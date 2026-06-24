@@ -38,6 +38,23 @@ def test_run_suite_writes_traces_summary_and_witnesses(tmp_path) -> None:
     assert "compiler_drops_tenant_predicate" in metadata["mutation_operator_ids"]
 
 
+def test_run_suite_handles_symlinked_output_directory(tmp_path) -> None:
+    real_dir = tmp_path / "real"
+    linked_dir = tmp_path / "linked"
+    real_dir.mkdir()
+    try:
+        linked_dir.symlink_to(real_dir, target_is_directory=True)
+    except OSError as exc:
+        pytest.skip(f"symlink unavailable: {exc}")
+
+    traces = run_suite("support_saas", "seeded", linked_dir)
+
+    assert len(traces) == 50
+    assert (linked_dir / "traces.jsonl").exists()
+    assert (linked_dir / "summary.json").exists()
+    assert all(trace.witness_path and trace.witness_path.startswith("witnesses/") for trace in traces)
+
+
 def test_run_suite_rejects_path_like_task_ids(tmp_path) -> None:
     domain_path = copy_domain("support_saas", tmp_path)
     (domain_path / "tasks" / "adversarial.yaml").write_text(

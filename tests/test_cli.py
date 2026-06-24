@@ -6,6 +6,24 @@ from policystrata.cli import main
 from policystrata.domain import copy_domain
 
 
+def test_cli_demo_runs_built_in_demo(tmp_path, capsys) -> None:
+    out_dir = tmp_path / "demo"
+
+    assert main(["demo", "--out", str(out_dir)]) == 0
+    output = capsys.readouterr().out
+
+    assert "PolicyStrata demo" in output
+    assert "Loaded built-in domain: support_saas" in output
+    assert "Ran 50 deterministic cases with no LLM API key" in output
+    assert "Detected 50 policy-drift witnesses" in output
+    assert "over_permissive=26" in output
+    assert "lowering_violation=10" in output
+    assert "semantic_drift=14" in output
+    assert (out_dir / "traces.jsonl").exists()
+    assert (out_dir / "summary.json").exists()
+    assert any((out_dir / "witnesses").glob("*.json"))
+
+
 def test_cli_run_and_summarize(tmp_path, capsys) -> None:
     out_dir = tmp_path / "run"
 

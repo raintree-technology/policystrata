@@ -1,24 +1,64 @@
 # PolicyStrata
 
-PolicyStrata is an experimental open-source framework for regression-testing policy drift in LLM
-data-agent stacks.
+PolicyStrata tests whether an LLM data-agent stack enforces the same policy across every layer that
+can affect access, semantics, or output.
 
-It checks whether authorization, semantic, and release obligations survive across non-equivalent
-layers: model-visible manifests, grammars, validators, semantic compilers, database RLS, and output
-filters.
+It generates principals, requests, semantic plans, database states, lowered queries, and release
+decisions; compares each layer against a canonical reference policy; and minimizes failures into
+small reproducible witnesses.
 
-The current artifact ships with deterministic `support_saas` and `finance_saas` benchmarks, 50
-hand-seeded support drift cases, generated mutation suites, minimized witnesses, JSONL traces,
-baseline comparisons, a dbt Semantic Layer adapter, and optional PostgreSQL RLS fixtures.
+PolicyStrata is for teams building text-to-SQL agents, BI copilots, internal analytics agents, data
+warehouse chat systems, and governed enterprise LLM tools.
+
+It is not another text-to-SQL benchmark, and it is not an authorization boundary. It is a
+regression-testing framework for finding reachable disagreements between prompts, manifests,
+semantic plans, validators, SQL compilers, database controls, and output filters.
+
+The core failure class is cross-layer policy drift:
+
+```text
+Canonical policy:
+  Analysts may view tenant-scoped aggregate ticket counts, but not customer-level PII.
+
+Model-visible manifest or grammar:
+  Accidentally exposes customer_email as a dimension.
+
+SQL compiler:
+  Accidentally drops the tenant predicate while lowering an authorized aggregate.
+
+Output layer:
+  Releases the result because the final answer looks like a summary.
+
+PolicyStrata result:
+  A minimized witness that localizes the violated layer and the obligation it failed to preserve.
+```
+
+The current artifact ships with deterministic `support_saas` and `finance_saas` benchmarks,
+generated mutation suites, minimized witnesses, JSONL traces, baseline comparisons, a dbt Semantic
+Layer adapter, and optional PostgreSQL RLS fixtures. The current version is deterministic and does
+not require an LLM API key.
 
 Status: early research artifact. Useful for reproducing the paper's core failure model; not a
 production security scanner.
 
+## 30-Second Demo
+
+```bash
+uv run policystrata demo
+```
+
+The demo runs the built-in `support_saas` fixture, writes traces and minimized witnesses to
+`runs/demo`, and prints the drift classes it found. Use `--out` to choose another output directory:
+
+```bash
+uv run policystrata demo --out runs/demo
+```
+
+## Benchmark Suite
+
 The benchmark suite, **DataPolicyDriftBench**, focuses on B2B SaaS embedded analytics: tenant
 isolation, PII restrictions, metric authorization, gross/net revenue drift, join-grain bugs,
 fiscal/calendar time drift, query-cost budgets, and database containment.
-
-The current version is deterministic and does not require an LLM API key.
 
 ## Open Source First
 
@@ -52,6 +92,9 @@ The trace records both surface decisions and contract decisions. A grammar can b
 validator by design, while a compiler that drops a tenant predicate violates the tenant-scope
 obligation it accepted from validation.
 
+See [`docs/failure-taxonomy.md`](docs/failure-taxonomy.md) for how the coarse `WitnessClass` values
+map to concrete policy-drift failures.
+
 ## Install
 
 ```bash
@@ -61,6 +104,7 @@ uv sync --extra dev
 ## CLI
 
 ```bash
+policystrata demo
 policystrata init-domain support_saas
 policystrata run --domain support_saas --suite seeded --out runs/example
 policystrata run \

@@ -7,6 +7,7 @@ from pathlib import Path
 from pydantic import ValidationError
 
 from policystrata.baselines import evaluate_baseline_run
+from policystrata.demo import run_demo
 from policystrata.domain import BUILTIN_DOMAIN, BUILTIN_DOMAINS, copy_domain
 from policystrata.evidence import parse_run_args, render_evidence_tables
 from policystrata.generator import MAX_GENERATED_COUNT
@@ -41,6 +42,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     init_parser.add_argument("domain", choices=BUILTIN_DOMAINS)
     init_parser.add_argument("--out", type=Path, default=Path("."))
+
+    demo_parser = subparsers.add_parser("demo", help="Run a 30-second built-in policy drift demo.")
+    demo_parser.add_argument("--out", type=Path, default=Path("runs/demo"))
 
     run_parser = subparsers.add_parser("run", help="Run a deterministic benchmark suite.")
     run_parser.add_argument("--domain", default=BUILTIN_DOMAIN)
@@ -113,6 +117,10 @@ def run_command(args: argparse.Namespace) -> int:
     if args.command == "init-domain":
         target = copy_domain(args.domain, args.out)
         print(target)
+        return 0
+
+    if args.command == "demo":
+        print(run_demo(args.out), end="")
         return 0
 
     if args.command == "run":

@@ -60,6 +60,7 @@ def run_suite(
     tasks = load_tasks(domain, suite, base_path, generated_count, generated_seed)
     traces = [evaluate_task(policy, task, surface_config) for task in tasks]
 
+    out_dir = out_dir.resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
     witness_dir = out_dir / "witnesses"
     witness_dir.mkdir(parents=True, exist_ok=True)
