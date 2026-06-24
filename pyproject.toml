@@ -1,0 +1,64 @@
+[build-system]
+requires = ["setuptools>=77.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "policystrata"
+version = "0.1.0"
+description = "Cross-layer policy regression testing for LLM data-agent stacks"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{name = "Raintree Technology", email = "support@raintree.technology"}]
+dependencies = [
+    "pydantic>=2.0",
+    "pyyaml>=6.0",
+    "psycopg[binary]>=3.2",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "hypothesis>=6.0",
+    "ruff>=0.8.0",
+    "mypy>=1.0",
+    "types-pyyaml>=6.0.0",
+]
+
+[project.scripts]
+policystrata = "policystrata.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["policystrata*"]
+
+[tool.setuptools.package-data]
+policystrata = ["py.typed", "domains/*/*.yaml", "domains/*/*.sql", "domains/*/tasks/*.yaml"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "A", "C4", "SIM"]
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+no_implicit_optional = true
+strict_equality = true
+ignore_missing_imports = true
+exclude = ["tests/"]
+plugins = ["pydantic.mypy"]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = ["-ra", "--showlocals"]
+markers = [
+    "integration: tests requiring Dockerized PostgreSQL",
+]

@@ -1,0 +1,80 @@
+versions:
+  manifest: v7
+  grammar: v7
+  validator: v7
+  compiler: v7
+  database: v7
+  release: v7
+contracts:
+  manifest:
+    mode: capability_exposure
+    responsibilities:
+      - expose_model_visible_metrics_and_dimensions
+      - omit_retired_aliases_and_forbidden_capabilities
+    emits_obligations:
+      - capability_scope
+  grammar:
+    mode: intent_space
+    responsibilities:
+      - parse_declared_query_intents
+      - preserve_untrusted_intent_for_validation
+      - avoid_advertising_capabilities_outside_manifest_scope
+    accepts_obligations:
+      - capability_scope
+    emits_obligations:
+      - syntactic_intent
+  validator:
+    mode: semantic_validation
+    responsibilities:
+      - authorize_metric_dimension_time_and_budget
+      - bind_principal_tenant_scope
+      - produce_canonical_semantic_obligations
+    accepts_obligations:
+      - syntactic_intent
+    emits_obligations:
+      - authorization_decision
+      - metric_semantics
+      - tenant_scope
+      - row_budget
+  compiler:
+    mode: sql_lowering
+    responsibilities:
+      - preserve_authorized_metric_semantics
+      - preserve_tenant_scope_predicates
+      - preserve_time_semantics
+      - preserve_row_budget
+    accepts_obligations:
+      - authorization_decision
+      - metric_semantics
+      - tenant_scope
+      - row_budget
+    emits_obligations:
+      - sql_semantics
+      - database_containment_request
+  database:
+    mode: database_containment
+    responsibilities:
+      - enforce_tenant_isolation_rls
+      - contain_cross_tenant_row_access
+    accepts_obligations:
+      - database_containment_request
+    emits_obligations:
+      - row_access_result
+  release:
+    mode: output_release
+    responsibilities:
+      - enforce_release_decision
+      - withhold_contained_or_unauthorized_results
+    accepts_obligations:
+      - authorization_decision
+      - row_access_result
+transition_obligations:
+  - capability_scope
+  - syntactic_intent
+  - authorization_decision
+  - metric_semantics
+  - tenant_scope
+  - row_budget
+  - sql_semantics
+  - database_containment_request
+  - row_access_result

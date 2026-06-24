@@ -1,0 +1,14 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: policystrata
+      POSTGRES_PASSWORD: policystrata
+      POSTGRES_DB: support_saas
+    ports:
+      - "55432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U policystrata -d support_saas"]
+      interval: 3s
+      timeout: 3s
+      retries: 20

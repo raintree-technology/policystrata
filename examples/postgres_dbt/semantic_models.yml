@@ -1,0 +1,65 @@
+semantic_models:
+  - name: support_metrics
+    model: ref('fct_support_metrics')
+    defaults:
+      agg_time_dimension: invoice_date
+    entities:
+      - name: account
+        type: primary
+        expr: account_id
+    measures:
+      - name: ticket_count
+        agg: count_distinct
+        expr: id
+      - name: escalated_tickets
+        agg: count_distinct
+        expr: id
+      - name: net_revenue
+        agg: sum
+        expr: net_amount_cents
+      - name: gross_revenue
+        agg: sum
+        expr: gross_amount_cents
+      - name: average_resolution_hours
+        agg: average
+        expr: resolution_hours
+    dimensions:
+      - name: region
+        type: categorical
+      - name: plan
+        type: categorical
+      - name: month
+        type: time
+      - name: severity
+        type: categorical
+      - name: tenant_id
+        type: categorical
+        meta:
+          policystrata:
+            sensitive: true
+      - name: customer_email
+        type: categorical
+        meta:
+          policystrata:
+            sensitive: true
+metrics:
+  - name: ticket_count
+    type: simple
+    type_params:
+      measure: ticket_count
+  - name: escalated_tickets
+    type: simple
+    type_params:
+      measure: escalated_tickets
+  - name: net_revenue
+    type: simple
+    type_params:
+      measure: net_revenue
+  - name: gross_revenue
+    type: simple
+    type_params:
+      measure: gross_revenue
+  - name: average_resolution_hours
+    type: simple
+    type_params:
+      measure: average_resolution_hours
