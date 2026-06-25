@@ -1,0 +1,130 @@
+suite: seeded
+policy_version: v3
+surface_versions:
+  manifest: v3
+  grammar: v3
+  validator: v3
+  compiler: v3
+  database: v3
+  release: v3
+matrix:
+  - mutation: stale_metric_alias_manifest
+    count: 2
+    principal: north_advisor
+    request: "Show gross inflows by advisor region, variant {index}."
+    semantic_query:
+      metric: inflows
+      dimensions: [advisor_region]
+      time_range: last_month
+      grain: month
+      limit: 100
+    surface_versions:
+      manifest: v2
+  - mutation: grammar_permits_forbidden_dimension
+    count: 2
+    principal: north_advisor
+    request: "Break AUM down by household tax ID, variant {index}."
+    semantic_query:
+      metric: aum
+      dimensions: [tax_id]
+      time_range: last_month
+      grain: month
+      limit: 100
+    surface_versions:
+      grammar: v2
+  - mutation: validator_omits_sensitive_column
+    count: 2
+    principal: north_advisor
+    request: "Show net deposits by household name, variant {index}."
+    semantic_query:
+      metric: net_deposits
+      dimensions: [household_name]
+      time_range: last_month
+      grain: month
+      limit: 100
+    surface_versions:
+      validator: v2
+  - mutation: compiler_drops_tenant_predicate
+    count: 2
+    principal: north_advisor
+    request: "Show AUM by account type for my firm, variant {index}."
+    semantic_query:
+      metric: aum
+      dimensions: [account_type]
+      time_range: last_month
+      grain: month
+      limit: 100
+    surface_versions:
+      compiler: v2
+  - mutation: compiler_swaps_tenant_account_id
+    count: 2
+    principal: north_advisor
+    request: "Show fee revenue by region with account scoped lowering, variant {index}."
+    semantic_query:
+      metric: fee_revenue
+      dimensions: [advisor_region]
+      time_range: last_month
+      grain: month
+      limit: 100
+    surface_versions:
+      compiler: v2
+  - mutation: gross_net_metric_drift
+    count: 2
+    principal: north_advisor
+    request: "Show net deposits by household segment, variant {index}."
+    semantic_query:
+      metric: net_deposits
+      dimensions: [household_segment]
+      time_range: last_month
+      grain: month
+      limit: 100
+    surface_versions:
+      compiler: v2
+  - mutation: compiler_removes_distinct
+    count: 2
+    principal: north_advisor
+    request: "Show assets by advisor region with deduplication, variant {index}."
+    semantic_query:
+      metric: aum
+      dimensions: [advisor_region]
+      time_range: last_month
+      grain: month
+      limit: 100
+    surface_versions:
+      compiler: v2
+  - mutation: compiler_inner_join_drops_rows
+    count: 2
+    principal: north_advisor
+    request: "Show fee revenue by account type including empty accounts, variant {index}."
+    semantic_query:
+      metric: fee_revenue
+      dimensions: [account_type]
+      time_range: last_month
+      grain: month
+      limit: 100
+    surface_versions:
+      compiler: v2
+  - mutation: fiscal_calendar_mismatch
+    count: 2
+    principal: north_advisor
+    request: "Show net deposits for last fiscal month, variant {index}."
+    semantic_query:
+      metric: net_deposits
+      dimensions: [account_type]
+      time_range: last_fiscal_month
+      grain: month
+      limit: 100
+    surface_versions:
+      compiler: v2
+  - mutation: app_deny_missing_db_policy
+    count: 2
+    principal: north_advisor
+    request: "Show gross flows for my firm, variant {index}."
+    semantic_query:
+      metric: gross_deposits
+      dimensions: [advisor_region]
+      time_range: last_month
+      grain: month
+      limit: 100
+    surface_versions:
+      database: v2

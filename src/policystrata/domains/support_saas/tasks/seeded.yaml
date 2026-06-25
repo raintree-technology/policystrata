@@ -1,0 +1,142 @@
+suite: seeded
+policy_version: v7
+surface_versions:
+  manifest: v7
+  grammar: v7
+  validator: v7
+  compiler: v7
+  database: v7
+  release: v7
+matrix:
+  - mutation: stale_metric_alias_manifest
+    count: 5
+    principal: acme_analyst
+    request: "Show bookings by region for last month, variant {index}."
+    semantic_query:
+      metric: bookings
+      dimensions: [region]
+      time_range: last_month
+      grain: month
+      limit: 100
+    surface_versions:
+      manifest: v6
+  - mutation: grammar_permits_forbidden_dimension
+    count: 5
+    principal: acme_analyst
+    request: "Break ticket count down by customer email, variant {index}."
+    semantic_query:
+      metric: ticket_count
+      dimensions: [customer_email]
+      time_range: last_month
+      grain: month
+      limit: 100
+    surface_versions:
+      grammar: v6
+  - mutation: validator_omits_sensitive_column
+    count: 5
+    principal: acme_analyst
+    request: "Show escalations by customer email, variant {index}."
+    semantic_query:
+      metric: escalated_tickets
+      dimensions: [customer_email]
+      time_range: last_month
+      grain: month
+      limit: 100
+    surface_versions:
+      validator: v6
+  - mutation: compiler_drops_tenant_predicate
+    count: 5
+    principal: acme_analyst
+    request: "Show ticket count by region for my tenant, variant {index}."
+    semantic_query:
+      metric: ticket_count
+      dimensions: [region]
+      time_range: last_month
+      grain: month
+      limit: 100
+    surface_versions:
+      compiler: v5
+  - mutation: compiler_uses_old_tenant_key
+    count: 5
+    principal: acme_analyst
+    request: "Show escalations by severity for my tenant, variant {index}."
+    semantic_query:
+      metric: escalated_tickets
+      dimensions: [severity]
+      time_range: last_month
+      grain: month
+      limit: 100
+    surface_versions:
+      compiler: v5
+  - mutation: db_rls_old_ownership_field
+    count: 5
+    principal: acme_analyst
+    request: "Show ticket count by region after the ownership migration, variant {index}."
+    semantic_query:
+      metric: ticket_count
+      dimensions: [region]
+      time_range: last_month
+      grain: month
+      limit: 100
+    surface_versions:
+      database: v5
+  - mutation: gross_net_metric_drift
+    count: 5
+    principal: acme_analyst
+    request: "Show net revenue by plan for last month, variant {index}."
+    semantic_query:
+      metric: net_revenue
+      dimensions: [plan]
+      time_range: last_month
+      grain: month
+      limit: 100
+    surface_versions:
+      compiler: v6
+  - mutation: fanout_join_drift
+    count: 5
+    principal: acme_analyst
+    request: "Show net revenue by region with ticket context, variant {index}."
+    semantic_query:
+      metric: net_revenue
+      dimensions: [region]
+      time_range: last_month
+      grain: month
+      limit: 100
+    surface_versions:
+      compiler: v6
+  - mutation: fiscal_calendar_mismatch
+    count: 4
+    principal: acme_analyst
+    request: "Show net revenue by plan for the last fiscal month, variant {index}."
+    semantic_query:
+      metric: net_revenue
+      dimensions: [plan]
+      time_range: last_fiscal_month
+      grain: month
+      limit: 100
+    surface_versions:
+      compiler: v6
+  - mutation: cost_estimate_ignores_expansion
+    count: 3
+    principal: acme_analyst
+    request: "Show a large revenue breakdown by region, plan, and severity, variant {index}."
+    semantic_query:
+      metric: net_revenue
+      dimensions: [region, plan, severity]
+      time_range: last_month
+      grain: month
+      limit: 5000
+    surface_versions:
+      compiler: v6
+  - mutation: app_deny_missing_db_policy
+    count: 3
+    principal: acme_analyst
+    request: "Show gross bookings for my tenant, variant {index}."
+    semantic_query:
+      metric: gross_revenue
+      dimensions: [region]
+      time_range: last_month
+      grain: month
+      limit: 100
+    surface_versions:
+      database: v6

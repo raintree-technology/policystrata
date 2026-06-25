@@ -1,0 +1,122 @@
+version: v3
+principals:
+  north_advisor:
+    id: north_advisor
+    role: advisor
+    tenant_ids: [north]
+  north_ops_admin:
+    id: north_ops_admin
+    role: ops_admin
+    tenant_ids: [north]
+  south_advisor:
+    id: south_advisor
+    role: advisor
+    tenant_ids: [south]
+roles:
+  advisor:
+    allowed_metrics:
+      - aum
+      - net_deposits
+      - fee_revenue
+    allowed_dimensions:
+      - advisor_region
+      - account_type
+      - household_segment
+      - month
+    allowed_time_ranges:
+      - last_month
+      - last_fiscal_month
+      - quarter_to_date
+    max_rows: 1000
+    max_cost: 120
+    aggregate_only: true
+  ops_admin:
+    allowed_metrics:
+      - aum
+      - net_deposits
+      - gross_deposits
+      - fee_revenue
+    allowed_dimensions:
+      - advisor_region
+      - account_type
+      - household_segment
+      - month
+      - firm_id
+      - household_name
+      - tax_id
+    allowed_time_ranges:
+      - last_month
+      - last_fiscal_month
+      - quarter_to_date
+    max_rows: 5000
+    max_cost: 600
+    aggregate_only: false
+metrics:
+  aum:
+    expression: sum(balances.market_value_cents)
+    table: balances
+    columns: [balances.market_value_cents]
+    allowed_roles: [advisor, ops_admin]
+    aliases: [assets]
+    grain: account_day
+    cost: 20
+  net_deposits:
+    expression: sum(transactions.amount_cents)
+    table: transactions
+    columns: [transactions.amount_cents]
+    allowed_roles: [advisor, ops_admin]
+    aliases: [flows]
+    grain: transaction
+    cost: 18
+  gross_deposits:
+    expression: sum(transactions.gross_amount_cents)
+    table: transactions
+    columns: [transactions.gross_amount_cents]
+    allowed_roles: [ops_admin]
+    aliases: [inflows, gross_flows]
+    grain: transaction
+    cost: 24
+  fee_revenue:
+    expression: sum(transactions.fee_cents)
+    table: transactions
+    columns: [transactions.fee_cents]
+    allowed_roles: [advisor, ops_admin]
+    aliases: [advisory_fees]
+    grain: transaction
+    cost: 16
+dimensions:
+  advisor_region:
+    column: advisors.region
+    allowed_roles: [advisor, ops_admin]
+    sensitive: false
+    cost: 2
+  account_type:
+    column: accounts.account_type
+    allowed_roles: [advisor, ops_admin]
+    sensitive: false
+    cost: 3
+  household_segment:
+    column: households.segment
+    allowed_roles: [advisor, ops_admin]
+    sensitive: false
+    cost: 3
+  month:
+    column: date_trunc('month', transactions.transaction_date)
+    allowed_roles: [advisor, ops_admin]
+    sensitive: false
+    cost: 2
+  firm_id:
+    column: households.firm_id
+    allowed_roles: [ops_admin]
+    sensitive: true
+    cost: 5
+  household_name:
+    column: households.name
+    allowed_roles: [ops_admin]
+    sensitive: true
+    cost: 7
+  tax_id:
+    column: households.tax_id
+    allowed_roles: [ops_admin]
+    sensitive: true
+    cost: 9

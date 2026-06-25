@@ -1,0 +1,125 @@
+version: v7
+principals:
+  acme_analyst:
+    id: acme_analyst
+    role: analyst
+    tenant_ids: [acme]
+  acme_finance_admin:
+    id: acme_finance_admin
+    role: finance_admin
+    tenant_ids: [acme]
+  beta_analyst:
+    id: beta_analyst
+    role: analyst
+    tenant_ids: [beta]
+roles:
+  analyst:
+    allowed_metrics:
+      - ticket_count
+      - escalated_tickets
+      - net_revenue
+      - average_resolution_hours
+    allowed_dimensions:
+      - region
+      - plan
+      - month
+      - severity
+    allowed_time_ranges:
+      - last_month
+      - last_fiscal_month
+    max_rows: 1000
+    max_cost: 80
+    aggregate_only: true
+  finance_admin:
+    allowed_metrics:
+      - ticket_count
+      - escalated_tickets
+      - net_revenue
+      - gross_revenue
+      - average_resolution_hours
+    allowed_dimensions:
+      - region
+      - plan
+      - month
+      - severity
+      - customer_email
+      - tenant_id
+    allowed_time_ranges:
+      - last_month
+      - last_fiscal_month
+      - fiscal_ytd
+    max_rows: 5000
+    max_cost: 500
+    aggregate_only: false
+metrics:
+  ticket_count:
+    expression: count(distinct support_tickets.id)
+    table: support_tickets
+    columns: [support_tickets.id]
+    allowed_roles: [analyst, finance_admin]
+    aliases: [tickets]
+    grain: ticket
+    cost: 8
+  escalated_tickets:
+    expression: count(distinct support_tickets.id) filter (where support_tickets.escalated)
+    table: support_tickets
+    columns: [support_tickets.id, support_tickets.escalated]
+    allowed_roles: [analyst, finance_admin]
+    aliases: [escalations]
+    grain: ticket
+    cost: 12
+  net_revenue:
+    expression: sum(invoices.net_amount_cents)
+    table: invoices
+    columns: [invoices.net_amount_cents]
+    allowed_roles: [analyst, finance_admin]
+    aliases: [recognized_revenue]
+    grain: invoice
+    cost: 18
+  gross_revenue:
+    expression: sum(invoices.gross_amount_cents)
+    table: invoices
+    columns: [invoices.gross_amount_cents]
+    allowed_roles: [finance_admin]
+    aliases: [bookings, gross_bookings]
+    grain: invoice
+    cost: 24
+  average_resolution_hours:
+    expression: avg(support_tickets.resolution_hours)
+    table: support_tickets
+    columns: [support_tickets.resolution_hours]
+    allowed_roles: [analyst, finance_admin]
+    aliases: [resolution_time]
+    grain: ticket
+    cost: 10
+dimensions:
+  region:
+    column: accounts.region
+    allowed_roles: [analyst, finance_admin]
+    sensitive: false
+    cost: 2
+  plan:
+    column: subscriptions.plan
+    allowed_roles: [analyst, finance_admin]
+    sensitive: false
+    cost: 3
+  month:
+    column: date_trunc('month', invoices.invoice_date)
+    allowed_roles: [analyst, finance_admin]
+    sensitive: false
+    cost: 2
+  severity:
+    column: support_tickets.severity
+    allowed_roles: [analyst, finance_admin]
+    sensitive: false
+    cost: 2
+  tenant_id:
+    column: accounts.tenant_id
+    allowed_roles: [finance_admin]
+    sensitive: true
+    cost: 5
+  customer_email:
+    column: accounts.customer_email
+    allowed_roles: [finance_admin]
+    sensitive: true
+    cost: 8

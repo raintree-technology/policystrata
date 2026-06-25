@@ -1,0 +1,10 @@
+cff-version: 1.2.0
+message: "If you use PolicyStrata in research, please cite it."
+title: "PolicyStrata"
+type: software
+version: "0.1.0"
+date-released: "2026-06-25"
+license: MIT
+repository-code: "https://github.com/raintree-technology/policystrata"
+authors:
+  - name: "Raintree Technology"

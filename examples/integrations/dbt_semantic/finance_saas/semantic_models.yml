@@ -1,0 +1,57 @@
+semantic_models:
+  - name: finance_accounts
+    model: ref('fct_finance_accounts')
+    defaults:
+      agg_time_dimension: transaction_date
+    entities:
+      - name: account
+        type: primary
+        expr: account_id
+      - name: household
+        type: foreign
+        expr: household_id
+    measures:
+      - name: aum
+        agg: sum
+        expr: market_value_cents
+      - name: net_deposits
+        agg: sum
+        expr: amount_cents
+      - name: gross_deposits
+        agg: sum
+        expr: gross_amount_cents
+      - name: fee_revenue
+        agg: sum
+        expr: fee_cents
+    dimensions:
+      - name: advisor_region
+        type: categorical
+      - name: account_type
+        type: categorical
+      - name: household_segment
+        type: categorical
+      - name: month
+        type: time
+      - name: household_name
+        type: categorical
+      - name: tax_id
+        type: categorical
+      - name: firm_id
+        type: categorical
+metrics:
+  - name: aum
+    type: simple
+    type_params:
+      measure: aum
+  - name: net_deposits
+    type: simple
+    type_params:
+      measure: net_deposits
+  - name: gross_deposits
+    type: simple
+    type_params:
+      measure: gross_deposits
+  - name: fee_revenue
+    type: simple
+    type_params:
+      measure: fee_revenue

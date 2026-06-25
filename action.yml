@@ -1,0 +1,70 @@
+name: PolicyStrata Scan
+description: Run PolicyStrata as a CI release gate for LLM data-agent policy drift.
+author: Raintree Technology
+
+branding:
+  icon: shield
+  color: blue
+
+inputs:
+  config:
+    description: Path to a policystrata.yaml scanner configuration in the checked-out repository.
+    required: false
+    default: policystrata.yaml
+  out:
+    description: Directory where PolicyStrata should write scan artifacts.
+    required: false
+    default: runs/policystrata
+  python-version:
+    description: Python version used to install and run PolicyStrata.
+    required: false
+    default: "3.12"
+  package:
+    description: Optional pip install spec. Defaults to installing PolicyStrata from this action checkout.
+    required: false
+    default: ""
+  extra-args:
+    description: Additional trusted command-line arguments appended to policystrata scan.
+    required: false
+    default: ""
+
+outputs:
+  out:
+    description: Directory containing PolicyStrata scan artifacts.
+    value: ${{ steps.scan.outputs.out }}
+  exit-code:
+    description: Exit code returned by policystrata scan.
+    value: ${{ steps.scan.outputs.exit-code }}
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Install PolicyStrata
+      shell: bash
+      run: |
+        set -euo pipefail
+        python -m pip install --upgrade pip
+        if [ -n "${{ inputs.package }}" ]; then
+          python -m pip install "${{ inputs.package }}"
+        else
+          python -m pip install "${{ github.action_path }}"
+        fi
+
+    - name: Run PolicyStrata scan
+      id: scan
+      shell: bash
+      run: |
+        set +e
+        policystrata scan \
+          --config "${{ inputs.config }}" \
+          --out "${{ inputs.out }}" \
+          ${{ inputs.extra-args }}
+        status=$?
+        echo "out=${{ inputs.out }}" >> "$GITHUB_OUTPUT"
+        echo "exit-code=$status" >> "$GITHUB_OUTPUT"
+        exit "$status"
