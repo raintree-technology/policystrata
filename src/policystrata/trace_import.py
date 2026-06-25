@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import random
+import re
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -59,12 +61,13 @@ def fuzz_imported_trace(
     policy: Policy,
     seed: int,
     max_cases: int,
+    tenant_columns: Sequence[str] | None = None,
 ) -> list[dict[str, Any]]:
     if max_cases == 0:
         return []
     rng = random.Random(f"{seed}:{trace.id}")
     candidates = [
-        remove_tenant_predicate(trace),
+        remove_tenant_predicate(trace, tenant_columns),
         mutate_join_path(trace),
         mutate_time_bounds(trace),
         add_sensitive_dimension(trace, policy, rng),
@@ -75,28 +78,43 @@ def fuzz_imported_trace(
     return [candidate for candidate in candidates if candidate is not None][:max_cases]
 
 
-def remove_tenant_predicate(trace: ImportedTrace) -> dict[str, Any] | None:
+def remove_tenant_predicate(
+    trace: ImportedTrace,
+    tenant_columns: Sequence[str] | None = None,
+) -> dict[str, Any] | None:
+    columns = tenant_columns or ("accounts.tenant_id", "households.firm_id", "tenant_id", "firm_id")
     lowered = trace.sql.lower()
-    if "tenant_id" not in lowered and "firm_id" not in lowered:
+    if not any(column.lower() in lowered for column in columns):
         return {
             "mutation": "tenant_predicate_removed",
             "status": MutantStatus.EQUIVALENT,
-            "reason": "trace SQL had no observable tenant or firm predicate to remove",
+            "reason": "trace SQL had no observable configured tenant predicate to remove",
         }
-    mutated_sql = trace.sql.replace("accounts.tenant_id", "accounts.legacy_tenant_id")
-    mutated_sql = mutated_sql.replace("households.firm_id", "households.legacy_firm_id")
+    mutated_sql = trace.sql
+    for column in columns:
+        mutated_sql = replace_tenant_column_with_legacy(mutated_sql, column)
     if mutated_sql == trace.sql:
         return {
             "mutation": "tenant_predicate_removed",
             "status": MutantStatus.EQUIVALENT,
-            "reason": "tenant predicate was not in a recognized canonical form",
+            "reason": "tenant predicate was present but not in a replaceable canonical form",
         }
     return {
         "mutation": "tenant_predicate_removed",
         "status": MutantStatus.KILLED,
         "sql": mutated_sql,
-        "reason": "tenant-scope predicate can be changed away from the canonical policy column",
+        "reason": "tenant-scope predicate can be changed away from the configured policy column",
     }
+
+
+def replace_tenant_column_with_legacy(sql: str, column: str) -> str:
+    if "." not in column:
+        replacement = f"legacy_{column}"
+    else:
+        table, name = column.rsplit(".", 1)
+        replacement = f"{table}.legacy_{name}"
+    pattern = rf"(?<![A-Za-z0-9_.]){re.escape(column)}(?![A-Za-z0-9_])"
+    return re.sub(pattern, replacement, sql)
 
 
 def mutate_join_path(trace: ImportedTrace) -> dict[str, Any]:

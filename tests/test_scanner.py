@@ -45,12 +45,18 @@ def test_scan_failing_fixture_writes_gate_outputs(tmp_path) -> None:
     assert (tmp_path / "scan" / "summary.json").is_file()
     assert (tmp_path / "scan" / "report.md").is_file()
     assert any(item.witness_path for item in result.findings)
+    assert all(item.minimal_repro_trace == item.witness_path for item in result.findings)
+    assert all(item.ci_gate_command for item in result.findings)
     assert any(item.id.startswith("unsafe_release") for item in result.findings)
     assert any(item.id.startswith("tenant_scope_missing") for item in result.findings)
     assert result.summary.regression_cases["fail_to_pass"] >= 2
+    assert result.summary.integration_readiness["level"] == "ci-gate-ready"
 
     scan_json = json.loads((tmp_path / "scan" / "scan.json").read_text(encoding="utf-8"))
     assert scan_json["gate"]["outcome"] == "fail"
+    report = (tmp_path / "scan" / "report.md").read_text(encoding="utf-8")
+    assert "## Production Integration" in report
+    assert "## Remediation" in report
 
 
 def test_scan_clean_fixture_passes(tmp_path) -> None:
@@ -61,6 +67,53 @@ def test_scan_clean_fixture_passes(tmp_path) -> None:
     assert result.summary.evidence_exercised["imported_trace"] == 1
     assert (tmp_path / "clean" / "report.md").read_text(encoding="utf-8").count("No findings") == 1
     assert "## Evidence Exercised" in (tmp_path / "clean" / "report.md").read_text(encoding="utf-8")
+
+
+def test_scan_accepts_configured_tenancy_predicate(tmp_path) -> None:
+    trace_path = tmp_path / "traces.jsonl"
+    config_path = tmp_path / "policystrata.yaml"
+    trace_path.write_text(
+        json.dumps(
+            {
+                "id": "custom_household_scope",
+                "principal": "acme_analyst",
+                "tenant_ids": ["acme"],
+                "release_allowed": True,
+                "semantic_ir": {"metric": "ticket_count", "limit": 100},
+                "sql": (
+                    "select count(distinct support_tickets.id) as value "
+                    "from support_tickets "
+                    "join transactions on transactions.ticket_id = support_tickets.id "
+                    "where transactions.household_id = 'acme' "
+                    "limit 100"
+                ),
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    config_path.write_text(
+        """
+version: 1
+domain: support_saas
+sql_traces:
+  files:
+    - traces.jsonl
+tenancy:
+  canonical_predicates:
+    - "transactions.household_id = :principal.tenant_id"
+  tenant_columns:
+    - transactions.household_id
+fuzz:
+  enabled: false
+""".lstrip(),
+        encoding="utf-8",
+    )
+
+    result = run_scan(config_path, tmp_path / "scan")
+
+    assert result.gate.outcome == GateOutcome.PASS
+    assert not any(item.id.startswith("tenant_scope_missing") for item in result.findings)
 
 
 def test_scan_state_assertions_detect_forbidden_database_state() -> None:
@@ -184,6 +237,33 @@ def test_fuzz_classifies_stillborn_and_equivalent_mutants(tmp_path) -> None:
 
     assert MutantStatus.STILLBORN in statuses
     assert MutantStatus.EQUIVALENT in statuses
+
+
+def test_fuzz_uses_configured_tenant_columns() -> None:
+    trace = ImportedTrace(
+        id="custom_tenant_column",
+        principal="acme_analyst",
+        sql="select * from transactions where transactions.household_id = 'acme'",
+        semantic_ir=SemanticQuery(metric="ticket_count"),
+        release_allowed=True,
+    )
+
+    fuzzed = fuzz_imported_trace(
+        trace,
+        load_policy(),
+        seed=7,
+        max_cases=1,
+        tenant_columns=["transactions.household_id"],
+    )
+
+    assert fuzzed == [
+        {
+            "mutation": "tenant_predicate_removed",
+            "status": MutantStatus.KILLED,
+            "sql": "select * from transactions where transactions.legacy_household_id = 'acme'",
+            "reason": "tenant-scope predicate can be changed away from the configured policy column",
+        }
+    ]
 
 
 def test_fuzz_handles_declared_principal_with_unknown_role() -> None:

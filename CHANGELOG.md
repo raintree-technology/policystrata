@@ -4,6 +4,17 @@
 
 - No changes yet.
 
+## [0.1.1] - 2026-06-25
+
+- Add `policystrata init-scan` to scaffold `policystrata.yaml`, `domain/policy.yaml`,
+  `domain/surfaces.yaml`, `traces.example.jsonl`, and a runnable scan command.
+- Add scanner `tenancy` configuration for custom canonical predicates and tenant columns.
+- Add production integration readiness scoring to scanner summaries and reports.
+- Add remediation-oriented finding fields for what changed, owning layer, probable fix, minimal
+  repro trace, and CI gate command.
+- Document the imported-trace contract, framework trace-export recipes, and an AI data assistant
+  scanning workflow.
+
 ## [0.1.0] - 2026-06-25
 
 - Initial public research artifact.

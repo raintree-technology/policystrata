@@ -70,6 +70,11 @@ class SqlTraceConfig(BaseModel):
     required: bool = False
 
 
+class TenancyScanConfig(BaseModel):
+    canonical_predicates: list[str] = Field(default_factory=list)
+    tenant_columns: list[str] = Field(default_factory=list)
+
+
 class RlsCheckConfig(BaseModel):
     id: str = Field(pattern=SAFE_IDENTIFIER_PATTERN, max_length=MAX_SAFE_IDENTIFIER_LENGTH)
     sql: str
@@ -134,6 +139,7 @@ class ScanConfig(BaseModel):
     sarif: bool = False
     dbt: DbtScanConfig = Field(default_factory=DbtScanConfig)
     sql_traces: SqlTraceConfig = Field(default_factory=SqlTraceConfig)
+    tenancy: TenancyScanConfig = Field(default_factory=TenancyScanConfig)
     database: DatabaseScanConfig = Field(default_factory=DatabaseScanConfig)
     fuzz: FuzzConfig = Field(default_factory=FuzzConfig)
     gate: GateConfig = Field(default_factory=GateConfig)
@@ -172,6 +178,11 @@ class ScanFinding(BaseModel):
     reproducible_command: str
     metadata: dict[str, Any] = Field(default_factory=dict)
     witness_path: str | None = None
+    what_changed: str | None = None
+    owner: SurfaceName | None = None
+    probable_fix: str | None = None
+    minimal_repro_trace: str | None = None
+    ci_gate_command: str | None = None
 
 
 class GateDecision(BaseModel):
@@ -190,6 +201,7 @@ class ScanSummary(BaseModel):
     evidence_levels: dict[str, int]
     mutant_statuses: dict[str, int]
     regression_cases: dict[str, int] = Field(default_factory=dict)
+    integration_readiness: dict[str, Any] = Field(default_factory=dict)
 
 
 class ScanResult(BaseModel):

@@ -5,6 +5,7 @@ import re
 import subprocess
 import time
 from collections import Counter
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, cast
 
@@ -172,11 +173,13 @@ def run_scan(config_path: Path, out_dir: Path | None = None) -> ScanResult:
 
     findings = assign_witness_paths(findings, witness_dir, output_dir)
     gate = decide_gate(findings, config)
+    readiness = assess_integration_readiness(config, imported_traces, database_adapter, findings)
     summary = build_summary(
         findings,
         gate.outcome,
         mutant_statuses,
         exercised_evidence_levels(config, policy, imported_traces, database_adapter, mutant_statuses),
+        readiness,
     )
     result = ScanResult(
         domain=config.domain,
@@ -247,6 +250,7 @@ def scan_fuzzed_trace(
         policy,
         config.fuzz.seed,
         config.fuzz.max_cases_per_trace,
+        tenant_columns_for_mutation(config),
     )
     for fuzzed in fuzzed_traces:
         status = MutantStatus(fuzzed["status"])
@@ -447,12 +451,7 @@ def scan_trace_static_sql(
 ) -> list[ScanFinding]:
     findings: list[ScanFinding] = []
     allow_rls_only = bool(trace.expected_policy.get("allow_rls_only"))
-    if not allow_rls_only and not sql_preserves_tenant_scope(
-        config.domain,
-        policy,
-        trace.principal,
-        trace.sql,
-    ):
+    if not allow_rls_only and not sql_preserves_tenant_scope(config, policy, trace):
         findings.append(
             imported_trace_finding(
                 f"tenant_scope_missing_{trace.id}",
@@ -461,7 +460,7 @@ def scan_trace_static_sql(
                 FindingConfidence.HIGH,
                 "compiler",
                 WitnessClass.LOWERING_VIOLATION,
-                [tenant_scope_reason(config.domain, policy, trace.principal)],
+                [tenant_scope_reason(config, policy, trace)],
                 config_path,
                 trace,
             )
@@ -957,6 +956,40 @@ def adapter_value_findings(
     ]
 
 
+def default_what_changed(witness_class: WitnessClass, surface: str) -> str:
+    if witness_class == WitnessClass.UNSAFE_RELEASE:
+        return "a result was released after the canonical policy denied the semantic request"
+    if witness_class == WitnessClass.LOWERING_VIOLATION:
+        return "the SQL-lowering layer did not preserve a policy obligation"
+    if witness_class == WitnessClass.SEMANTIC_DRIFT:
+        return "the imported representation no longer matches canonical policy semantics"
+    if witness_class == WitnessClass.OVER_PERMISSIVE:
+        return f"the {surface} layer allowed behavior outside the canonical policy"
+    if witness_class == WitnessClass.OVER_RESTRICTIVE:
+        return f"the {surface} layer blocked or failed a required policy check"
+    return "the scanner observed a clean or informational condition"
+
+
+def default_probable_fix(witness_class: WitnessClass, surface: str) -> str:
+    if witness_class == WitnessClass.UNSAFE_RELEASE:
+        return "bind release decisions to the canonical validator result before returning data"
+    if witness_class == WitnessClass.LOWERING_VIOLATION:
+        return (
+            "update the SQL compiler or trace exporter so tenant, metric, time, "
+            "and row-budget obligations are preserved"
+        )
+    if witness_class == WitnessClass.SEMANTIC_DRIFT:
+        return (
+            "align the adapter, semantic layer, or SQL generation path with the policy "
+            "metric and dimension contract"
+        )
+    if witness_class == WitnessClass.OVER_PERMISSIVE:
+        return f"tighten the {surface} policy check or remove the stale exposed capability"
+    if witness_class == WitnessClass.OVER_RESTRICTIVE:
+        return f"fix the {surface} fixture, adapter, or environment so required evidence can run"
+    return "no remediation is required for a clean informational finding"
+
+
 def imported_trace_finding(
     finding_id: str,
     title: str,
@@ -1007,6 +1040,7 @@ def finding(
     regression_case: RegressionCase | None = None,
     metadata: dict[str, Any] | None = None,
 ) -> ScanFinding:
+    command = f"policystrata scan --config {config_path}"
     return ScanFinding(
         id=safe_identifier(finding_id),
         title=title,
@@ -1023,26 +1057,106 @@ def finding(
         mutation=mutation,
         mutant_status=mutant_status,
         regression_case=regression_case,
-        reproducible_command=f"policystrata scan --config {config_path}",
+        reproducible_command=command,
         metadata=metadata or {},
+        what_changed=default_what_changed(witness_class, surface),
+        owner=cast(SurfaceName, surface),
+        probable_fix=default_probable_fix(witness_class, surface),
+        ci_gate_command=command,
     )
 
 
-def sql_preserves_tenant_scope(domain: str, policy: Policy, principal_id: str, sql: str) -> bool:
-    principal = policy.principals.get(principal_id)
+def sql_preserves_tenant_scope(config: ScanConfig, policy: Policy, trace: ImportedTrace) -> bool:
+    principal = policy.principals.get(trace.principal)
     if principal is None:
         return False
-    lowered = normalize_sql(sql)
-    scope_column = normalize_sql(tenant_column(domain))
-    if scope_column not in lowered:
-        return False
-    return any(normalize_sql(str(tenant_id)) in lowered for tenant_id in principal.tenant_ids)
+    tenant_ids = trace.tenant_ids or principal.tenant_ids
+    if config.tenancy.canonical_predicates:
+        return any(
+            tenant_predicate_matches_sql(predicate, trace.sql, tenant_ids)
+            for predicate in config.tenancy.canonical_predicates
+        )
+    columns = tenant_columns_for_scope_check(config)
+    return sql_mentions_any_tenant_column(trace.sql, columns) and sql_has_tenant_binding(
+        trace.sql,
+        tenant_ids,
+    )
 
 
-def tenant_scope_reason(domain: str, policy: Policy, principal_id: str) -> str:
-    principal = policy.principals.get(principal_id)
+def tenant_scope_reason(config: ScanConfig, policy: Policy, trace: ImportedTrace) -> str:
+    principal = policy.principals.get(trace.principal)
     tenants = [] if principal is None else principal.tenant_ids
-    return f"expected SQL to include {tenant_column(domain)} scoped to one of {tenants}"
+    expected_tenants = trace.tenant_ids or tenants
+    if config.tenancy.canonical_predicates:
+        predicates = ", ".join(config.tenancy.canonical_predicates)
+        return (
+            "expected SQL to include one configured tenancy predicate "
+            f"({predicates}) scoped to one of {expected_tenants}"
+        )
+    columns = ", ".join(tenant_columns_for_scope_check(config))
+    return (
+        f"expected SQL to include one configured tenant column ({columns}) "
+        f"scoped to one of {expected_tenants}"
+    )
+
+
+def tenant_predicate_matches_sql(predicate: str, sql: str, tenant_ids: Sequence[str]) -> bool:
+    normalized_sql = normalize_sql(sql)
+    if ":principal.tenant_id" not in predicate:
+        return normalize_sql(predicate) in normalized_sql
+    for tenant_id in tenant_ids:
+        if normalize_sql(predicate.replace(":principal.tenant_id", str(tenant_id))) in normalized_sql:
+            return True
+    columns = tenant_columns_from_predicate(predicate)
+    return sql_mentions_any_tenant_column(sql, columns) and sql_has_tenant_binding(sql, tenant_ids)
+
+
+def sql_mentions_any_tenant_column(sql: str, columns: Sequence[str]) -> bool:
+    normalized_sql = normalize_sql(sql)
+    return any(normalize_sql(column) in normalized_sql for column in columns)
+
+
+def sql_has_tenant_binding(sql: str, tenant_ids: Sequence[str]) -> bool:
+    normalized_sql = normalize_sql(sql)
+    if any(normalize_sql(str(tenant_id)) in normalized_sql for tenant_id in tenant_ids):
+        return True
+    return bool(re.search(r"(:[A-Za-z_][A-Za-z0-9_.]*|\$\d+|%s|\?)", sql))
+
+
+def tenant_columns_for_scope_check(config: ScanConfig) -> list[str]:
+    if config.tenancy.tenant_columns:
+        return list(config.tenancy.tenant_columns)
+    return [tenant_column(config.domain)]
+
+
+def tenant_columns_for_mutation(config: ScanConfig) -> list[str]:
+    columns = list(config.tenancy.tenant_columns)
+    for predicate in config.tenancy.canonical_predicates:
+        columns.extend(tenant_columns_from_predicate(predicate))
+    if not columns:
+        columns = [tenant_column(config.domain)]
+    return list(dict.fromkeys(columns))
+
+
+def tenant_columns_from_predicate(predicate: str) -> list[str]:
+    identifiers = re.findall(r"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?", predicate)
+    ignored = {
+        "principal.tenant_id",
+        "current_setting",
+        "true",
+        "false",
+        "and",
+        "or",
+        "in",
+        "is",
+        "not",
+        "null",
+    }
+    return [
+        identifier
+        for identifier in identifiers
+        if identifier.lower() not in ignored and not identifier.lower().startswith("principal.")
+    ]
 
 
 def sql_mentions_policy_metric(policy: Policy, metric_or_alias: str, sql: str) -> bool:
@@ -1095,6 +1209,7 @@ def build_summary(
     gate: GateOutcome,
     mutant_statuses: Counter[str],
     evidence_exercised: Counter[str] | None = None,
+    integration_readiness: dict[str, Any] | None = None,
 ) -> ScanSummary:
     evidence_levels = Counter(item.evidence_level.value for item in findings)
     regression_cases = Counter(
@@ -1118,7 +1233,51 @@ def build_summary(
         evidence_levels=dict(sorted(evidence_levels.items())),
         mutant_statuses=dict(sorted(mutant_statuses.items())),
         regression_cases=dict(sorted(regression_cases.items())),
+        integration_readiness=integration_readiness or {},
     )
+
+
+def assess_integration_readiness(
+    config: ScanConfig,
+    imported_traces: list[ImportedTrace],
+    database_adapter: PostgresAdapter | None,
+    findings: list[ScanFinding],
+) -> dict[str, Any]:
+    stages = {
+        "demo-ready": True,
+        "fixture-ready": True,
+        "trace-ready": bool(config.sql_traces.files and imported_traces),
+        "db-ready": database_adapter is not None
+        and bool(
+            config.database.rls_checks
+            or config.database.state_assertions
+            or (config.database.execute_imported_sql and imported_traces)
+        ),
+        "ci-gate-ready": config.gate.fail_on_high_confidence
+        and bool(config.sql_traces.files or config.dbt.files or config.database.rls_checks),
+    }
+    levels = ["demo-ready", "fixture-ready", "trace-ready", "db-ready", "ci-gate-ready"]
+    level = next(name for name in reversed(levels) if stages[name])
+    return {
+        "level": level,
+        "stages": stages,
+        "recommended_next_step": integration_readiness_next_step(stages),
+        "blocking_findings": [
+            item.id
+            for item in findings
+            if item.severity == FindingSeverity.CRITICAL and item.confidence == FindingConfidence.HIGH
+        ],
+    }
+
+
+def integration_readiness_next_step(stages: dict[str, bool]) -> str:
+    if not stages["trace-ready"]:
+        return "export at least one production SQL trace using the documented trace contract"
+    if not stages["db-ready"]:
+        return "add a disposable PostgreSQL fixture, RLS check, or state assertion"
+    if not stages["ci-gate-ready"]:
+        return "enable high-confidence gate failures in CI with policystrata scan"
+    return "run the scan command in CI and review remediation fields for any findings"
 
 
 def exercised_evidence_levels(
@@ -1172,8 +1331,9 @@ def assign_witness_paths(
         seen[item.id] += 1
         unique_id = item.id if seen[item.id] == 1 else safe_identifier(f"{item.id}_{seen[item.id]}")
         path = witness_dir / f"{unique_id}.json"
+        witness_path = str(path.relative_to(output_dir))
         updated = item.model_copy(
-            update={"id": unique_id, "witness_path": str(path.relative_to(output_dir))}
+            update={"id": unique_id, "witness_path": witness_path, "minimal_repro_trace": witness_path}
         )
         path.write_text(updated.model_dump_json(indent=2) + "\n", encoding="utf-8")
         assigned.append(updated)
@@ -1206,6 +1366,13 @@ def render_report(result: ScanResult) -> str:
     ]
     if not exercised_rows:
         exercised_rows = [["-", "0"]]
+    readiness = result.summary.integration_readiness
+    readiness_rows = [
+        [stage, "yes" if ready else "no"]
+        for stage, ready in sorted(readiness.get("stages", {}).items())
+    ]
+    if not readiness_rows:
+        readiness_rows = [["-", "no readiness data"]]
     finding_rows = [
         [
             item.id,
@@ -1221,16 +1388,38 @@ def render_report(result: ScanResult) -> str:
     ]
     if not finding_rows:
         finding_rows = [["-", "-", "-", "-", "-", "-", "-", "No findings"]]
+    remediation_rows = [
+        [
+            item.id,
+            item.what_changed or "-",
+            item.owner or item.surface,
+            item.probable_fix or "-",
+            item.minimal_repro_trace or "-",
+            item.ci_gate_command or item.reproducible_command,
+        ]
+        for item in result.findings
+    ]
+    if not remediation_rows:
+        remediation_rows = [["-", "-", "-", "-", "-", "-"]]
     sections = [
         "# PolicyStrata Scan Report",
         f"Gate: **{result.gate.outcome.value}**",
         "PolicyStrata is a scanner and release gate, not an authorization boundary.",
+        "## Production Integration",
+        f"Score: **{readiness.get('level', 'unknown')}**",
+        markdown_table(["Stage", "Ready"], readiness_rows),
+        f"Next step: {readiness.get('recommended_next_step', '-')}",
         "## Evidence Exercised",
         markdown_table(["Evidence level", "Checks"], exercised_rows),
         "## Findings",
         markdown_table(
             ["Finding", "Severity", "Confidence", "Surface", "Class", "Evidence", "Case", "Title"],
             finding_rows,
+        ),
+        "## Remediation",
+        markdown_table(
+            ["Finding", "What changed", "Owner", "Probable fix", "Minimal repro", "CI gate command"],
+            remediation_rows,
         ),
     ]
     return "\n\n".join(sections) + "\n"

@@ -13,6 +13,7 @@ from policystrata.domain import BUILTIN_DOMAIN, BUILTIN_DOMAINS, copy_domain
 from policystrata.evidence import parse_run_args, render_evidence_tables
 from policystrata.exports import export_run
 from policystrata.generator import MAX_GENERATED_COUNT
+from policystrata.init_scan import init_scan_project
 from policystrata.integrations.dbt_semantic import compare_dbt_semantic_model
 from policystrata.minimize import minimize_witness_file
 from policystrata.runner import run_suite
@@ -44,6 +45,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     init_parser.add_argument("domain", choices=BUILTIN_DOMAINS)
     init_parser.add_argument("--out", type=Path, default=Path("."))
+
+    init_scan_parser = subparsers.add_parser(
+        "init-scan",
+        help="Create a runnable scanner scaffold with config, domain policy, surfaces, and example traces.",
+    )
+    init_scan_parser.add_argument("--out", type=Path, default=Path("."))
+    init_scan_parser.add_argument("--source-domain", choices=BUILTIN_DOMAINS, default=BUILTIN_DOMAIN)
+    init_scan_parser.add_argument("--force", action="store_true")
 
     demo_parser = subparsers.add_parser("demo", help="Run a 30-second built-in policy drift demo.")
     demo_parser.add_argument("--out", type=Path, default=Path("runs/demo"))
@@ -120,7 +129,7 @@ def main(argv: list[str] | None = None) -> int:
         return run_command(args)
     except ValidationError as exc:
         parser.error(format_validation_error(exc))
-    except (FileNotFoundError, ValueError) as exc:
+    except (FileExistsError, FileNotFoundError, ValueError) as exc:
         parser.error(str(exc))
     except TypeError as exc:
         if not is_user_type_error(exc):
@@ -133,6 +142,15 @@ def run_command(args: argparse.Namespace) -> int:
     if args.command == "init-domain":
         target = copy_domain(args.domain, args.out)
         print(target)
+        return 0
+
+    if args.command == "init-scan":
+        print(
+            json.dumps(
+                init_scan_project(args.out, args.source_domain, args.force),
+                sort_keys=True,
+            )
+        )
         return 0
 
     if args.command == "demo":

@@ -10,9 +10,17 @@ The scanner reads a `policystrata.yaml` config with:
 
 - dbt Semantic Layer YAML files;
 - imported SQL or semantic trace JSONL files;
+- tenancy predicates and tenant-column vocabulary for real app schemas;
 - optional schema and seed fixtures;
 - optional PostgreSQL RLS checks and state assertions;
 - fuzzing and gate settings.
+
+Create a starter scanner project:
+
+```bash
+uv run policystrata init-scan --out policystrata
+uv run policystrata scan --config policystrata/policystrata.yaml --out runs/policystrata-smoke
+```
 
 The clean example is a passing smoke test:
 
@@ -52,6 +60,14 @@ successfully checked even when it produced no finding. This is separate from `ev
 which counts findings by evidence level. Clean scans should therefore still show imported-trace,
 property-generated, or real-db coverage when those checks ran and passed.
 
+`summary.json` includes `integration_readiness`, a production integration score with stages:
+
+- `demo-ready`: scanner command and policy fixture can run.
+- `fixture-ready`: policy and surface fixtures are loadable.
+- `trace-ready`: imported traces were loaded and checked.
+- `db-ready`: PostgreSQL fixture, RLS checks, state assertions, or real-db comparisons ran.
+- `ci-gate-ready`: scan inputs are configured for CI gate exit codes.
+
 ## Gate Behavior
 
 - exit code `0`: pass or warning-only scan;
@@ -61,6 +77,14 @@ property-generated, or real-db coverage when those checks ran and passed.
 The default gate fails high-confidence authorization, tenant-scope, RLS, unsafe-release, and
 semantic-drift findings. Static adapter mismatches and optional unavailable database fixtures are
 warnings unless configured as required.
+
+Findings include remediation fields:
+
+- `what_changed`
+- `owner`
+- `probable_fix`
+- `minimal_repro_trace`
+- `ci_gate_command`
 
 Imported traces and state assertions can carry regression case labels:
 
@@ -82,6 +106,40 @@ evidence.
 
 The recommended first deployment shape is a disposable Docker/PostgreSQL fixture or sanitized clone,
 not direct mutation of a customer database.
+
+## Trace Contract
+
+Imported traces are JSONL records. See [trace-contract.md](trace-contract.md) for the exact field
+contract and examples for:
+
+- `principal`
+- `semantic_ir`
+- `sql`
+- `release_allowed`
+- `expected_policy`
+- `tenant_ids`
+
+Tiny exporter recipes for TypeScript/Drizzle, Prisma, SQLAlchemy, Rails ActiveRecord, dbt Semantic
+Layer, and OpenTelemetry span logs are in [trace-adapters.md](trace-adapters.md).
+
+## Tenancy Configuration
+
+Declare real application tenant vocabulary instead of relying on built-in fixture names:
+
+```yaml
+tenancy:
+  canonical_predicates:
+    - "transactions.household_id = :principal.tenant_id"
+    - "accounts.household_id = :principal.tenant_id"
+    - "orders.organization_id = current_setting('app.organization_id')"
+  tenant_columns:
+    - transactions.household_id
+    - accounts.household_id
+    - organization_id
+```
+
+`canonical_predicates` are the strongest signal. `tenant_columns` are also used by the fuzz layer
+when generating tenant-scope mutants.
 
 ## Docker/PostgreSQL Fixture
 

@@ -240,6 +240,23 @@ def test_cli_check_dbt_semantic_integration(capsys) -> None:
     assert output["stale_dbt_metrics"] == []
 
 
+def test_cli_init_scan_creates_runnable_scaffold(tmp_path, capsys) -> None:
+    scanner_dir = tmp_path / "scanner"
+
+    assert main(["init-scan", "--out", str(scanner_dir)]) == 0
+    scaffold = json.loads(capsys.readouterr().out)
+
+    assert (scanner_dir / "policystrata.yaml").is_file()
+    assert (scanner_dir / "domain" / "policy.yaml").is_file()
+    assert (scanner_dir / "domain" / "surfaces.yaml").is_file()
+    assert (scanner_dir / "traces.example.jsonl").is_file()
+    assert "policystrata scan --config" in scaffold["command"]
+
+    assert main(["scan", "--config", scaffold["files"]["config"], "--out", str(tmp_path / "scan")]) == 0
+    scan = json.loads(capsys.readouterr().out)
+    assert scan["gate"] == "pass"
+
+
 def test_cli_scan_uses_gate_exit_codes(tmp_path, capsys) -> None:
     failed_out = tmp_path / "failed"
     clean_out = tmp_path / "clean"

@@ -167,6 +167,16 @@ boundaries in [docs/methodology.md](docs/methodology.md) and [EVAL_CARD.md](EVAL
 `policystrata scan` is the production-oriented path. It treats PolicyStrata as a scanner and
 release gate, not as the authorization boundary.
 
+Create a scanner scaffold for an application:
+
+```bash
+uv run policystrata init-scan --out policystrata
+uv run policystrata scan --config policystrata/policystrata.yaml --out runs/policystrata-smoke
+```
+
+The scaffold writes `policystrata.yaml`, `domain/policy.yaml`, `domain/surfaces.yaml`, and
+`traces.example.jsonl`. Replace the example trace with exported SQL/tool-call traces from your app.
+
 Clean smoke test:
 
 ```bash
@@ -202,8 +212,11 @@ uv run policystrata scan --config examples/postgres_dbt/policystrata_real_db_cle
 ```
 
 Postgres access goes through Python/`psycopg`; host `psql` is not required. See
-[docs/scanner.md](docs/scanner.md) for scanner configuration, gate behavior, state assertions, and
-real-database fixture details.
+[docs/scanner.md](docs/scanner.md) for scanner configuration, gate behavior, tenancy config,
+remediation fields, state assertions, and real-database fixture details. See
+[docs/trace-contract.md](docs/trace-contract.md), [docs/trace-adapters.md](docs/trace-adapters.md),
+and [docs/testing-ai-data-assistant.md](docs/testing-ai-data-assistant.md) for imported-trace
+contracts and framework recipes.
 
 ## GitHub Action
 
@@ -223,7 +236,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: raintree-technology/policystrata@v0.1.0
+      - uses: raintree-technology/policystrata@v0.1.1
         with:
           config: policystrata.yaml
           out: runs/policystrata
