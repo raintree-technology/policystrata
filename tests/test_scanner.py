@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 
+import psycopg
 import pytest
 
 from policystrata.database import assert_read_only_sql
@@ -205,4 +206,4 @@ class FakePostgresAdapter:
 
 class FailingPostgresAdapter:
     def query(self, sql: str, tenant_id: str | None = None) -> list[dict[str, object]]:
-        raise RuntimeError("fixture unavailable")
+        raise psycopg.OperationalError("fixture unavailable")

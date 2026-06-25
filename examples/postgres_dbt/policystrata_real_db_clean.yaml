@@ -1,0 +1,23 @@
+version: 1
+domain: support_saas
+output: scan-real-db-clean-out
+sql_traces:
+  required: true
+  files:
+    - traces_real_db_clean.jsonl
+database:
+  required: true
+  schema: ../../src/policystrata/domains/support_saas/schema.sql
+  seed: ../../src/policystrata/domains/support_saas/seed.sql
+  rls_checks:
+    - id: accounts_acme_rls
+      sql: "select tenant_id, name from accounts order by tenant_id, name"
+      tenant_id: acme
+      expected_rows: 2
+      expected_tenant_ids: [acme]
+      tenant_column: tenant_id
+fuzz:
+  enabled: false
+gate:
+  fail_on_high_confidence: true
+  required_inputs: [sql_traces, database]

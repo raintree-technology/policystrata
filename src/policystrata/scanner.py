@@ -49,6 +49,15 @@ SCAN_OUTPUT_FILES = {
     "summary": "summary.json",
     "report": "report.md",
 }
+DATABASE_FIXTURE_EXCEPTIONS = (
+    OSError,
+    TimeoutError,
+    ValueError,
+    subprocess.SubprocessError,
+    psycopg.Error,
+)
+DATABASE_QUERY_EXCEPTIONS = (OSError, ValueError, psycopg.Error)
+POSTGRES_STARTUP_EXCEPTIONS = (OSError, psycopg.Error)
 
 
 def load_scan_config(path: Path) -> ScanConfig:
@@ -421,19 +430,14 @@ def scan_imported_trace_on_database(
     tenant_id = imported_trace_tenant_id(trace, principal.tenant_ids)
     try:
         imported_rows = app.query(trace.sql, tenant_id=tenant_id)
-    except Exception as exc:  # noqa: BLE001 - connector failures become scan findings.
-        severity = FindingSeverity.CRITICAL if config.database.required else FindingSeverity.WARNING
+    except DATABASE_QUERY_EXCEPTIONS as exc:
         return [
-            finding(
+            database_error_finding(
                 f"imported_sql_execution_error_{trace.id}",
                 "Imported SQL could not be executed against the configured PostgreSQL fixture",
-                severity,
-                FindingConfidence.HIGH,
-                "database",
-                WitnessClass.OVER_RESTRICTIVE,
-                EvidenceLevel.REAL_DB,
                 [str(exc)],
                 config_path,
+                required=config.database.required,
                 principal=trace.principal,
                 semantic_ir=semantic_query_dump(trace.semantic_ir),
                 sql=trace.sql,
@@ -450,19 +454,14 @@ def scan_imported_trace_on_database(
     ).sql
     try:
         canonical_rows = app.query(canonical_sql, tenant_id=tenant_id)
-    except Exception as exc:  # noqa: BLE001 - connector failures become scan findings.
-        severity = FindingSeverity.CRITICAL if config.database.required else FindingSeverity.WARNING
+    except DATABASE_QUERY_EXCEPTIONS as exc:
         return [
-            finding(
+            database_error_finding(
                 f"canonical_sql_execution_error_{trace.id}",
                 "Canonical compiler SQL could not be executed against the configured PostgreSQL fixture",
-                severity,
-                FindingConfidence.HIGH,
-                "database",
-                WitnessClass.OVER_RESTRICTIVE,
-                EvidenceLevel.REAL_DB,
                 [str(exc)],
                 config_path,
+                required=config.database.required,
                 principal=trace.principal,
                 semantic_ir=semantic_query_dump(trace.semantic_ir),
                 sql=canonical_sql,
@@ -532,20 +531,15 @@ def prepare_database(
         admin = PostgresAdapter(admin_url)
         admin.load_fixture(schema, seed)
         app = PostgresAdapter(app_url)
-    except Exception as exc:  # noqa: BLE001 - connector failures become scan findings.
-        severity = FindingSeverity.CRITICAL if config.database.required else FindingSeverity.WARNING
-        confidence = FindingConfidence.HIGH if config.database.required else FindingConfidence.MEDIUM
+    except DATABASE_FIXTURE_EXCEPTIONS as exc:
         findings.append(
-            finding(
+            database_error_finding(
                 "postgres_fixture_unavailable",
                 "PostgreSQL fixture could not be prepared",
-                severity,
-                confidence,
-                "database",
-                WitnessClass.OVER_RESTRICTIVE,
-                EvidenceLevel.REAL_DB,
                 [str(exc)],
                 config_path,
+                required=config.database.required,
+                confidence=database_fixture_confidence(config.database.required),
             )
         )
         return None, findings
@@ -581,7 +575,7 @@ def wait_for_postgres(database_url: str, timeout_seconds: float) -> None:
                 cur.execute("select 1")
                 cur.fetchone()
                 return
-        except Exception as exc:  # noqa: BLE001 - retry until timeout.
+        except POSTGRES_STARTUP_EXCEPTIONS as exc:
             last_error = exc
             time.sleep(0.5)
     if last_error is not None:
@@ -599,23 +593,14 @@ def scan_rls_checks(
         try:
             assert_read_only_sql(check.sql)
             rows = app.query(check.sql, tenant_id=check.tenant_id)
-        except Exception as exc:  # noqa: BLE001 - connector failures become scan findings.
-            severity = (
-                FindingSeverity.CRITICAL
-                if check.required or config.database.required
-                else FindingSeverity.WARNING
-            )
+        except DATABASE_QUERY_EXCEPTIONS as exc:
             findings.append(
-                finding(
+                database_error_finding(
                     f"postgres_rls_check_error_{check.id}",
                     "PostgreSQL RLS check could not run",
-                    severity,
-                    FindingConfidence.HIGH,
-                    "database",
-                    WitnessClass.OVER_RESTRICTIVE,
-                    EvidenceLevel.REAL_DB,
                     [str(exc)],
                     config_path,
+                    required=check.required or config.database.required,
                     sql=check.sql,
                 )
             )
@@ -648,6 +633,46 @@ def scan_rls_checks(
                 )
             )
     return findings
+
+
+def database_error_severity(required: bool) -> FindingSeverity:
+    return FindingSeverity.CRITICAL if required else FindingSeverity.WARNING
+
+
+def database_fixture_confidence(required: bool) -> FindingConfidence:
+    return FindingConfidence.HIGH if required else FindingConfidence.MEDIUM
+
+
+def database_error_finding(
+    finding_id: str,
+    title: str,
+    reasons: list[str],
+    config_path: Path,
+    *,
+    required: bool,
+    confidence: FindingConfidence = FindingConfidence.HIGH,
+    principal: str | None = None,
+    semantic_ir: dict[str, Any] | None = None,
+    sql: str | None = None,
+    source: str | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> ScanFinding:
+    return finding(
+        finding_id,
+        title,
+        database_error_severity(required),
+        confidence,
+        "database",
+        WitnessClass.OVER_RESTRICTIVE,
+        EvidenceLevel.REAL_DB,
+        reasons,
+        config_path,
+        principal=principal,
+        semantic_ir=semantic_ir,
+        sql=sql,
+        source=source,
+        metadata=metadata,
+    )
 
 
 def adapter_finding(

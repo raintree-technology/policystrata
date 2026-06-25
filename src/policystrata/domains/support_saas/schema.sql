@@ -8,9 +8,10 @@ drop table if exists tenants;
 
 do $$
 begin
-  if not exists (select 1 from pg_roles where rolname = 'policystrata_app') then
-    create role policystrata_app login password 'policystrata_app';
-  end if;
+  create role policystrata_app login password 'policystrata_app';
+exception
+  when duplicate_object or unique_violation then
+    alter role policystrata_app with login password 'policystrata_app';
 end
 $$;
 

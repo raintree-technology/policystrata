@@ -69,7 +69,14 @@ def run_suite(
     with traces_path.open("w", encoding="utf-8") as handle:
         for task, trace in zip(tasks, traces, strict=True):
             if trace.witness_class != WitnessClass.CLEAN:
-                witness = minimize_trace(trace)
+                def replay(query: SemanticQuery, task: Task = task) -> Trace:
+                    return evaluate_task(
+                        policy,
+                        task.model_copy(update={"semantic_query": query}),
+                        surface_config,
+                    )
+
+                witness = minimize_trace(trace, replay=replay)
                 witness_path = witness_file_path(witness_dir, task.id)
                 witness_path.write_text(
                     json.dumps(witness, indent=2, sort_keys=True) + "\n",

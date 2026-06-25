@@ -35,6 +35,27 @@ def test_postgres_rls_blocks_cross_tenant_rows() -> None:
     os.environ.get("POLICYSTRATA_RUN_DB_TESTS") != "1",
     reason="set POLICYSTRATA_RUN_DB_TESTS=1 and start docker compose postgres",
 )
+def test_postgres_schema_setup_is_idempotent_for_existing_app_role() -> None:
+    root = Path("src/policystrata/domains/support_saas")
+    adapter = PostgresAdapter()
+    adapter.execute_script(root / "schema.sql")
+    adapter.execute_script(root / "schema.sql")
+    adapter.execute_script(root / "seed.sql")
+
+    app_adapter = PostgresAdapter(APP_DATABASE_URL)
+    rows = app_adapter.query(
+        "select tenant_id, name from accounts order by tenant_id, name",
+        tenant_id="beta",
+    )
+
+    assert len(rows) == 2
+    assert {row["tenant_id"] for row in rows} == {"beta"}
+
+
+@pytest.mark.skipif(
+    os.environ.get("POLICYSTRATA_RUN_DB_TESTS") != "1",
+    reason="set POLICYSTRATA_RUN_DB_TESTS=1 and start docker compose postgres",
+)
 def test_scanner_runs_real_postgres_rls_check(tmp_path) -> None:
     config = tmp_path / "policystrata.yaml"
     config.write_text(
@@ -59,6 +80,17 @@ gate:
     )
 
     result = run_scan(config, tmp_path / "scan")
+
+    assert result.gate.outcome == GateOutcome.PASS
+    assert result.summary.total_findings == 0
+
+
+@pytest.mark.skipif(
+    os.environ.get("POLICYSTRATA_RUN_DB_TESTS") != "1",
+    reason="set POLICYSTRATA_RUN_DB_TESTS=1 and start docker compose postgres",
+)
+def test_scanner_executes_imported_trace_against_real_postgres_fixture(tmp_path) -> None:
+    result = run_scan(Path("examples/postgres_dbt/policystrata_real_db_clean.yaml"), tmp_path / "scan")
 
     assert result.gate.outcome == GateOutcome.PASS
     assert result.summary.total_findings == 0
