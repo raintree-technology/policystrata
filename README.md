@@ -18,7 +18,7 @@ between layers.
 
 ## Quick Start
 
-After the first PyPI release:
+From PyPI:
 
 ```bash
 uvx policystrata demo
