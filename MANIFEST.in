@@ -1,0 +1,14 @@
+include README.md
+include CHANGELOG.md
+include CONTRIBUTING.md
+include SECURITY.md
+exclude AGENTS.md
+include CITATION.cff
+include LICENSE
+include docker-compose.yml
+include uv.lock
+recursive-include docs *.md
+recursive-include examples *.jsonl *.yaml *.yml
+recursive-include scripts *.py *.sh
+recursive-include tests *.py
+recursive-include src/policystrata/domains *.sql *.yaml

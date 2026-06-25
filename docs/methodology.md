@@ -140,7 +140,12 @@ count is reported in the suite table rather than as a self-referential baseline.
 
 ## Witnesses
 
-The current witness minimizer is a compact projection of the trace, not a delta-debugging reducer.
+The current witness minimizer performs bounded semantic-IR replay reduction and then emits a compact
+projection of the reduced trace. It tries to remove dimensions, remove filters, and reset non-default
+limits. A candidate reduction is accepted only if replay preserves the witness class, first violated
+surface, containment layer, release decision, localized contract failure, and semantic-drift or
+database-containment evidence when present.
+
 It preserves:
 
 - task ID;
@@ -148,7 +153,7 @@ It preserves:
 - localized surface;
 - containment layer;
 - principal and request;
-- normalized semantic IR;
+- replay-reduced semantic IR;
 - surface versions;
 - surface responsibilities;
 - contract decisions;
@@ -158,10 +163,10 @@ It preserves:
 - release decision;
 - explanatory reasons.
 
-Because it does not mutate or shrink the query yet, it preserves the violated obligation by
-construction. Future minimization that removes fields, filters, joins, or rows must test that the
-same witness class, first violated surface, principal meaning, database distinction, and containment
-status remain unchanged.
+This is not a delta-debugging reducer or proof of globally minimal input. It is a bounded replay
+reducer over the current semantic IR shape. Future minimization that changes metrics, time windows,
+joins, rows, or source code must test that the same witness class, first violated surface, principal
+meaning, database distinction, and containment status remain unchanged.
 
 ## Current Limitations
 

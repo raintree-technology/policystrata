@@ -1,0 +1,97 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      run_postgres:
+        description: "Run Dockerized PostgreSQL integration tests"
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  quality:
+    name: Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: uv sync --extra dev
+
+      - name: Run tests
+        run: uv run pytest
+
+      - name: Run release checks
+        if: ${{ matrix.python-version == '3.12' }}
+        run: |
+          uv run ruff check .
+          uv run mypy src
+          uv build
+
+  postgres-integration:
+    name: PostgreSQL integration
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_postgres }}
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: policystrata
+          POSTGRES_PASSWORD: policystrata
+          POSTGRES_DB: support_saas
+        ports:
+          - 55432:5432
+        options: >-
+          --health-cmd "pg_isready -U policystrata -d support_saas"
+          --health-interval 3s
+          --health-timeout 3s
+          --health-retries 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: uv sync --extra dev
+
+      - name: Run PostgreSQL integration tests
+        env:
+          POLICYSTRATA_RUN_DB_TESTS: "1"
+        run: uv run pytest tests/test_postgres_integration.py
+
+      - name: Run real-db scanner fixture
+        run: >
+          uv run policystrata scan
+          --config examples/postgres_dbt/policystrata_real_db_clean.yaml
+          --out runs/scan-real-db-clean

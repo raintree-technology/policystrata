@@ -124,7 +124,7 @@ policystrata evidence \
   finance_saas=runs/finance \
   --out runs/evidence.md
 policystrata minimize --witness runs/example/witnesses/<id>.json
-policystrata scan --config examples/postgres_dbt/policystrata.yaml --out runs/scan
+policystrata scan --config examples/postgres_dbt/policystrata_clean.yaml --out runs/scan-clean
 ```
 
 The default `run` command uses the built-in deterministic domain fixtures and writes:
@@ -152,18 +152,35 @@ The scanner reads a `policystrata.yaml` config with:
 Example:
 
 ```bash
+policystrata scan --config examples/postgres_dbt/policystrata_clean.yaml --out runs/scan-clean
+```
+
+The clean example is a passing smoke test and should exit `0` with no findings. The command writes:
+
+```text
+runs/scan-clean/scan.json
+runs/scan-clean/findings.jsonl
+runs/scan-clean/summary.json
+runs/scan-clean/report.md
+runs/scan-clean/witnesses/*.json
+runs/scan-clean/scan.sarif  # when sarif: true
+```
+
+The repo also includes an intentionally failing scanner fixture:
+
+```bash
 policystrata scan --config examples/postgres_dbt/policystrata.yaml --out runs/scan
 ```
 
-The command writes:
+That example should exit `1` because it contains imported traces with authorization, unsafe-release,
+and tenant-scope findings. Use it to inspect gate-failure output, not as the first clean smoke test.
 
-```text
-runs/scan/scan.json
-runs/scan/findings.jsonl
-runs/scan/summary.json
-runs/scan/report.md
-runs/scan/witnesses/*.json
-runs/scan/scan.sarif  # when sarif: true
+For a clean scanner run that also executes imported SQL beside canonical compiler SQL against the
+Docker/PostgreSQL fixture:
+
+```bash
+docker compose up -d postgres
+policystrata scan --config examples/postgres_dbt/policystrata_real_db_clean.yaml --out runs/scan-real-db-clean
 ```
 
 Gate behavior:
@@ -296,11 +313,12 @@ Methodology details are in [`docs/methodology.md`](docs/methodology.md).
 
 ## Sample Witness
 
-A minimized witness keeps the smallest stable record needed to explain the violated obligation:
+A minimized witness keeps a smaller replay-stable record needed to explain the violated
+obligation:
 
 ```json
 {
-  "compiled_sql": "select count(distinct support_tickets.id) as value, accounts.region as region from accounts left join subscriptions on subscriptions.account_id = accounts.id left join invoices on invoices.subscription_id = subscriptions.id left join support_tickets on support_tickets.account_id = accounts.id where invoices.invoice_date >= date '2026-05-01' and invoices.invoice_date < date '2026-06-01' group by accounts.region limit 100",
+  "compiled_sql": "select count(distinct support_tickets.id) as value from accounts left join subscriptions on subscriptions.account_id = accounts.id left join invoices on invoices.subscription_id = subscriptions.id left join support_tickets on support_tickets.account_id = accounts.id where invoices.invoice_date >= date '2026-05-01' and invoices.invoice_date < date '2026-06-01' limit 100",
   "containment_layer": "database",
   "contract_decisions": {
     "compiler": {
@@ -349,9 +367,7 @@ A minimized witness keeps the smallest stable record needed to explain the viola
   "release_allowed": false,
   "request": "Show ticket count by region for my tenant, variant 1.",
   "semantic_ir": {
-    "dimensions": [
-      "region"
-    ],
+    "dimensions": [],
     "filters": {},
     "grain": "month",
     "limit": 100,

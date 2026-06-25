@@ -55,10 +55,10 @@ What this does not prove:
 
 | Suite | Mutants | Killed | Survived | Equivalent declared | Median witness bytes |
 | --- | --- | --- | --- | --- | --- |
-| seeded | 50 | 50 | 0 | 0 | 3212 |
-| generated | 500 | 500 | 0 | 0 | 3321 |
-| generated_alt_seed | 50 | 50 | 0 | 0 | 3327 |
-| finance_saas | 20 | 20 | 0 | 0 | 3329 |
+| seeded | 50 | 50 | 0 | 0 | 3138 |
+| generated | 500 | 500 | 0 | 0 | 3227 |
+| generated_alt_seed | 50 | 50 | 0 | 0 | 3227 |
+| finance_saas | 20 | 20 | 0 | 0 | 3253 |
 
 ## Baselines
 
@@ -79,7 +79,8 @@ What this does not prove:
   by the deterministic simulator and expected-label fixtures.
 - Equivalent and stillborn mutant accounting is supported in the evidence table; the current
   generators emit none.
-- The current witness minimizer is a compact projection of trace fields, not a search-based reducer.
+- The current witness minimizer is a bounded semantic-IR replay reducer, not a search-based
+  delta-debugging reducer.
 - Database effects are simulated in deterministic benchmark runs.
 
 ## Optional Real PostgreSQL RLS Check
@@ -106,13 +107,27 @@ Expected table shape:
 over configured dbt files, imported SQL/semantic traces, generated SQL/IR fuzz mutants, and optional
 real PostgreSQL fixture checks.
 
-Example:
+Clean smoke test:
+
+```bash
+uv run policystrata scan --config examples/postgres_dbt/policystrata_clean.yaml --out runs/scan-clean
+```
+
+Clean real-DB smoke test:
+
+```bash
+docker compose up -d postgres
+uv run policystrata scan --config examples/postgres_dbt/policystrata_real_db_clean.yaml --out runs/scan-real-db-clean
+```
+
+Intentional gate-failure example:
 
 ```bash
 uv run policystrata scan --config examples/postgres_dbt/policystrata.yaml --out runs/scan
 ```
 
-The scanner writes `scan.json`, `findings.jsonl`, `summary.json`, `report.md`, and minimized
-finding witnesses. These findings carry evidence levels such as `imported_trace`, `property_generated`,
-and `real_db`; they are release-gating evidence, not proof that all real-world policy drift can be
-detected.
+The second config includes imported traces with known authorization, release, and tenant-scope
+findings and should exit `1`. The scanner writes `scan.json`, `findings.jsonl`, `summary.json`,
+`report.md`, and minimized finding witnesses. These findings carry evidence levels such as
+`imported_trace`, `property_generated`, and `real_db`; they are release-gating evidence, not proof
+that all real-world policy drift can be detected.
