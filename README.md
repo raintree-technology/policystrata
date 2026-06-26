@@ -245,7 +245,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: raintree-technology/policystrata@v3.0.3
+      - uses: raintree-technology/policystrata@v0.1.3
         with:
           config: policystrata.yaml
           out: runs/policystrata

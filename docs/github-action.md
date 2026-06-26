@@ -6,7 +6,7 @@ action exits non-zero and blocks the workflow.
 
 The action installs PolicyStrata from the action checkout by default, so it can be used from a
 repository tag before the package is published to PyPI. After the PyPI package is published, callers
-can optionally set `package` to a normal pip install spec such as `policystrata==3.0.3`.
+can optionally set `package` to a normal pip install spec such as `policystrata==0.1.3`.
 
 ## Basic Gate
 
@@ -24,7 +24,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: raintree-technology/policystrata@v3.0.3
+      - uses: raintree-technology/policystrata@v0.1.3
         with:
           config: policystrata.yaml
           out: runs/policystrata
@@ -33,7 +33,7 @@ jobs:
 ## Upload Scan Artifacts
 
 ```yaml
-      - uses: raintree-technology/policystrata@v3.0.3
+      - uses: raintree-technology/policystrata@v0.1.3
         with:
           config: policystrata.yaml
           out: runs/policystrata
