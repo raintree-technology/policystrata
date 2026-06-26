@@ -70,6 +70,11 @@ class SqlTraceConfig(BaseModel):
     required: bool = False
 
 
+class FileInputConfig(BaseModel):
+    files: list[str] = Field(default_factory=list)
+    required: bool = False
+
+
 class TenancyScanConfig(BaseModel):
     canonical_predicates: list[str] = Field(default_factory=list)
     tenant_columns: list[str] = Field(default_factory=list)
@@ -139,6 +144,9 @@ class ScanConfig(BaseModel):
     sarif: bool = False
     dbt: DbtScanConfig = Field(default_factory=DbtScanConfig)
     sql_traces: SqlTraceConfig = Field(default_factory=SqlTraceConfig)
+    policy_docs: FileInputConfig = Field(default_factory=FileInputConfig)
+    prompt_manifests: FileInputConfig = Field(default_factory=FileInputConfig)
+    source_maps: FileInputConfig = Field(default_factory=FileInputConfig)
     tenancy: TenancyScanConfig = Field(default_factory=TenancyScanConfig)
     database: DatabaseScanConfig = Field(default_factory=DatabaseScanConfig)
     fuzz: FuzzConfig = Field(default_factory=FuzzConfig)

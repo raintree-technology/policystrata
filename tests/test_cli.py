@@ -373,3 +373,181 @@ def test_cli_scan_uses_gate_exit_codes(tmp_path, capsys) -> None:
     clean = json.loads(capsys.readouterr().out)
     assert clean["gate"] == "pass"
     assert clean["findings"] == 0
+
+
+def test_cli_doctor_config_reports_wired_and_missing_stack(capsys) -> None:
+    assert main(["doctor", "--config", "examples/postgres_dbt/policystrata.yaml"]) == 0
+    doctor = json.loads(capsys.readouterr().out)
+
+    stack = {item["id"]: item for item in doctor["stack"]}
+    assert doctor["version"] == "doctor.v1"
+    assert doctor["environment"]["requires_llm_api_key"] is False
+    assert stack["dbt_semantic_adapter"]["status"] == "wired"
+    assert stack["app_sql_traces"]["status"] == "wired"
+    assert stack["database_fixture"]["status"] == "missing"
+    assert stack["release_layer_tests"]["status"] == "wired"
+    assert doctor["coverage_accounting"]["sql_trace_records"] >= 1
+    assert any(todo["id"] == "fix_database_fixture" for todo in doctor["remediation"])
+
+
+def test_cli_doctor_real_db_config_introspects_schema_and_writes_markdown(tmp_path, capsys) -> None:
+    report_path = tmp_path / "doctor.md"
+
+    assert (
+        main(
+            [
+                "doctor",
+                "--config",
+                "examples/postgres_dbt/policystrata_real_db_clean.yaml",
+                "--format",
+                "markdown",
+                "--out",
+                str(report_path),
+            ]
+        )
+        == 0
+    )
+    output = json.loads(capsys.readouterr().out)
+    assert output["out"] == str(report_path)
+    markdown = report_path.read_text(encoding="utf-8")
+    assert "# PolicyStrata Doctor" in markdown
+    assert "PostgreSQL fixture" in markdown
+
+    assert main(["doctor", "--config", "examples/postgres_dbt/policystrata_real_db_clean.yaml"]) == 0
+    doctor = json.loads(capsys.readouterr().out)
+    schema = doctor["database_introspection"]
+    stack = {item["id"]: item for item in doctor["stack"]}
+    assert "accounts" in schema["tables"]
+    assert "accounts" in schema["rls_tables"]
+    assert "accounts.customer_email" in schema["sensitive_columns"]
+    assert stack["database_fixture"]["status"] == "wired"
+    assert stack["rls_policies"]["status"] == "wired"
+    assert stack["state_assertions"]["status"] == "wired"
+
+
+def test_cli_doctor_policy_docs_classify_privacy_tos_and_obligations(tmp_path, capsys) -> None:
+    docs_dir = tmp_path / "docs"
+    docs_dir.mkdir()
+    (docs_dir / "privacy.md").write_text(
+        """
+# Privacy Policy
+
+We collect only personal data limited to what is necessary. We use your information to
+provide the service. This privacy notice explains consent and privacy rights, including
+how to access your data, correct your data, and delete your data. We retain and delete
+personal information according to a retention schedule. We share data with third party
+service providers. Sensitive personal data such as customer_email is protected by
+safeguards and access control.
+""".lstrip(),
+        encoding="utf-8",
+    )
+    (docs_dir / "terms.md").write_text(
+        """
+# Terms of Service
+
+These service terms describe acceptable use and authorized users for customer data.
+""".lstrip(),
+        encoding="utf-8",
+    )
+    (docs_dir / "data-processing.md").write_text(
+        """
+# Data Processing Agreement
+
+The customer is controller, PolicyStrata is processor, and subprocessors are reviewed
+under security controls and encryption requirements.
+""".lstrip(),
+        encoding="utf-8",
+    )
+    (docs_dir / "internal-policy.md").write_text(
+        """
+# Internal Policy
+
+Employee access uses role-based access and least privilege for tenant account data.
+""".lstrip(),
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "policystrata.yaml"
+    config_path.write_text(
+        """
+version: 1
+domain: support_saas
+policy_docs:
+  files:
+    - docs/privacy.md
+    - docs/terms.md
+    - docs/data-processing.md
+    - docs/internal-policy.md
+fuzz:
+  enabled: false
+""".lstrip(),
+        encoding="utf-8",
+    )
+
+    assert main(["doctor", "--config", str(config_path)]) == 0
+    doctor = json.loads(capsys.readouterr().out)
+
+    policy_docs = doctor["policy_documents"]
+    stack = {item["id"]: item for item in doctor["stack"]}
+    assert policy_docs["status"] == "wired"
+    assert policy_docs["missing_required_types"] == []
+    assert policy_docs["missing_expected_obligations"] == []
+    assert set(policy_docs["detected_types"]) >= {
+        "privacy_policy",
+        "terms_of_service",
+        "data_processing_agreement",
+        "internal_policy",
+    }
+    assert set(policy_docs["detected_obligations"]) >= {
+        "personal_data_minimization",
+        "purpose_limited_processing",
+        "notice_or_consent",
+        "retention_and_deletion",
+        "third_party_sharing",
+        "security_controls",
+        "sensitive_data_controls",
+    }
+    assert "accounts.customer_email" in policy_docs["referenced_sensitive_columns"]
+    assert stack["policy_docs_ingestion"]["status"] == "wired"
+
+
+def test_cli_doctor_prompt_manifest_compares_exposed_policy_surface(tmp_path, capsys) -> None:
+    manifest_path = tmp_path / "prompts.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "tools": [
+                    {
+                        "name": "searchTickets",
+                        "exposed_metrics": ["ticket_count", "retired_metric"],
+                        "dimensions": ["region", "private_field"],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "policystrata.yaml"
+    config_path.write_text(
+        """
+version: 1
+domain: support_saas
+prompt_manifests:
+  files:
+    - prompts.json
+fuzz:
+  enabled: false
+""".lstrip(),
+        encoding="utf-8",
+    )
+
+    assert main(["doctor", "--config", str(config_path)]) == 0
+    doctor = json.loads(capsys.readouterr().out)
+    stack = {item["id"]: item for item in doctor["stack"]}
+    coverage = doctor["coverage_accounting"]
+
+    assert stack["prompt_manifest_checks"]["status"] == "partial"
+    assert "retired_metric" in coverage["prompt_manifest_unauthorized_metrics"]
+    assert "private_field" in coverage["prompt_manifest_unauthorized_dimensions"]
+
+    assert main(["doctor", "--config", str(config_path), "--strict"]) == 1
+    capsys.readouterr()

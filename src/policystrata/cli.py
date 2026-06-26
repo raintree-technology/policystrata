@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import shutil
-import sys
 from pathlib import Path
 
 from pydantic import ValidationError
@@ -11,6 +9,7 @@ from pydantic import ValidationError
 from policystrata.artifact_report import artifact_report_json, render_artifact_report
 from policystrata.baselines import evaluate_ablation_runs, evaluate_baseline_runs
 from policystrata.demo import run_demo
+from policystrata.doctor import environment_doctor, render_doctor_report, run_config_doctor
 from policystrata.domain import BUILTIN_DOMAIN, BUILTIN_DOMAINS, copy_domain
 from policystrata.evidence import parse_run_args, render_evidence_tables
 from policystrata.exports import export_run
@@ -183,7 +182,7 @@ def build_parser() -> argparse.ArgumentParser:
             "    --out runs/scan-clean\n\n"
             "Accepted config sections:\n"
             "  version, domain, domain_path, output, sarif, dbt, sql_traces,\n"
-            "  tenancy, database, fuzz, gate"
+            "  policy_docs, prompt_manifests, source_maps, tenancy, database, fuzz, gate"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -195,7 +194,26 @@ def build_parser() -> argparse.ArgumentParser:
     )
     scan_parser.add_argument("--out", type=Path, default=None, help="Output directory for scan artifacts.")
 
-    subparsers.add_parser("doctor", help="Check local dependencies for deterministic reproduction.")
+    doctor_parser = subparsers.add_parser(
+        "doctor",
+        help="Check local dependencies or audit a scanner configuration.",
+        description=(
+            "Check local dependencies or audit scanner wiring.\n\n"
+            "Examples:\n"
+            "  policystrata doctor\n"
+            "  policystrata doctor --config policystrata/policystrata.yaml\n"
+            "  policystrata doctor --config policystrata/policystrata.yaml --format markdown"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    doctor_parser.add_argument("--config", type=Path, default=None, help="Scan config YAML to audit.")
+    doctor_parser.add_argument("--format", choices=["json", "markdown"], default="json")
+    doctor_parser.add_argument("--out", type=Path, default=None, help="Optional output file.")
+    doctor_parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="Exit 1 when configured stack audit contains missing, partial, or invalid wiring.",
+    )
 
     return parser
 
@@ -348,8 +366,24 @@ def run_command(args: argparse.Namespace) -> int:
         return 1 if scan_result.gate.outcome == GateOutcome.FAIL else 0
 
     if args.command == "doctor":
-        print(json.dumps(run_doctor(), indent=2, sort_keys=True))
-        return 0
+        if args.config is None:
+            output = json.dumps(run_doctor(), indent=2, sort_keys=True) + "\n"
+            exit_code = 0
+        else:
+            doctor = run_config_doctor(args.config)
+            output = (
+                render_doctor_report(doctor)
+                if args.format == "markdown"
+                else json.dumps(doctor, indent=2, sort_keys=True) + "\n"
+            )
+            exit_code = 1 if args.strict and doctor_has_missing_wiring(doctor) else 0
+        if args.out is not None:
+            args.out.parent.mkdir(parents=True, exist_ok=True)
+            args.out.write_text(output, encoding="utf-8")
+            print(json.dumps({"out": str(args.out)}, sort_keys=True))
+        else:
+            print(output, end="")
+        return exit_code
 
     raise ValueError(f"unknown command: {args.command}")
 
@@ -376,13 +410,17 @@ def strip_manifest_payloads(verification: dict[str, object]) -> dict[str, object
 
 
 def run_doctor() -> dict[str, object]:
-    return {
-        "python": sys.version.split()[0],
-        "uv": shutil.which("uv") is not None,
-        "docker": shutil.which("docker") is not None,
-        "requires_llm_api_key": False,
-        "requires_host_psql": False,
-    }
+    return environment_doctor()
+
+
+def doctor_has_missing_wiring(doctor: dict[str, object]) -> bool:
+    stack = doctor.get("stack", [])
+    if not isinstance(stack, list):
+        return False
+    return any(
+        isinstance(item, dict) and item.get("status") in {"missing", "partial", "invalid"}
+        for item in stack
+    )
 
 
 def format_validation_error(exc: ValidationError) -> str:

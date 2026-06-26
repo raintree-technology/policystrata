@@ -10,6 +10,9 @@ The scanner reads a `policystrata.yaml` config with:
 
 - dbt Semantic Layer YAML files;
 - imported SQL or semantic trace JSONL files;
+- optional policy, terms, privacy, DPA, or internal policy documents for doctor/audit accounting;
+- optional prompt/tool manifest exports for doctor/audit accounting;
+- optional source maps from traces back to tools, routes, or query-builder code paths;
 - tenancy predicates and tenant-column vocabulary for real app schemas;
 - optional schema and seed fixtures;
 - optional PostgreSQL RLS checks and state assertions;
@@ -81,6 +84,56 @@ gate because it found drift.
 - `trace-ready`: imported traces were loaded and checked.
 - `db-ready`: PostgreSQL fixture, RLS checks, state assertions, or real-db comparisons ran.
 - `ci-gate-ready`: scan inputs are configured for CI gate exit codes.
+
+## Doctor / Audit Mode
+
+`policystrata doctor` without arguments keeps the lightweight reproducibility check:
+
+```bash
+uv run policystrata doctor
+```
+
+Pass a scanner config to get a first-class stack audit:
+
+```bash
+uv run policystrata doctor --config policystrata/policystrata.yaml
+uv run policystrata doctor --config policystrata/policystrata.yaml --format markdown --out runs/doctor.md
+```
+
+The config audit reports what is wired and what is missing across policy/domain YAML, surface
+contracts, dbt semantic inputs, app SQL traces, tenancy checks, database fixtures, RLS checks, state
+assertions, release-layer tests, policy document inputs, prompt/tool manifest inputs, source maps,
+export traces, and CI gating. Policy documents are classified deterministically as privacy policy,
+terms of service, data processing agreement, internal policy, security policy, or retention policy
+inputs, then scanned for obligation signals such as personal-data minimization, purpose limits,
+notice/consent, data-subject rights, retention/deletion, third-party sharing, subprocessor controls,
+security controls, tenant isolation, and sensitive-data controls. The audit also statically
+introspects configured PostgreSQL schema SQL for tables, RLS policies, grants, views, tenant
+columns, sensitive columns, and indexes. Prompt and tool manifests are parsed when they are JSON or
+YAML, and exposed metrics and dimensions are compared with the canonical policy so stale or
+unauthorized model-visible capabilities show up as partial wiring. It does not require an LLM API
+key or host `psql`.
+
+The audit emits remediation todos with an owner, expected files, expected tests, and a CI gate
+command. Use `--strict` when missing, partial, or invalid wiring should fail CI.
+
+Doctor-only config sections are passive for `policystrata scan` and exist to account for stack
+wiring that may be enforced by current or future adapters:
+
+```yaml
+policy_docs:
+  files:
+    - docs/privacy.md
+    - docs/terms.md
+    - docs/data-processing.md
+    - docs/internal-policy.md
+prompt_manifests:
+  files:
+    - policystrata/prompts.json
+source_maps:
+  files:
+    - policystrata/source-map.json
+```
 
 ## Gate Behavior
 
