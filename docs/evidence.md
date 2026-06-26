@@ -159,4 +159,4 @@ uv run policystrata export runs/repro/seeded --format benchflow --out runs/repro
 ```
 
 These exports package tasks, traces, and deterministic verifier expectations for downstream eval
-harnesses. They are not part of the 620-mutant score.
+harnesses. They are not part of the deterministic benchmark score.
