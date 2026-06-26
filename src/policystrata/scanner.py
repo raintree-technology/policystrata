@@ -1406,7 +1406,7 @@ def render_report(result: ScanResult) -> str:
         f"Gate: **{result.gate.outcome.value}**",
         "PolicyStrata is a scanner and release gate, not an authorization boundary.",
         "## Production Integration",
-        f"Score: **{readiness.get('level', 'unknown')}**",
+        f"Configured readiness: **{readiness.get('level', 'unknown')}**",
         markdown_table(["Stage", "Ready"], readiness_rows),
         f"Next step: {readiness.get('recommended_next_step', '-')}",
         "## Evidence Exercised",

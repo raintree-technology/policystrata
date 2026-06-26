@@ -13,8 +13,8 @@ from policystrata.domain import BUILTIN_DOMAIN, BUILTIN_DOMAINS, copy_domain
 from policystrata.evidence import parse_run_args, render_evidence_tables
 from policystrata.exports import export_run
 from policystrata.generator import MAX_GENERATED_COUNT
-from policystrata.init_scan import init_scan_project
-from policystrata.integrations.dbt_semantic import compare_dbt_semantic_model
+from policystrata.init_scan import SCANNER_EXAMPLES, init_scan_project
+from policystrata.integrations.dbt_semantic import compare_dbt_semantic_model, dbt_semantic_has_warnings
 from policystrata.minimize import minimize_witness_file
 from policystrata.runner import run_suite
 from policystrata.scan_models import GateOutcome
@@ -36,6 +36,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="policystrata",
         description="Cross-layer policy regression testing.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -49,6 +50,20 @@ def build_parser() -> argparse.ArgumentParser:
     init_scan_parser = subparsers.add_parser(
         "init-scan",
         help="Create a runnable scanner scaffold with config, domain policy, surfaces, and example traces.",
+        description=(
+            "Create a runnable scanner scaffold.\n\n"
+            "Examples:\n"
+            "  policystrata init-scan --out policystrata\n"
+            "  policystrata init-scan postgres_dbt --out policystrata-example"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    init_scan_parser.add_argument(
+        "example",
+        nargs="?",
+        choices=SCANNER_EXAMPLES,
+        default="basic",
+        help="Scanner example to copy. Defaults to basic.",
     )
     init_scan_parser.add_argument("--out", type=Path, default=Path("."))
     init_scan_parser.add_argument("--source-domain", choices=BUILTIN_DOMAINS, default=BUILTIN_DOMAIN)
@@ -110,13 +125,37 @@ def build_parser() -> argparse.ArgumentParser:
     integration_parser.add_argument("--domain", default=BUILTIN_DOMAIN, choices=BUILTIN_DOMAINS)
     integration_parser.add_argument("--path", type=Path, required=True)
     integration_parser.add_argument("--domain-path", type=Path, default=None)
+    integration_parser.add_argument(
+        "--strict",
+        "--fail-on-warning",
+        action="store_true",
+        dest="fail_on_warning",
+        help="Exit 1 when the integration check reports warning-level diagnostics.",
+    )
 
     scan_parser = subparsers.add_parser(
         "scan",
         help="Run a production policy-drift scan over configured adapters and traces.",
+        description=(
+            "Run a production policy-drift scan over configured adapters and traces.\n\n"
+            "Examples:\n"
+            "  policystrata scan --config policystrata/policystrata.yaml --out runs/policystrata-smoke\n"
+            "  policystrata init-scan postgres_dbt --out policystrata-example\n"
+            "  policystrata scan --config policystrata-example/policystrata_clean.yaml \\\n"
+            "    --out runs/scan-clean\n\n"
+            "Accepted config sections:\n"
+            "  version, domain, domain_path, output, sarif, dbt, sql_traces,\n"
+            "  tenancy, database, fuzz, gate"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    scan_parser.add_argument("--config", type=Path, default=Path("policystrata.yaml"))
-    scan_parser.add_argument("--out", type=Path, default=None)
+    scan_parser.add_argument(
+        "--config",
+        type=Path,
+        default=Path("policystrata.yaml"),
+        help="Scan config YAML.",
+    )
+    scan_parser.add_argument("--out", type=Path, default=None, help="Output directory for scan artifacts.")
 
     return parser
 
@@ -147,7 +186,7 @@ def run_command(args: argparse.Namespace) -> int:
     if args.command == "init-scan":
         print(
             json.dumps(
-                init_scan_project(args.out, args.source_domain, args.force),
+                init_scan_project(args.out, args.example, args.source_domain, args.force),
                 sort_keys=True,
             )
         )
@@ -201,28 +240,29 @@ def run_command(args: argparse.Namespace) -> int:
         return 0
 
     if args.command == "check-integration" and args.kind == "dbt-semantic":
+        integration_result = compare_dbt_semantic_model(args.domain, args.path, args.domain_path)
         print(
             json.dumps(
-                compare_dbt_semantic_model(args.domain, args.path, args.domain_path),
+                integration_result,
                 indent=2,
                 sort_keys=True,
             )
         )
-        return 0
+        return 1 if args.fail_on_warning and dbt_semantic_has_warnings(integration_result) else 0
 
     if args.command == "scan":
-        result = run_scan(args.config, args.out)
+        scan_result = run_scan(args.config, args.out)
         print(
             json.dumps(
                 {
-                    "gate": result.gate.outcome.value,
-                    "findings": result.summary.total_findings,
-                    "out": result.output_dir,
+                    "gate": scan_result.gate.outcome.value,
+                    "findings": scan_result.summary.total_findings,
+                    "out": scan_result.output_dir,
                 },
                 sort_keys=True,
             )
         )
-        return 1 if result.gate.outcome == GateOutcome.FAIL else 0
+        return 1 if scan_result.gate.outcome == GateOutcome.FAIL else 0
 
     raise ValueError(f"unknown command: {args.command}")
 

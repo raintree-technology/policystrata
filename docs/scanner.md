@@ -22,6 +22,18 @@ uv run policystrata init-scan --out policystrata
 uv run policystrata scan --config policystrata/policystrata.yaml --out runs/policystrata-smoke
 ```
 
+The basic scaffold defaults to `support_saas`. Pass `--source-domain finance_saas` to copy the
+finance policy and generate a finance-specific starter trace with the correct principal, metric,
+and firm-scope predicate.
+
+Installed wheels also include a Postgres/dbt scanner example that can be copied into a local
+directory:
+
+```bash
+uvx policystrata init-scan postgres_dbt --out policystrata-example
+uvx policystrata scan --config policystrata-example/policystrata_clean.yaml --out runs/scan-clean
+```
+
 The clean example is a passing smoke test:
 
 ```bash
@@ -60,7 +72,9 @@ successfully checked even when it produced no finding. This is separate from `ev
 which counts findings by evidence level. Clean scans should therefore still show imported-trace,
 property-generated, or real-db coverage when those checks ran and passed.
 
-`summary.json` includes `integration_readiness`, a production integration score with stages:
+`summary.json` includes `integration_readiness`, a configured-readiness level with stages. This is
+separate from the gate outcome; a scan can be configured for CI gating and still fail the current
+gate because it found drift.
 
 - `demo-ready`: scanner command and policy fixture can run.
 - `fixture-ready`: policy and surface fixtures are loadable.
@@ -151,6 +165,15 @@ docker compose up -d postgres
 uv run policystrata scan --config examples/postgres_dbt/policystrata_real_db_clean.yaml --out runs/scan-real-db-clean
 ```
 
+If host port `55432` is already in use, run the fixture on another port and point the scanner at it:
+
+```bash
+POLICYSTRATA_POSTGRES_PORT=55433 docker compose up -d postgres
+POLICYSTRATA_DATABASE_URL=postgresql://policystrata:policystrata@localhost:55433/support_saas \
+POLICYSTRATA_APP_DATABASE_URL=postgresql://policystrata_app:policystrata_app@localhost:55433/support_saas \
+  uv run policystrata scan --config examples/postgres_dbt/policystrata_real_db_clean.yaml --out runs/scan-real-db-clean
+```
+
 The scanner can start a compose service when configured:
 
 ```yaml
@@ -214,3 +237,12 @@ The adapter compares dbt metric, measure, and dimension names against a PolicySt
 Scanner diagnostics additionally check simple measure-expression references, sensitive dimension
 metadata, and semantic-model lineage presence. It is deliberately an adapter; core execution is not
 coupled to dbt.
+
+Use `--strict` or `--fail-on-warning` to make warning-level adapter diagnostics exit nonzero:
+
+```bash
+uv run policystrata check-integration dbt-semantic \
+  --domain finance_saas \
+  --path examples/integrations/dbt_semantic/finance_saas/semantic_models.yml \
+  --strict
+```

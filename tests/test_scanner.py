@@ -49,6 +49,7 @@ def test_scan_failing_fixture_writes_gate_outputs(tmp_path) -> None:
     assert all(item.ci_gate_command for item in result.findings)
     assert any(item.id.startswith("unsafe_release") for item in result.findings)
     assert any(item.id.startswith("tenant_scope_missing") for item in result.findings)
+    assert not any(item.id == "postgres_fixture_unavailable" for item in result.findings)
     assert result.summary.regression_cases["fail_to_pass"] >= 2
     assert result.summary.integration_readiness["level"] == "ci-gate-ready"
 
@@ -56,6 +57,8 @@ def test_scan_failing_fixture_writes_gate_outputs(tmp_path) -> None:
     assert scan_json["gate"]["outcome"] == "fail"
     report = (tmp_path / "scan" / "report.md").read_text(encoding="utf-8")
     assert "## Production Integration" in report
+    assert "Configured readiness:" in report
+    assert "Score:" not in report
     assert "## Remediation" in report
 
 

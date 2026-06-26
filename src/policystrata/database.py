@@ -1,13 +1,20 @@
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
 from typing import Any
 
 import psycopg
 
-DEFAULT_DATABASE_URL = "postgresql://policystrata:policystrata@localhost:55432/support_saas"
-DEFAULT_APP_DATABASE_URL = "postgresql://policystrata_app:policystrata_app@localhost:55432/support_saas"
+DEFAULT_DATABASE_URL = os.environ.get(
+    "POLICYSTRATA_DATABASE_URL",
+    "postgresql://policystrata:policystrata@localhost:55432/support_saas",
+)
+DEFAULT_APP_DATABASE_URL = os.environ.get(
+    "POLICYSTRATA_APP_DATABASE_URL",
+    "postgresql://policystrata_app:policystrata_app@localhost:55432/support_saas",
+)
 FORBIDDEN_SQL_TOKENS = {
     "alter",
     "call",

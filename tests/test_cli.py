@@ -3,7 +3,8 @@ import json
 import pytest
 
 from policystrata.cli import main
-from policystrata.domain import copy_domain
+from policystrata.domain import BUILTIN_DOMAINS, copy_domain, load_policy
+from policystrata.init_scan import BASIC_SCAN_TEMPLATES
 
 
 def test_cli_demo_runs_built_in_demo(tmp_path, capsys) -> None:
@@ -240,6 +241,45 @@ def test_cli_check_dbt_semantic_integration(capsys) -> None:
     assert output["stale_dbt_metrics"] == []
 
 
+def test_cli_check_integration_can_fail_on_warnings(tmp_path, capsys) -> None:
+    fixture = tmp_path / "semantic_models.yml"
+    fixture.write_text(
+        """
+semantic_models:
+  - name: support_metrics
+    model: ref('fct_support_metrics')
+    dimensions:
+      - name: customer_email
+        type: categorical
+metrics: []
+""".lstrip(),
+        encoding="utf-8",
+    )
+
+    assert (
+        main(["check-integration", "dbt-semantic", "--domain", "support_saas", "--path", str(fixture)])
+        == 0
+    )
+    output = json.loads(capsys.readouterr().out)
+    assert output["sensitive_metadata_missing"] == ["customer_email"]
+
+    assert (
+        main(
+            [
+                "check-integration",
+                "dbt-semantic",
+                "--domain",
+                "support_saas",
+                "--path",
+                str(fixture),
+                "--strict",
+            ]
+        )
+        == 1
+    )
+    assert json.loads(capsys.readouterr().out)["sensitive_metadata_missing"] == ["customer_email"]
+
+
 def test_cli_init_scan_creates_runnable_scaffold(tmp_path, capsys) -> None:
     scanner_dir = tmp_path / "scanner"
 
@@ -255,6 +295,63 @@ def test_cli_init_scan_creates_runnable_scaffold(tmp_path, capsys) -> None:
     assert main(["scan", "--config", scaffold["files"]["config"], "--out", str(tmp_path / "scan")]) == 0
     scan = json.loads(capsys.readouterr().out)
     assert scan["gate"] == "pass"
+
+
+@pytest.mark.parametrize("source_domain", BUILTIN_DOMAINS)
+def test_cli_init_scan_creates_runnable_source_domain_scaffold(
+    source_domain: str,
+    tmp_path,
+    capsys,
+) -> None:
+    scanner_dir = tmp_path / f"{source_domain}-scanner"
+
+    assert main(["init-scan", "--source-domain", source_domain, "--out", str(scanner_dir)]) == 0
+    scaffold = json.loads(capsys.readouterr().out)
+
+    template = BASIC_SCAN_TEMPLATES[source_domain]
+    policy = load_policy(source_domain, scanner_dir / "domain")
+    config = (scanner_dir / "policystrata.yaml").read_text(encoding="utf-8")
+    trace = json.loads((scanner_dir / "traces.example.jsonl").read_text(encoding="utf-8"))
+    assert f"domain: {source_domain}" in config
+    assert template.tenant_column in config
+    assert template.tenant_column in trace["sql"]
+    assert trace["principal"] in policy.principals
+    assert trace["tenant_ids"] == policy.principals[trace["principal"]].tenant_ids
+    assert trace["semantic_ir"]["metric"] in policy.metrics
+    assert set(trace["semantic_ir"]["dimensions"]).issubset(policy.dimensions)
+
+    assert main(["scan", "--config", scaffold["files"]["config"], "--out", str(tmp_path / "scan")]) == 0
+    scan = json.loads(capsys.readouterr().out)
+    assert scan["gate"] == "pass"
+
+
+def test_cli_init_scan_copies_packaged_postgres_dbt_example(tmp_path, capsys) -> None:
+    scanner_dir = tmp_path / "policystrata-example"
+
+    assert main(["init-scan", "postgres_dbt", "--out", str(scanner_dir)]) == 0
+    scaffold = json.loads(capsys.readouterr().out)
+
+    assert scaffold["example"] == "postgres_dbt"
+    assert (scanner_dir / "policystrata.yaml").is_file()
+    assert (scanner_dir / "policystrata_clean.yaml").is_file()
+    assert (scanner_dir / "policystrata_real_db_clean.yaml").is_file()
+    assert (scanner_dir / "domain" / "schema.sql").is_file()
+    assert (scanner_dir / "domain" / "seed.sql").is_file()
+
+    assert main(["scan", "--config", scaffold["files"]["clean_config"], "--out", str(tmp_path / "scan")]) == 0
+    clean = json.loads(capsys.readouterr().out)
+    assert clean["gate"] == "pass"
+
+
+def test_cli_scan_help_documents_examples_and_config_sections(capsys) -> None:
+    with pytest.raises(SystemExit) as exc_info:
+        main(["scan", "--help"])
+
+    assert exc_info.value.code == 0
+    output = capsys.readouterr().out
+    assert "policystrata init-scan postgres_dbt --out policystrata-example" in output
+    assert "Accepted config sections" in output
+    assert "dbt, sql_traces" in output
 
 
 def test_cli_scan_uses_gate_exit_codes(tmp_path, capsys) -> None:

@@ -1,0 +1,11 @@
+version: 1
+domain: support_saas
+domain_path: domain
+output: scan-clean-out
+sql_traces:
+  files:
+    - traces_clean.jsonl
+fuzz:
+  enabled: false
+gate:
+  fail_on_high_confidence: true

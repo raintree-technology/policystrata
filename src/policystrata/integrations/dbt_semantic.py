@@ -7,6 +7,15 @@ from typing import Any
 from policystrata.domain import load_policy, load_yaml_mapping
 from policystrata.models import DimensionPolicy, MetricPolicy
 
+DBT_SEMANTIC_WARNING_KEYS = (
+    "missing_policy_metrics",
+    "stale_dbt_metrics",
+    "missing_policy_dimensions",
+    "stale_dbt_dimensions",
+    "expression_mismatches",
+    "sensitive_metadata_missing",
+)
+
 
 def load_dbt_semantic_names(path: Path) -> dict[str, set[str]]:
     inventory = load_dbt_semantic_inventory(path)
@@ -91,6 +100,10 @@ def inspect_dbt_semantic_model(
         ),
         "models_missing_lineage": models_missing_lineage(inventory["semantic_models"]),
     }
+
+
+def dbt_semantic_has_warnings(result: Mapping[str, object]) -> bool:
+    return any(bool(result.get(key)) for key in DBT_SEMANTIC_WARNING_KEYS)
 
 
 def expression_mismatches(

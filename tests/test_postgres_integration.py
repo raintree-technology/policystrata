@@ -3,12 +3,11 @@ from pathlib import Path
 
 import pytest
 
-from policystrata.database import PostgresAdapter
+from policystrata.database import DEFAULT_APP_DATABASE_URL, PostgresAdapter
 from policystrata.scan_models import GateOutcome
 from policystrata.scanner import run_scan
 
 pytestmark = pytest.mark.integration
-APP_DATABASE_URL = "postgresql://policystrata_app:policystrata_app@localhost:55432/support_saas"
 
 
 @pytest.mark.skipif(
@@ -21,7 +20,7 @@ def test_postgres_rls_blocks_cross_tenant_rows() -> None:
     adapter.execute_script(root / "schema.sql")
     adapter.execute_script(root / "seed.sql")
 
-    app_adapter = PostgresAdapter(APP_DATABASE_URL)
+    app_adapter = PostgresAdapter(DEFAULT_APP_DATABASE_URL)
     rows = app_adapter.query(
         "select tenant_id, name from accounts order by tenant_id, name",
         tenant_id="acme",
@@ -42,7 +41,7 @@ def test_postgres_schema_setup_is_idempotent_for_existing_app_role() -> None:
     adapter.execute_script(root / "schema.sql")
     adapter.execute_script(root / "seed.sql")
 
-    app_adapter = PostgresAdapter(APP_DATABASE_URL)
+    app_adapter = PostgresAdapter(DEFAULT_APP_DATABASE_URL)
     rows = app_adapter.query(
         "select tenant_id, name from accounts order by tenant_id, name",
         tenant_id="beta",

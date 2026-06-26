@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "policystrata"
-version = "0.1.1"
+version = "0.1.2"
 description = "Cross-layer policy regression testing for LLM data-agent stacks"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -61,7 +61,15 @@ where = ["src"]
 include = ["policystrata*"]
 
 [tool.setuptools.package-data]
-policystrata = ["py.typed", "domains/*/*.yaml", "domains/*/*.sql", "domains/*/tasks/*.yaml"]
+policystrata = [
+    "py.typed",
+    "domains/*/*.yaml",
+    "domains/*/*.sql",
+    "domains/*/tasks/*.yaml",
+    "scanner_examples/*/*.jsonl",
+    "scanner_examples/*/*.yaml",
+    "scanner_examples/*/*.yml",
+]
 
 [tool.ruff]
 line-length = 110

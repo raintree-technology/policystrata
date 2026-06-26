@@ -59,8 +59,8 @@ pipx run policystrata demo
 ```
 
 Repository examples under `examples/`, Docker Compose fixtures, and evidence scripts are available
-from a GitHub checkout or source distribution. The wheel installs the runtime package and built-in
-domain fixtures used by `policystrata demo`, `run`, `init-domain`, and `scan`.
+from a GitHub checkout or source distribution. The wheel installs the runtime package, built-in
+domain fixtures, and packaged scanner examples reachable through `policystrata init-scan`.
 
 ## Use As A Template
 
@@ -176,6 +176,15 @@ uv run policystrata scan --config policystrata/policystrata.yaml --out runs/poli
 
 The scaffold writes `policystrata.yaml`, `domain/policy.yaml`, `domain/surfaces.yaml`, and
 `traces.example.jsonl`. Replace the example trace with exported SQL/tool-call traces from your app.
+Use `--source-domain finance_saas` to scaffold the finance policy and a matching finance trace
+instead of the default support SaaS example.
+
+Copy a packaged Postgres/dbt scanner example from an installed wheel:
+
+```bash
+uvx policystrata init-scan postgres_dbt --out policystrata-example
+uvx policystrata scan --config policystrata-example/policystrata_clean.yaml --out runs/scan-clean
+```
 
 Clean smoke test:
 
@@ -236,7 +245,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: raintree-technology/policystrata@v0.1.1
+      - uses: raintree-technology/policystrata@v0.1.2
         with:
           config: policystrata.yaml
           out: runs/policystrata

@@ -4,6 +4,18 @@
 
 - No changes yet.
 
+## [0.1.2] - 2026-06-26
+
+- Package scanner examples in the wheel and add `policystrata init-scan postgres_dbt --out ...`.
+- Expand `policystrata scan --help` with examples and accepted config sections.
+- Fix `init-scan --source-domain finance_saas` so the generated config and trace use finance
+  principals, metrics, and firm-scope predicates.
+- Label scanner reports with configured readiness instead of a pass-like score.
+- Keep the intentional scanner failure fixture off the PostgreSQL fixture path.
+- Allow Docker/PostgreSQL fixture ports and database URLs to be overridden with environment
+  variables for local release testing.
+- Add `--strict`/`--fail-on-warning` to `check-integration`.
+
 ## [0.1.1] - 2026-06-25
 
 - Add `policystrata init-scan` to scaffold `policystrata.yaml`, `domain/policy.yaml`,

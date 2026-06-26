@@ -1,5 +1,6 @@
 version: 1
 domain: support_saas
+domain_path: domain
 output: scan-out
 dbt:
   files:

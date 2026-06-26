@@ -13,3 +13,4 @@ recursive-include examples *.jsonl *.yaml *.yml
 recursive-include scripts *.py *.sh
 recursive-include tests *.py
 recursive-include src/policystrata/domains *.sql *.yaml
+recursive-include src/policystrata/scanner_examples *.jsonl *.yaml *.yml
