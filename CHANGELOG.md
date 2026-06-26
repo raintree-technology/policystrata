@@ -4,6 +4,11 @@
 
 - No changes yet.
 
+## [3.0.3] - 2026-06-26
+
+- Re-publish the 0.1.3 SDK/scanner release line above the existing `3.0.2` PyPI version so
+  unpinned `pip install policystrata` resolves to the current build.
+
 ## [0.1.3] - 2026-06-26
 
 - Add a first-party TypeScript/Node trace recorder for agent tools, session metadata, Drizzle-style
