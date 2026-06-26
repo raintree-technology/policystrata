@@ -14,6 +14,8 @@ from policystrata.models import Policy, SemanticQuery
 from policystrata.policy import PolicyOracle
 from policystrata.scan_models import ImportedTrace, MutantStatus
 
+NON_SQL_RECORD_TYPES = {"agent_session", "tool_execution", "mutation"}
+
 
 def resolve_scan_input_paths(config_dir: Path, values: list[str], input_name: str) -> list[Path]:
     paths: list[Path] = []
@@ -48,12 +50,30 @@ def load_imported_traces(paths: list[Path]) -> list[ImportedTrace]:
                     continue
                 try:
                     raw = json.loads(line)
-                    trace = ImportedTrace.model_validate(raw)
+                    normalized = normalize_imported_trace_record(raw)
+                    if normalized is None:
+                        continue
+                    trace = ImportedTrace.model_validate(normalized)
                     assert_read_only_sql(trace.sql)
                 except (json.JSONDecodeError, ValidationError, ValueError) as exc:
                     raise ValueError(f"invalid imported trace {path}:{line_number}: {exc}") from exc
                 traces.append(trace)
     return traces
+
+
+def normalize_imported_trace_record(raw: Any) -> dict[str, Any] | None:
+    if not isinstance(raw, dict):
+        raise ValueError("trace record must be a JSON object")
+    record_type = raw.get("record_type")
+    if record_type in NON_SQL_RECORD_TYPES and "sql" not in raw:
+        return None
+    normalized = dict(raw)
+    query = raw.get("query")
+    if "sql" not in normalized and isinstance(query, dict) and isinstance(query.get("sql"), str):
+        normalized["sql"] = query["sql"]
+    if "id" not in normalized and isinstance(raw.get("trace_id"), str):
+        normalized["id"] = raw["trace_id"]
+    return normalized
 
 
 def fuzz_imported_trace(

@@ -22,6 +22,11 @@ ORM query, semantic-layer query, or SQL span.
 }
 ```
 
+TypeScript SDK records may put SQL under `query.sql`; the scanner normalizes that to the top-level
+`sql` field during import. The SDK can also emit `record_type: "agent_session"`,
+`"tool_execution"`, or `"mutation"` records in the same JSONL stream. Those records are ignored by
+the SQL scanner unless they include top-level read-only `sql`.
+
 ## Fields
 
 | Field | Required | Meaning |

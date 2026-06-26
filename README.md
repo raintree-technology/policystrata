@@ -245,7 +245,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: raintree-technology/policystrata@v0.1.2
+      - uses: raintree-technology/policystrata@v0.1.3
         with:
           config: policystrata.yaml
           out: runs/policystrata
@@ -273,6 +273,26 @@ uv run policystrata check-integration dbt-semantic \
 ```
 
 See [docs/trace-interop.md](docs/trace-interop.md) for adapter field mappings.
+
+## TypeScript / Node SDK
+
+The repository includes a first-party TypeScript recorder under `packages/node` for Next.js,
+Drizzle, and other Node agent stacks:
+
+```ts
+import { createPolicyStrataRecorder } from "policystrata/node";
+
+const recorder = createPolicyStrataRecorder({
+  service: "betteroff-ask-ai",
+  out: ".policystrata/traces.jsonl",
+  tenancy: {
+    tenantColumns: ["transactions.household_id", "accounts.household_id"],
+  },
+});
+```
+
+`wrapTool()` records sanitized tool executions, `captureQuery()` captures Drizzle `.toSQL()` output
+when available, and read-tool SQL records can be scanned with `policystrata scan`.
 
 ## Reference Docs
 

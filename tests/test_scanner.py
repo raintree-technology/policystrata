@@ -119,6 +119,68 @@ fuzz:
     assert not any(item.id.startswith("tenant_scope_missing") for item in result.findings)
 
 
+def test_scan_accepts_policystrata_node_mixed_jsonl(tmp_path) -> None:
+    trace_path = tmp_path / "traces.jsonl"
+    config_path = tmp_path / "policystrata.yaml"
+    records = [
+        {
+            "id": "session_1",
+            "record_type": "agent_session",
+            "session_id": "chat-run-1",
+            "prompt_class": "user_finance_question",
+            "tools_available": ["searchTickets"],
+        },
+        {
+            "trace_id": "ask_ai_read_1",
+            "record_type": "sql_trace",
+            "principal": "acme_analyst",
+            "tenant_ids": ["acme"],
+            "release_allowed": True,
+            "semantic_ir": {"metric": "ticket_count", "limit": 100},
+            "query": {
+                "sql": (
+                    "select count(distinct support_tickets.id) as value "
+                    "from accounts "
+                    "left join support_tickets on support_tickets.account_id = accounts.id "
+                    "where accounts.tenant_id = $1 "
+                    "limit 100"
+                )
+            },
+            "tool": {"name": "searchTickets", "kind": "read"},
+        },
+        {
+            "id": "write_1",
+            "record_type": "mutation",
+            "session_id": "chat-run-1",
+            "mutation": {
+                "table": "support_tickets",
+                "where_predicates": ["id", "tenant_id"],
+                "columns_written": ["status"],
+            },
+        },
+    ]
+    trace_path.write_text("\n".join(json.dumps(record) for record in records) + "\n", encoding="utf-8")
+    config_path.write_text(
+        """
+version: 1
+domain: support_saas
+sql_traces:
+  files:
+    - traces.jsonl
+fuzz:
+  enabled: false
+""".lstrip(),
+        encoding="utf-8",
+    )
+
+    traces = load_imported_traces([trace_path])
+    result = run_scan(config_path, tmp_path / "scan")
+
+    assert [trace.id for trace in traces] == ["ask_ai_read_1"]
+    assert traces[0].sql.startswith("select count")
+    assert result.gate.outcome == GateOutcome.PASS
+
+
 def test_scan_state_assertions_detect_forbidden_database_state() -> None:
     config = load_scan_config(Path("examples/postgres_dbt/policystrata_real_db_clean.yaml"))
     findings = scan_state_assertions(

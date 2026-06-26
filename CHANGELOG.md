@@ -4,6 +4,14 @@
 
 - No changes yet.
 
+## [0.1.3] - 2026-06-26
+
+- Add a first-party TypeScript/Node trace recorder for agent tools, session metadata, Drizzle-style
+  query capture, mutation traces, redaction defaults, and SaaS tenant-scope SQL checks.
+- Allow imported trace JSONL files to mix Node SDK session/tool/mutation records with SQL traces.
+- Accept SDK SQL records that provide SQL under `query.sql` while preserving read-only validation.
+- Document the Node SDK workflow and mixed-record trace contract.
+
 ## [0.1.2] - 2026-06-26
 
 - Package scanner examples in the wheel and add `policystrata init-scan postgres_dbt --out ...`.

@@ -5,33 +5,39 @@ request path. Emit traces in test, staging, or a sanitized replay job.
 
 ## TypeScript / Drizzle
 
-Wrap the call site where your Ask AI tool has already produced semantic intent and SQL:
+Use the Node recorder when your agent stack runs in TypeScript/Next/Drizzle:
 
 ```ts
-import { appendFileSync } from "node:fs";
+import { createPolicyStrataRecorder } from "policystrata/node";
 
-export function writePolicyStrataTrace(trace: {
-  id: string;
-  principal: string;
-  tenantIds: string[];
-  semanticIr: unknown;
-  sql: string;
-  releaseAllowed: boolean;
-}) {
-  appendFileSync(
-    "traces.policystrata.jsonl",
-    JSON.stringify({
-      id: trace.id,
-      principal: trace.principal,
-      tenant_ids: trace.tenantIds,
-      semantic_ir: trace.semanticIr,
-      sql: trace.sql,
-      release_allowed: trace.releaseAllowed,
-      source: "drizzle"
-    }) + "\n"
-  );
-}
+const recorder = createPolicyStrataRecorder({
+  service: "betteroff-ask-ai",
+  environment: process.env.NODE_ENV,
+  out: ".policystrata/traces.jsonl",
+  tenancy: {
+    tenantColumns: ["transactions.household_id", "accounts.household_id"],
+  },
+});
+
+const searchTransactions = recorder.wrapTool("searchTransactions", {
+  kind: "read",
+  scope: "household",
+  handler: async (args, ctx) => {
+    const query = db.select().from(transactions);
+    recorder.captureQuery(query); // captures .toSQL() when the query builder exposes it
+    return await query;
+  },
+});
 ```
+
+Read-tool SQL records include top-level `sql`, `principal`, `tenant_ids`, and `semantic_ir`, so
+`policystrata scan` can consume them directly. The same JSONL file may also contain
+`agent_session`, `tool_execution`, and `mutation` records; the SQL scanner ignores those non-SQL
+records while preserving them for downstream agent-session analysis.
+
+The recorder redacts by default: ID-like fields are hashed, prompt text is omitted, SQL literal
+values are replaced with placeholders, arguments are recorded by shape, and results are summarized
+as row counts plus field names.
 
 ## Prisma
 
