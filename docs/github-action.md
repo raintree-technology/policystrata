@@ -6,7 +6,15 @@ action exits non-zero and blocks the workflow.
 
 The action installs PolicyStrata from the action checkout by default, so it can be used from a
 repository tag before the package is published to PyPI. After the PyPI package is published, callers
-can optionally set `package` to a normal pip install spec such as `policystrata==0.1.4`.
+can optionally set `package` to a normal pip install spec such as `policystrata==0.1.5`.
+
+For CI, run two gates:
+
+- `policystrata scan` for the policy-drift gate.
+- `policystrata doctor --strict` for the implementation-readiness gate.
+
+The action provides the scan gate. Add a CLI doctor step when missing, partial, or invalid wiring
+should block release.
 
 ## Basic Gate
 
@@ -24,16 +32,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: raintree-technology/policystrata@v0.1.4
+      - uses: raintree-technology/policystrata@v0.1.5
         with:
           config: policystrata.yaml
           out: runs/policystrata
+
+      - name: Implementation readiness gate
+        if: always()
+        run: policystrata doctor --config policystrata.yaml --strict
 ```
 
 ## Upload Scan Artifacts
 
 ```yaml
-      - uses: raintree-technology/policystrata@v0.1.4
+      - uses: raintree-technology/policystrata@v0.1.5
         with:
           config: policystrata.yaml
           out: runs/policystrata
@@ -44,6 +56,13 @@ jobs:
           name: policystrata-scan
           path: runs/policystrata
 ```
+
+## Config-Scoped Doctor
+
+`doctor` audits only the selected config. In the copied `postgres_dbt` example,
+`policystrata_clean.yaml` is a minimal clean scan and will not claim database readiness. Use
+`policystrata_real_db_clean.yaml` for DB/RLS readiness checks, or merge the dbt and database
+sections into your application config before enabling `doctor --strict` as a release gate.
 
 ## Inputs
 

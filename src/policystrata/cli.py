@@ -9,7 +9,12 @@ from pydantic import ValidationError
 from policystrata.artifact_report import artifact_report_json, render_artifact_report
 from policystrata.baselines import evaluate_ablation_runs, evaluate_baseline_runs
 from policystrata.demo import run_demo
-from policystrata.doctor import environment_doctor, render_doctor_report, run_config_doctor
+from policystrata.doctor import (
+    environment_doctor,
+    render_doctor_report,
+    render_environment_doctor_report,
+    run_config_doctor,
+)
 from policystrata.domain import BUILTIN_DOMAIN, BUILTIN_DOMAINS, copy_domain
 from policystrata.evidence import parse_run_args, render_evidence_tables
 from policystrata.exports import export_run
@@ -367,7 +372,12 @@ def run_command(args: argparse.Namespace) -> int:
 
     if args.command == "doctor":
         if args.config is None:
-            output = json.dumps(run_doctor(), indent=2, sort_keys=True) + "\n"
+            doctor = run_doctor()
+            output = (
+                render_environment_doctor_report(doctor)
+                if args.format == "markdown"
+                else json.dumps(doctor, indent=2, sort_keys=True) + "\n"
+            )
             exit_code = 0
         else:
             doctor = run_config_doctor(args.config)

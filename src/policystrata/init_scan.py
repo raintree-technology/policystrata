@@ -228,6 +228,24 @@ def init_packaged_scan_example(destination: Path, example: str, force: bool = Fa
         "out": str(destination),
         "files": {name: str(path) for name, path in files.items()},
         "command": command,
+        "commands": {
+            "policy_drift_failure_demo": command,
+            "clean_smoke_scan": f"policystrata scan --config {files['clean_config']}",
+            "db_readiness_scan": f"policystrata scan --config {files['real_db_config']}",
+            "db_readiness_doctor": (
+                f"policystrata doctor --config {files['real_db_config']} --strict"
+            ),
+        },
+        "notes": [
+            (
+                "doctor audits only the selected config; use policystrata_real_db_clean.yaml "
+                "for DB/RLS readiness checks."
+            ),
+            (
+                "policystrata_clean.yaml is a minimal passing smoke config and does not "
+                "claim dbt or database wiring."
+            ),
+        ],
     }
 
 

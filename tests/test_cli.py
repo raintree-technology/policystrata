@@ -1,7 +1,10 @@
 import json
+import re
+from pathlib import Path
 
 import pytest
 
+from policystrata import __version__
 from policystrata.cli import main
 from policystrata.domain import BUILTIN_DOMAINS, copy_domain, load_policy
 from policystrata.init_scan import BASIC_SCAN_TEMPLATES
@@ -110,6 +113,17 @@ def test_cli_artifact_report_outputs_usability_metrics(tmp_path, capsys) -> None
     assert report["minimized_witnesses"] == 50
     assert report["requires_llm_api_key"] is False
     assert report["domain_fixture_lines"] > 0
+
+
+def test_docs_github_action_examples_use_current_release_tag() -> None:
+    docs = "\n".join(
+        Path(path).read_text(encoding="utf-8")
+        for path in ("README.md", "docs/github-action.md")
+    )
+
+    action_refs = re.findall(r"raintree-technology/policystrata@v[0-9.]+", docs)
+    assert action_refs
+    assert set(action_refs) == {f"raintree-technology/policystrata@v{__version__}"}
 
 
 def test_cli_export_adapters(tmp_path, capsys) -> None:
@@ -337,6 +351,13 @@ def test_cli_init_scan_copies_packaged_postgres_dbt_example(tmp_path, capsys) ->
     assert (scanner_dir / "policystrata_real_db_clean.yaml").is_file()
     assert (scanner_dir / "domain" / "schema.sql").is_file()
     assert (scanner_dir / "domain" / "seed.sql").is_file()
+    assert scaffold["commands"]["clean_smoke_scan"].endswith("policystrata_clean.yaml")
+    assert (
+        scaffold["commands"]["db_readiness_doctor"].endswith(
+            "policystrata_real_db_clean.yaml --strict"
+        )
+    )
+    assert "doctor audits only the selected config" in scaffold["notes"][0]
 
     assert main(["scan", "--config", scaffold["files"]["clean_config"], "--out", str(tmp_path / "scan")]) == 0
     clean = json.loads(capsys.readouterr().out)
@@ -388,6 +409,17 @@ def test_cli_doctor_config_reports_wired_and_missing_stack(capsys) -> None:
     assert stack["release_layer_tests"]["status"] == "wired"
     assert doctor["coverage_accounting"]["sql_trace_records"] >= 1
     assert any(todo["id"] == "fix_database_fixture" for todo in doctor["remediation"])
+
+
+def test_cli_doctor_environment_markdown_without_config(capsys) -> None:
+    assert main(["doctor", "--format", "markdown"]) == 0
+    markdown = capsys.readouterr().out
+
+    assert markdown.startswith("# PolicyStrata Doctor")
+    assert "Mode: `environment`" in markdown
+    assert "| Requires LLM API key | no |" in markdown
+    assert "| Requires host psql | no |" in markdown
+    assert not markdown.lstrip().startswith("{")
 
 
 def test_cli_doctor_real_db_config_introspects_schema_and_writes_markdown(tmp_path, capsys) -> None:

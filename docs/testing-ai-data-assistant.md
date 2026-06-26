@@ -111,8 +111,10 @@ Findings include:
 
 ```bash
 uv run policystrata scan --config policystrata/policystrata.yaml --out runs/policystrata
+uv run policystrata doctor --config policystrata/policystrata.yaml --strict
 ```
 
-The command exits `1` on high-confidence gate failures such as unsafe release, missing tenant scope,
-RLS leakage, or semantic drift. Keep trace generation deterministic in CI by replaying sanitized
-tool-call fixtures rather than requiring an LLM API key.
+`scan` exits `1` on high-confidence gate failures such as unsafe release, missing tenant scope, RLS
+leakage, or semantic drift. `doctor --strict` exits `1` when stack wiring is missing, partial, or
+invalid. Keep trace generation deterministic in CI by replaying sanitized tool-call fixtures rather
+than requiring an LLM API key.

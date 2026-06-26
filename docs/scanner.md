@@ -37,6 +37,12 @@ uvx policystrata init-scan postgres_dbt --out policystrata-example
 uvx policystrata scan --config policystrata-example/policystrata_clean.yaml --out runs/scan-clean
 ```
 
+Doctor audits only the selected config, not every rich file in the copied directory.
+`policystrata_clean.yaml` is a minimal passing smoke config and will report dbt/database wiring as
+missing. Use `policystrata_real_db_clean.yaml` for DB/RLS readiness checks, use
+`policystrata.yaml` to inspect the dbt-backed intentional drift fixture, or combine those sections
+in your own app config when one strict implementation-readiness gate should cover both.
+
 The clean example is a passing smoke test:
 
 ```bash
@@ -91,6 +97,7 @@ gate because it found drift.
 
 ```bash
 uv run policystrata doctor
+uv run policystrata doctor --format markdown
 ```
 
 Pass a scanner config to get a first-class stack audit:
@@ -116,6 +123,16 @@ key or host `psql`.
 
 The audit emits remediation todos with an owner, expected files, expected tests, and a CI gate
 command. Use `--strict` when missing, partial, or invalid wiring should fail CI.
+
+For CI, run both commands against the same application config:
+
+```bash
+uv run policystrata scan --config policystrata/policystrata.yaml --out runs/policystrata
+uv run policystrata doctor --config policystrata/policystrata.yaml --strict
+```
+
+`scan` is the policy-drift gate. `doctor --strict` is the implementation-readiness gate for
+missing, partial, or invalid scanner wiring.
 
 Doctor-only config sections are passive for `policystrata scan` and exist to account for stack
 wiring that may be enforced by current or future adapters:

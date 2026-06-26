@@ -192,6 +192,12 @@ uvx policystrata init-scan postgres_dbt --out policystrata-example
 uvx policystrata scan --config policystrata-example/policystrata_clean.yaml --out runs/scan-clean
 ```
 
+`policystrata doctor` audits only the config you pass. In the copied `postgres_dbt` example,
+`policystrata_clean.yaml` is a minimal clean smoke config, so doctor reports database and dbt
+wiring as missing. Use `policystrata_real_db_clean.yaml` for the DB/RLS readiness audit, and
+combine the dbt and database sections in your own app config when one strict readiness gate should
+cover both.
+
 Clean smoke test:
 
 ```bash
@@ -239,6 +245,7 @@ contracts and framework recipes.
 scanner config, it audits what a deployment has wired and what is missing:
 
 ```bash
+uv run policystrata doctor --format markdown
 uv run policystrata doctor --config examples/postgres_dbt/policystrata_real_db_clean.yaml \
   --format markdown --out runs/doctor.md
 ```
@@ -253,7 +260,8 @@ invalid wiring should fail CI.
 
 ## GitHub Action
 
-Use the first-party action to run `policystrata scan` as a pull-request or release gate:
+Use the first-party action to run `policystrata scan` as a pull-request or release policy-drift
+gate. The example pins the current release tag:
 
 ```yaml
 name: PolicyStrata
@@ -269,11 +277,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: raintree-technology/policystrata@v0.1.4
+      - uses: raintree-technology/policystrata@v0.1.5
         with:
           config: policystrata.yaml
           out: runs/policystrata
+
+      - name: Implementation readiness gate
+        if: always()
+        run: policystrata doctor --config policystrata.yaml --strict
 ```
+
+In CI, keep both gates: `policystrata scan` catches high-confidence policy drift, while
+`policystrata doctor --strict` catches missing, partial, or invalid stack wiring before release.
 
 See [docs/github-action.md](docs/github-action.md) for inputs, artifact upload, and database
 fixture guidance.

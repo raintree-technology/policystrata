@@ -141,6 +141,31 @@ def environment_doctor() -> dict[str, object]:
     }
 
 
+def render_environment_doctor_report(report: dict[str, object]) -> str:
+    rows = [
+        ["Python", str(report.get("python", "unknown"))],
+        ["uv", yes_no(bool(report.get("uv")))],
+        ["Docker", yes_no(bool(report.get("docker")))],
+        ["Requires LLM API key", yes_no(bool(report.get("requires_llm_api_key")))],
+        ["Requires host psql", yes_no(bool(report.get("requires_host_psql")))],
+    ]
+    sections = [
+        "# PolicyStrata Doctor",
+        "Mode: `environment`",
+        "## Environment",
+        markdown_table(["Check", "Value"], rows),
+        (
+            "Pass `--config policystrata.yaml` to audit scanner stack wiring. "
+            "Use `--strict` in CI when missing, partial, or invalid implementation wiring should fail."
+        ),
+    ]
+    return "\n\n".join(sections) + "\n"
+
+
+def yes_no(value: bool) -> str:
+    return "yes" if value else "no"
+
+
 def run_config_doctor(config_path: Path) -> dict[str, Any]:
     config_path = config_path.resolve()
     config_dir = config_path.parent
