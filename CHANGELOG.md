@@ -9,12 +9,15 @@
 - Add `policystrata doctor --config` as a first-class stack audit mode for scanner wiring,
   coverage accounting, database schema/RLS/grant/view/index introspection, source-map accounting,
   prompt/tool manifest accounting, and remediation todos.
+- Compare JSON/YAML prompt manifests against the canonical policy for stale exposed metrics or
+  dimensions.
 - Add deterministic privacy policy, terms of service, DPA, internal policy, security policy, and
   retention policy classification for configured policy documents.
 - Extract policy-document obligation signals for personal-data minimization, purpose limits,
   notice/consent, data-subject rights, retention/deletion, third-party sharing, subprocessor
   controls, security controls, tenant isolation, and sensitive-data controls.
 - Preserve the dependency-only `policystrata doctor` output for reproducibility checks.
+- Make `doctor --strict` fail missing, partial, or invalid stack wiring.
 
 ## [0.1.3] - 2026-06-26
 

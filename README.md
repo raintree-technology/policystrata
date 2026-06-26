@@ -233,6 +233,24 @@ remediation fields, state assertions, and real-database fixture details. See
 and [docs/testing-ai-data-assistant.md](docs/testing-ai-data-assistant.md) for imported-trace
 contracts and framework recipes.
 
+## Audit Stack Wiring
+
+`policystrata doctor` without a config still checks local reproducibility dependencies. With a
+scanner config, it audits what a deployment has wired and what is missing:
+
+```bash
+uv run policystrata doctor --config examples/postgres_dbt/policystrata_real_db_clean.yaml \
+  --format markdown --out runs/doctor.md
+```
+
+The audit inventories policy/domain YAML, surface contracts, SQL traces, dbt semantic models,
+PostgreSQL schema/RLS/grant/view/index metadata, privacy policies, terms of service, DPA/security/
+retention/internal-policy documents, prompt/tool manifests, source maps, release coverage, and CI
+gates. It classifies policy-document obligation signals, compares JSON/YAML prompt manifests
+against the canonical policy for stale exposed metrics or dimensions, and emits remediation todos
+with owners, files, expected tests, and gate commands. Use `--strict` when missing, partial, or
+invalid wiring should fail CI.
+
 ## GitHub Action
 
 Use the first-party action to run `policystrata scan` as a pull-request or release gate:
