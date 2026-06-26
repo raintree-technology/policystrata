@@ -80,6 +80,20 @@ BASIC_SCAN_TEMPLATES: dict[str, BasicScanTemplate] = {
             limit=100,
         ),
     ),
+    "analytics_clickhouse": BasicScanTemplate(
+        trace_id="example_active_users_by_country",
+        principal="acme_product_viewer",
+        tenant_predicate="events.project_id = :principal.tenant_id",
+        tenant_column="events.project_id",
+        tenant_scope="events.project_id scoped to principal project_ids",
+        semantic_query=SemanticQuery(
+            metric="active_users",
+            dimensions=["country"],
+            time_range="last_7_days",
+            grain="day",
+            limit=100,
+        ),
+    ),
 }
 
 

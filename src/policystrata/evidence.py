@@ -9,7 +9,7 @@ from typing import Any
 from policystrata.baselines import evaluate_baselines
 from policystrata.minimize import minimize_trace
 from policystrata.models import Trace, WitnessClass
-from policystrata.summary import load_traces
+from policystrata.summary import accounting_status, load_traces
 
 
 def render_evidence_tables(runs: dict[str, Path]) -> str:
@@ -26,7 +26,10 @@ def render_evidence_tables(runs: dict[str, Path]) -> str:
                 "Mutants",
                 "Killed",
                 "Survived",
-                "Equivalent declared",
+                "Equivalent",
+                "Invalid",
+                "Clean controls",
+                "False positives",
                 "Median witness bytes",
                 "Evidence level",
                 "Provenance",
@@ -45,17 +48,16 @@ def render_evidence_tables(runs: dict[str, Path]) -> str:
 def suite_row(name: str, run_dir: Path) -> list[str]:
     traces = load_traces(run_dir)
     metadata = load_run_metadata(run_dir)
-    killed = sum(1 for trace in traces if trace.witness_class != WitnessClass.CLEAN)
-    survived = len(traces) - killed
-    equivalent_declared = sum(
-        1 for trace in traces if trace.expected_witness_class == WitnessClass.CLEAN
-    )
+    statuses = Counter(accounting_status(trace) for trace in traces)
     return [
         name,
         str(len(traces)),
-        str(killed),
-        str(survived),
-        str(equivalent_declared),
+        str(statuses["killed"]),
+        str(statuses["survived"]),
+        str(statuses["equivalent"]),
+        str(statuses["invalid"]),
+        str(statuses["clean_control"]),
+        str(statuses["false_positive"]),
         str(median_witness_bytes(run_dir, traces)),
         str(metadata.get("evidence_level", "deterministic_fixture")),
         str(metadata.get("suite_provenance", "hand_authored")),

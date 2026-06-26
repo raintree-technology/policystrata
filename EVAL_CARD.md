@@ -25,15 +25,21 @@ The core artifact uses deterministic semantic plans and traces. It does not requ
 | `support_saas` seeded | public hand-authored fixture | regression coverage, not recall |
 | `support_saas` generated | deterministic operator-generated cases | generated from the same public taxonomy |
 | `support_saas` generated_alt_seed | secondary deterministic generated suite | reproducibility evidence, not blinded held-out evidence |
+| `support_saas` heldout_v1 | detector-frozen generated cases | held out from development after freeze, not externally authored |
 | `finance_saas` seeded | second synthetic built-in domain | reduces single-domain risk, still synthetic |
+| `finance_saas` heldout_v1 | detector-frozen generated cases | second-domain held-out coverage |
+| `analytics_clickhouse` seeded/generated | ClickHouse-style analytics fixture | domain-transfer evidence, deterministic simulation |
+| `clean_controls` | generated no-drift controls | false-positive accounting |
 
-The current canonical evidence reports 620/620 killed non-equivalent mutants across these suites.
-That means coverage over the implemented deterministic operators and fixtures. It does not mean
-PolicyStrata detects all real-world policy drift.
+The current final reproduction path reports 1720/1720 killed non-clean injected cases and 0 false
+positives on 80 clean controls. That means coverage over the implemented deterministic operators
+and fixtures. It does not mean PolicyStrata detects all real-world policy drift.
 
 Run metadata records each suite's evidence level, provenance, and detector-freeze status. Future
-externally authored, detector-frozen, or incident-reconstruction suites should be reported
-separately from this 620-mutant public deterministic score.
+externally authored or incident-reconstruction suites should be reported separately from this
+deterministic artifact-suite score.
+`benchmark_manifest.json` records detector, generator, mutation registry, policy, surfaces, suite,
+and task hashes for frozen runs.
 
 ## Scanner Evidence Levels
 

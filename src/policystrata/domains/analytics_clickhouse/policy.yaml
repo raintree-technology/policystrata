@@ -1,0 +1,146 @@
+version: v1
+principals:
+  acme_product_viewer:
+    id: acme_product_viewer
+    role: product_viewer
+    tenant_ids: [project_acme_mobile]
+  acme_growth_admin:
+    id: acme_growth_admin
+    role: growth_admin
+    tenant_ids: [project_acme_mobile]
+  beta_product_viewer:
+    id: beta_product_viewer
+    role: product_viewer
+    tenant_ids: [project_beta_web]
+roles:
+  product_viewer:
+    allowed_metrics:
+      - events
+      - sessions
+      - active_users
+      - conversions
+    allowed_dimensions:
+      - event_name
+      - country
+      - platform
+      - day
+    allowed_time_ranges:
+      - last_7_days
+      - last_month
+    max_rows: 1000
+    max_cost: 120
+    aggregate_only: true
+  growth_admin:
+    allowed_metrics:
+      - events
+      - sessions
+      - active_users
+      - conversions
+      - retention
+      - sampled_events
+    allowed_dimensions:
+      - event_name
+      - country
+      - platform
+      - day
+      - project_id
+      - user_id
+      - session_id
+      - cohort_id
+    allowed_time_ranges:
+      - last_7_days
+      - last_month
+      - quarter_to_date
+    max_rows: 5000
+    max_cost: 600
+    aggregate_only: false
+metrics:
+  events:
+    expression: count()
+    table: events
+    columns: [events.event_id]
+    allowed_roles: [product_viewer, growth_admin]
+    aliases: [event_count]
+    grain: event
+    cost: 8
+  sessions:
+    expression: uniqExact(events.session_id)
+    table: events
+    columns: [events.session_id]
+    allowed_roles: [product_viewer, growth_admin]
+    aliases: [visits]
+    grain: session
+    cost: 12
+  active_users:
+    expression: uniqExact(events.user_id)
+    table: events
+    columns: [events.user_id]
+    allowed_roles: [product_viewer, growth_admin]
+    aliases: [users, mau]
+    grain: user
+    cost: 18
+  conversions:
+    expression: countIf(events.event_name = 'purchase')
+    table: events
+    columns: [events.event_name]
+    allowed_roles: [product_viewer, growth_admin]
+    aliases: [purchases]
+    grain: event
+    cost: 14
+  retention:
+    expression: uniqExactIf(events.user_id, events.event_name = 'return')
+    table: events
+    columns: [events.user_id, events.event_name]
+    allowed_roles: [growth_admin]
+    aliases: [returning_users]
+    grain: user
+    cost: 24
+  sampled_events:
+    expression: count()
+    table: events_sampled
+    columns: [events.event_id]
+    allowed_roles: [growth_admin]
+    aliases: [sampled_event_count]
+    grain: event
+    cost: 30
+dimensions:
+  event_name:
+    column: events.event_name
+    allowed_roles: [product_viewer, growth_admin]
+    sensitive: false
+    cost: 2
+  country:
+    column: events.country
+    allowed_roles: [product_viewer, growth_admin]
+    sensitive: false
+    cost: 2
+  platform:
+    column: events.platform
+    allowed_roles: [product_viewer, growth_admin]
+    sensitive: false
+    cost: 2
+  day:
+    column: toDate(events.event_time, projects.timezone)
+    allowed_roles: [product_viewer, growth_admin]
+    sensitive: false
+    cost: 3
+  project_id:
+    column: events.project_id
+    allowed_roles: [growth_admin]
+    sensitive: true
+    cost: 5
+  user_id:
+    column: events.user_id
+    allowed_roles: [growth_admin]
+    sensitive: true
+    cost: 8
+  session_id:
+    column: events.session_id
+    allowed_roles: [growth_admin]
+    sensitive: true
+    cost: 7
+  cohort_id:
+    column: events.cohort_id
+    allowed_roles: [growth_admin]
+    sensitive: true
+    cost: 6

@@ -2,7 +2,8 @@
 
 PolicyStrata's deterministic benchmark suite is **DataPolicyDriftBench**. It focuses on B2B SaaS
 embedded analytics: tenant isolation, PII restrictions, metric authorization, gross/net revenue
-drift, join-grain bugs, fiscal/calendar time drift, query-cost budgets, and database containment.
+drift, join-grain bugs, fiscal/calendar time drift, query-cost budgets, database containment,
+release controls, and ClickHouse-style product analytics policies.
 
 The current benchmark is reproducible without an LLM API key. It is artifact evidence over
 implemented operators and fixtures, not evidence of recall on unknown production incidents.
@@ -24,6 +25,8 @@ uv run policystrata run \
   --suite generated_alt_seed \
   --out runs/repro/generated_alt_seed
 uv run policystrata run --domain finance_saas --suite seeded --out runs/repro/finance
+uv run policystrata run --domain analytics_clickhouse --suite seeded --out runs/repro/analytics
+uv run policystrata run --domain support_saas --suite clean_controls --count 80 --seed 260627 --out runs/repro/clean-controls
 ```
 
 `seeded` is a static public suite. `generated` synthesizes deterministic variants from the policy,
@@ -32,6 +35,12 @@ not a blinded held-out set. The legacy suite name `held_out` remains accepted fo
 but should not be used in paper claims unless cases were produced after a detector freeze or
 authored independently.
 
+`heldout_v1` is the detector-freeze-oriented generated held-out suite. Use it with
+`freeze-benchmark` and `--freeze-manifest` so reviewers can verify that the detector, mutation
+registry, generator, policy, surfaces, seed, count, and suite materialization did not change.
+
+`clean_controls` generates authorized and denied no-drift cases for false-positive accounting.
+
 ## Domains
 
 Built-in domains:
@@ -39,6 +48,9 @@ Built-in domains:
 - `support_saas`: support tickets, invoices, subscriptions, customer PII, tenant isolation.
 - `finance_saas`: households, advisors, accounts, transactions, balances, firm isolation, sensitive
   household identifiers.
+- `analytics_clickhouse`: product analytics events, sessions, projects, aggregate-only viewers,
+  cohort release thresholds, materialized-view lineage, and ClickHouse row-policy assumptions for
+  read-only users.
 
 Both domains declare surface responsibility contracts. The point is not that every layer must equal
 the canonical policy. Each layer has a declared job, and transitions must preserve the obligations
@@ -61,6 +73,12 @@ Current operators include:
 - left joins changed to inner joins;
 - missing database deny propagation;
 - cost estimator drift.
+- ClickHouse project-policy gaps;
+- small-cohort release drift;
+- materialized-view lineage loss;
+- timezone bucket drift;
+- unique-user/session grain drift;
+- sampled aggregate release drift.
 
 Generated mutants are policy-driven, but they are generated from the same public taxonomy used by
 the deterministic simulator and expected-label fixtures. Treat their results as reproducibility and
@@ -77,11 +95,20 @@ PolicyStrata includes executable baseline evaluators over trace files:
 - `random_data_generation`
 - `naive_surface_equality`
 - `defense_in_depth_stack`
+- `grammar_only`
+- `semantic_validator_only`
+- `sql_ast_policy_checker`
+- `db_policy_only`
+- `release_filter_only`
+- `lineage_only`
+- `policy_as_code_precheck`
+- `defense_in_depth_stack_v2`
 
 Run:
 
 ```bash
 uv run policystrata baselines runs/repro/seeded
+uv run policystrata ablations runs/repro/seeded runs/repro/analytics
 ```
 
 These are intentionally simple observability models. PolicyStrata's own killed/survived count is
@@ -100,18 +127,13 @@ scripts/reproduce-evidence.sh
 Equivalent direct command:
 
 ```bash
-uv run policystrata evidence \
-  seeded=runs/repro/seeded \
-  generated=runs/repro/generated \
-  generated_alt_seed=runs/repro/generated_alt_seed \
-  finance_saas=runs/repro/finance \
-  --out runs/repro/evidence.md
+scripts/reproduce-final.sh
 ```
 
 The output includes:
 
 ```text
-Suite | Mutants | Killed | Survived | Equivalent declared | Median witness bytes | Evidence level | Provenance | Detector frozen
+Suite | Mutants | Killed | Survived | Equivalent | Invalid | Clean controls | False positives | Median witness bytes | Evidence level | Provenance | Detector frozen
 Evidence level | Suites | Mutants
 Baseline | Failures caught | Catch rate
 ```
@@ -180,6 +202,8 @@ for minimization boundaries.
 - Generated mutants are derived from the same taxonomy used by the deterministic simulator and
   expected-label fixtures.
 - `generated_alt_seed` is not a blinded held-out set.
+- `heldout_v1` is detector-frozen generated evidence when paired with a freeze manifest; it is not
+  externally authored by default.
 - Equivalent and stillborn mutant accounting is defined, but the current generators do not emit
   those cases.
 - Deterministic benchmark runs simulate database effects.

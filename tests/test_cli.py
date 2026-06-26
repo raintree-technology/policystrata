@@ -86,8 +86,8 @@ def test_cli_generated_baselines_and_evidence(tmp_path, capsys) -> None:
     capsys.readouterr()
     evidence = evidence_path.read_text(encoding="utf-8")
     assert "## Suite Results" in evidence
-    assert "Equivalent declared" in evidence
-    assert "| generated | 16 | 16 | 0 | 0 |" in evidence
+    assert "False positives" in evidence
+    assert "| generated | 16 | 16 | 0 | 0 | 0 | 0 | 0 |" in evidence
     assert "| policystrata |" not in evidence
 
 

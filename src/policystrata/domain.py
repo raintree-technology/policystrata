@@ -14,14 +14,21 @@ from typing import Any
 import yaml
 
 from policystrata.generator import (
+    CLEAN_CONTROLS_SUITE,
+    DEFAULT_CLEAN_CONTROL_COUNT,
+    DEFAULT_CLEAN_CONTROL_SEED,
     DEFAULT_GENERATED_ALT_SEED_COUNT,
     DEFAULT_GENERATED_ALT_SEED_SEED,
     DEFAULT_GENERATED_COUNT,
     DEFAULT_GENERATED_SEED,
+    DEFAULT_HELDOUT_V1_COUNT,
+    DEFAULT_HELDOUT_V1_SEED,
     GENERATED_ALT_SEED_SUITE,
     GENERATED_SUITE,
     HELD_OUT_SUITE,
+    HELDOUT_V1_SUITE,
     MAX_GENERATED_COUNT,
+    generate_clean_control_tasks,
     generate_tasks,
 )
 from policystrata.models import (
@@ -38,7 +45,7 @@ from policystrata.models import (
 from policystrata.mutations import get_mutation
 
 BUILTIN_DOMAIN = "support_saas"
-BUILTIN_DOMAINS = ("support_saas", "finance_saas")
+BUILTIN_DOMAINS = ("support_saas", "finance_saas", "analytics_clickhouse")
 SUITE_NAME_PATTERN = SAFE_IDENTIFIER_PATTERN
 MAX_SUITE_NAME_LENGTH = MAX_SAFE_IDENTIFIER_LENGTH
 
@@ -86,7 +93,7 @@ def load_tasks(
     generated_seed: int | None = None,
 ) -> list[Task]:
     suite = validate_suite_name(suite)
-    if suite in {GENERATED_SUITE, GENERATED_ALT_SEED_SUITE, HELD_OUT_SUITE}:
+    if suite in {GENERATED_SUITE, GENERATED_ALT_SEED_SUITE, HELD_OUT_SUITE, HELDOUT_V1_SUITE}:
         policy = load_policy(domain, base_path)
         surfaces = load_surfaces(domain, base_path)
         count = generated_count
@@ -94,10 +101,19 @@ def load_tasks(
         if suite == GENERATED_SUITE:
             count = DEFAULT_GENERATED_COUNT if count is None else count
             seed = DEFAULT_GENERATED_SEED if seed is None else seed
-        else:
+        elif suite in {GENERATED_ALT_SEED_SUITE, HELD_OUT_SUITE}:
             count = DEFAULT_GENERATED_ALT_SEED_COUNT if count is None else count
             seed = DEFAULT_GENERATED_ALT_SEED_SEED if seed is None else seed
+        else:
+            count = DEFAULT_HELDOUT_V1_COUNT if count is None else count
+            seed = DEFAULT_HELDOUT_V1_SEED if seed is None else seed
         return generate_tasks(domain, policy, surfaces, count=count, seed=seed)
+    if suite == CLEAN_CONTROLS_SUITE:
+        policy = load_policy(domain, base_path)
+        surfaces = load_surfaces(domain, base_path)
+        count = DEFAULT_CLEAN_CONTROL_COUNT if generated_count is None else generated_count
+        seed = DEFAULT_CLEAN_CONTROL_SEED if generated_seed is None else generated_seed
+        return generate_clean_control_tasks(domain, policy, surfaces, count=count, seed=seed)
 
     raw = load_suite_yaml(domain, suite, base_path)
     defaults = {
@@ -131,6 +147,20 @@ def load_suite_metadata(
                 "secondary deterministic generated suite; not blinded unless detector-frozen "
                 "metadata is supplied"
             ],
+        )
+    if suite == HELDOUT_V1_SUITE:
+        return SuiteMetadata(
+            provenance="secondary_generated",
+            evidence_level="blinded_suite",
+            authored_after_detector_freeze=True,
+            notes=["deterministic held-out v1 suite generated after detector freeze"],
+        )
+    if suite == CLEAN_CONTROLS_SUITE:
+        return SuiteMetadata(
+            provenance="secondary_generated",
+            evidence_level="blinded_suite",
+            authored_after_detector_freeze=True,
+            notes=["clean-control suite for false-positive accounting"],
         )
 
     raw = load_suite_yaml(domain, suite, base_path)

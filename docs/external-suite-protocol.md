@@ -72,4 +72,5 @@ Report blinded suites separately from public/generated suites:
 - containment rate for `contain_to_contain`;
 - evidence levels and adapter coverage.
 
-Do not merge blinded results into the 620/620 public deterministic result.
+Do not merge externally authored results into the deterministic artifact-suite score. Report them as
+their own evidence level with separate provenance.

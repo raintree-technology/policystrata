@@ -1,0 +1,120 @@
+suite: seeded
+policy_version: v1
+surface_versions:
+  manifest: v1
+  grammar: v1
+  validator: v1
+  compiler: v1
+  database: v1
+  release: v1
+matrix:
+  - mutation: stale_metric_alias_manifest
+    count: 10
+    principal: acme_product_viewer
+    request: "Show retained users by country, variant {index}."
+    semantic_query:
+      metric: returning_users
+      dimensions: [country]
+      time_range: last_7_days
+      grain: day
+      limit: 100
+    surface_versions:
+      manifest: v0
+  - mutation: grammar_permits_forbidden_dimension
+    count: 10
+    principal: acme_product_viewer
+    request: "Break active users down by raw user id, variant {index}."
+    semantic_query:
+      metric: active_users
+      dimensions: [user_id]
+      time_range: last_7_days
+      grain: day
+      limit: 100
+    surface_versions:
+      grammar: v0
+  - mutation: validator_omits_sensitive_column
+    count: 10
+    principal: acme_product_viewer
+    request: "Show sessions by session id, variant {index}."
+    semantic_query:
+      metric: sessions
+      dimensions: [session_id]
+      time_range: last_7_days
+      grain: day
+      limit: 100
+    surface_versions:
+      validator: v0
+  - mutation: clickhouse_row_policy_missing_project_filter
+    count: 12
+    principal: acme_product_viewer
+    request: "Show events by platform with read-only row policy containment, variant {index}."
+    semantic_query:
+      metric: events
+      dimensions: [platform]
+      time_range: last_7_days
+      grain: day
+      limit: 100
+    surface_versions:
+      database: v0
+  - mutation: clickhouse_row_policy_readonly_assumption_violation
+    count: 10
+    principal: acme_product_viewer
+    request: "Show active users after a role execution-mode change, variant {index}."
+    semantic_query:
+      metric: active_users
+      dimensions: [country]
+      time_range: last_7_days
+      grain: day
+      limit: 100
+    surface_versions:
+      database: v0
+  - mutation: aggregate_small_cohort_release
+    count: 12
+    principal: acme_product_viewer
+    request: "Show conversions for a small cohort, variant {index}."
+    semantic_query:
+      metric: conversions
+      dimensions: [event_name]
+      filters:
+        cohort_id: cohort_small
+      time_range: last_7_days
+      grain: day
+      limit: 100
+    surface_versions:
+      release: v0
+  - mutation: materialized_view_lineage_drop
+    count: 12
+    principal: acme_product_viewer
+    request: "Show active users from a materialized aggregate, variant {index}."
+    semantic_query:
+      metric: active_users
+      dimensions: [event_name]
+      time_range: last_7_days
+      grain: day
+      limit: 100
+    surface_versions:
+      compiler: v0
+  - mutation: timezone_bucket_drift
+    count: 12
+    principal: acme_product_viewer
+    request: "Show sessions by local day, variant {index}."
+    semantic_query:
+      metric: sessions
+      dimensions: [day]
+      time_range: last_7_days
+      grain: day
+      limit: 100
+    surface_versions:
+      compiler: v0
+  - mutation: uniq_to_count_drift
+    count: 12
+    principal: acme_product_viewer
+    request: "Show active users without double-counting events, variant {index}."
+    semantic_query:
+      metric: active_users
+      dimensions: [country]
+      time_range: last_7_days
+      grain: day
+      limit: 100
+    surface_versions:
+      compiler: v0

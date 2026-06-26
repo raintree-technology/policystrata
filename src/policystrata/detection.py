@@ -108,6 +108,8 @@ def classify_witness(
         return WitnessClass.SEMANTIC_DRIFT
     if localized_surface == "database":
         return WitnessClass.OVER_PERMISSIVE
+    if localized_surface == "release" and release_decision.allowed:
+        return WitnessClass.UNSAFE_RELEASE
     if release_decision.allowed and not canonical.allowed:
         return WitnessClass.UNSAFE_RELEASE
     if semantic_difference:

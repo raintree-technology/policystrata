@@ -1,0 +1,92 @@
+versions:
+  manifest: v1
+  grammar: v1
+  validator: v1
+  compiler: v1
+  database: v1
+  release: v1
+contracts:
+  manifest:
+    mode: capability_exposure
+    responsibilities:
+      - expose_project_scoped_analytics_metrics
+      - omit_raw_event_and_sensitive_identifier_capabilities
+    emits_obligations:
+      - capability_scope
+  grammar:
+    mode: intent_space
+    responsibilities:
+      - parse_declared_analytics_intents
+      - preserve_untrusted_intent_for_validation
+      - avoid_advertising_raw_event_capabilities_to_aggregate_roles
+    accepts_obligations:
+      - capability_scope
+    emits_obligations:
+      - syntactic_intent
+  validator:
+    mode: semantic_validation
+    responsibilities:
+      - authorize_metric_dimension_time_and_budget
+      - bind_principal_project_scope
+      - enforce_aggregate_only_roles
+      - require_cohort_threshold_metadata
+    accepts_obligations:
+      - syntactic_intent
+    emits_obligations:
+      - authorization_decision
+      - metric_semantics
+      - tenant_scope
+      - row_budget
+      - release_threshold
+  compiler:
+    mode: sql_lowering
+    responsibilities:
+      - preserve_authorized_metric_semantics
+      - preserve_project_scope_predicates
+      - preserve_timezone_window_semantics
+      - preserve_distinct_user_and_session_grain
+      - preserve_materialized_view_lineage
+    accepts_obligations:
+      - authorization_decision
+      - metric_semantics
+      - tenant_scope
+      - row_budget
+      - release_threshold
+    emits_obligations:
+      - sql_semantics
+      - database_containment_request
+      - lineage
+  database:
+    mode: database_containment
+    responsibilities:
+      - enforce_clickhouse_row_policy_for_read_only_users
+      - contain_cross_project_row_access
+      - document_row_policy_read_only_assumption
+    accepts_obligations:
+      - database_containment_request
+      - tenant_scope
+    emits_obligations:
+      - row_access_result
+  release:
+    mode: output_release
+    responsibilities:
+      - enforce_release_decision
+      - withhold_small_cohort_aggregates
+      - disclose_sampling_and_preserve_result_lineage
+    accepts_obligations:
+      - authorization_decision
+      - row_access_result
+      - release_threshold
+      - lineage
+transition_obligations:
+  - capability_scope
+  - syntactic_intent
+  - authorization_decision
+  - metric_semantics
+  - tenant_scope
+  - row_budget
+  - release_threshold
+  - sql_semantics
+  - database_containment_request
+  - row_access_result
+  - lineage

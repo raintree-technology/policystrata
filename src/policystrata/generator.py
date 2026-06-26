@@ -16,12 +16,29 @@ from policystrata.mutations import MUTATIONS, get_mutation
 GENERATED_SUITE = "generated"
 GENERATED_ALT_SEED_SUITE = "generated_alt_seed"
 HELD_OUT_SUITE = "held_out"
+HELDOUT_V1_SUITE = "heldout_v1"
+CLEAN_CONTROLS_SUITE = "clean_controls"
+NO_MUTATION_ID = "none"
 DEFAULT_GENERATED_COUNT = 500
 DEFAULT_GENERATED_ALT_SEED_COUNT = 50
+DEFAULT_HELDOUT_V1_COUNT = 500
+DEFAULT_CLEAN_CONTROL_COUNT = 80
 DEFAULT_GENERATED_SEED = 1729
 DEFAULT_GENERATED_ALT_SEED_SEED = 8675309
+DEFAULT_HELDOUT_V1_SEED = 260626
+DEFAULT_CLEAN_CONTROL_SEED = 260627
 MAX_GENERATED_COUNT = 10_000
 MAX_GENERATED_DIMENSIONS = 3
+CLICKHOUSE_MUTATION_IDS = {
+    "clickhouse_row_policy_missing_project_filter",
+    "clickhouse_row_policy_readonly_assumption_violation",
+    "aggregate_small_cohort_release",
+    "materialized_view_lineage_drop",
+    "timezone_bucket_drift",
+    "uniq_to_count_drift",
+    "sample_clause_release_drift",
+    "distributed_table_policy_gap",
+}
 
 
 def generate_tasks(
@@ -34,7 +51,7 @@ def generate_tasks(
     count = validate_generated_count(count)
     rng = random.Random(seed)
     principal = select_restricted_principal(policy)
-    mutations = list(MUTATIONS)
+    mutations = mutation_ids_for_domain(domain)
     tasks: list[Task] = []
 
     for index in range(count):
@@ -64,6 +81,62 @@ def generate_tasks(
     return tasks
 
 
+def mutation_ids_for_domain(domain: str) -> list[str]:
+    mutation_ids = list(MUTATIONS)
+    if domain == "analytics_clickhouse":
+        return mutation_ids
+    return [mutation_id for mutation_id in mutation_ids if mutation_id not in CLICKHOUSE_MUTATION_IDS]
+
+
+def generate_clean_control_tasks(
+    domain: str,
+    policy: Policy,
+    surface_versions: SurfaceVersions,
+    count: int = DEFAULT_CLEAN_CONTROL_COUNT,
+    seed: int = DEFAULT_CLEAN_CONTROL_SEED,
+) -> list[Task]:
+    count = validate_generated_count(count)
+    rng = random.Random(seed)
+    principals = sorted(policy.principals.values(), key=lambda principal: principal.id)
+    tasks: list[Task] = []
+
+    for index in range(count):
+        principal = principals[index % len(principals)]
+        scenario = index % 4
+        if scenario == 0:
+            query = authorized_query(policy, principal, rng)
+            request = request_for_query(query, NO_MUTATION_ID, index + 1)
+        elif scenario == 1:
+            query = denied_metric_query(policy, principal, rng)
+            request = f"Clean control {index + 1}: denied metric should be rejected before release."
+        elif scenario == 2:
+            query = denied_dimension_query(policy, principal, rng)
+            request = f"Clean control {index + 1}: denied dimension should be rejected before release."
+        else:
+            query = authorized_query(policy, principal, rng).model_copy(
+                update={"limit": policy.roles[principal.role].max_rows}
+            )
+            request = f"Clean control {index + 1}: maximum allowed row budget remains clean."
+
+        tasks.append(
+            Task(
+                id=f"clean_control_{index + 1:04d}",
+                domain=domain,
+                principal=principal.id,
+                request=request,
+                policy_version=policy.version,
+                surface_versions=surface_versions,
+                mutation=NO_MUTATION_ID,
+                semantic_query=query,
+                expected_witness_class=WitnessClass.CLEAN,
+                expected_localized_surface="release",
+            )
+        )
+
+    rng.shuffle(tasks)
+    return tasks
+
+
 def validate_generated_count(count: int) -> int:
     if not isinstance(count, int) or isinstance(count, bool):
         raise TypeError("generated count must be an integer")
@@ -77,6 +150,38 @@ def select_restricted_principal(policy: Policy) -> Principal:
         if "admin" not in principal.role:
             return principal
     return next(iter(policy.principals.values()))
+
+
+def authorized_query(policy: Policy, principal: Principal, rng: random.Random) -> SemanticQuery:
+    role = policy.roles[principal.role]
+    allowed_dimensions = choose_allowed_dimensions(policy, principal.role, rng)
+    return SemanticQuery(
+        metric=choose_allowed_metric(policy, principal.role, rng),
+        dimensions=allowed_dimensions[:1],
+        time_range=choose_time_range(role.allowed_time_ranges, rng),
+        limit=min(role.max_rows, 100),
+    )
+
+
+def denied_metric_query(policy: Policy, principal: Principal, rng: random.Random) -> SemanticQuery:
+    role = policy.roles[principal.role]
+    denied_metric = choose_denied_metric(policy, principal.role, rng)
+    return SemanticQuery(
+        metric=first_alias(denied_metric) or denied_metric.expression,
+        dimensions=choose_allowed_dimensions(policy, principal.role, rng)[:1],
+        time_range=choose_time_range(role.allowed_time_ranges, rng),
+        limit=min(role.max_rows, 100),
+    )
+
+
+def denied_dimension_query(policy: Policy, principal: Principal, rng: random.Random) -> SemanticQuery:
+    role = policy.roles[principal.role]
+    return SemanticQuery(
+        metric=choose_allowed_metric(policy, principal.role, rng),
+        dimensions=[choose_sensitive_dimension(policy, principal.role, rng)],
+        time_range=choose_time_range(role.allowed_time_ranges, rng),
+        limit=min(role.max_rows, 100),
+    )
 
 
 def query_for_mutation(

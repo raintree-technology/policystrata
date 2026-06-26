@@ -2,16 +2,19 @@ from __future__ import annotations
 
 import argparse
 import json
+import shutil
+import sys
 from pathlib import Path
 
 from pydantic import ValidationError
 
 from policystrata.artifact_report import artifact_report_json, render_artifact_report
-from policystrata.baselines import evaluate_baseline_run
+from policystrata.baselines import evaluate_ablation_runs, evaluate_baseline_runs
 from policystrata.demo import run_demo
 from policystrata.domain import BUILTIN_DOMAIN, BUILTIN_DOMAINS, copy_domain
 from policystrata.evidence import parse_run_args, render_evidence_tables
 from policystrata.exports import export_run
+from policystrata.freeze import verify_benchmark_manifest, write_benchmark_manifest
 from policystrata.generator import MAX_GENERATED_COUNT
 from policystrata.init_scan import SCANNER_EXAMPLES, init_scan_project
 from policystrata.integrations.dbt_semantic import compare_dbt_semantic_model, dbt_semantic_has_warnings
@@ -89,6 +92,34 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Seed for generated suites.",
     )
+    run_parser.add_argument(
+        "--freeze-manifest",
+        type=Path,
+        default=None,
+        help="Benchmark manifest created by freeze-benchmark; verified before running.",
+    )
+
+    freeze_parser = subparsers.add_parser(
+        "freeze-benchmark",
+        help="Create a detector/suite/policy freeze manifest for a deterministic benchmark run.",
+    )
+    freeze_parser.add_argument("--domain", default=BUILTIN_DOMAIN, choices=BUILTIN_DOMAINS)
+    freeze_parser.add_argument("--suite", default="generated")
+    freeze_parser.add_argument("--domain-path", type=Path, default=None)
+    freeze_parser.add_argument("--count", type=generated_count_arg, default=None)
+    freeze_parser.add_argument("--seed", type=int, default=None)
+    freeze_parser.add_argument("--out", type=Path, required=True)
+
+    verify_parser = subparsers.add_parser(
+        "verify-freeze",
+        help="Verify that current detector, policy, surfaces, and suite match a freeze manifest.",
+    )
+    verify_parser.add_argument("manifest", type=Path)
+    verify_parser.add_argument("--domain", default=None, choices=BUILTIN_DOMAINS)
+    verify_parser.add_argument("--suite", default=None)
+    verify_parser.add_argument("--domain-path", type=Path, default=None)
+    verify_parser.add_argument("--count", type=generated_count_arg, default=None)
+    verify_parser.add_argument("--seed", type=int, default=None)
 
     minimize_parser = subparsers.add_parser("minimize", help="Minimize a trace or witness JSON file.")
     minimize_parser.add_argument("--witness", type=Path, required=True)
@@ -97,7 +128,14 @@ def build_parser() -> argparse.ArgumentParser:
     summarize_parser.add_argument("run_dir", type=Path)
 
     baselines_parser = subparsers.add_parser("baselines", help="Evaluate baseline strategies for a run.")
-    baselines_parser.add_argument("run_dir", type=Path)
+    baselines_parser.add_argument("run_dirs", type=Path, nargs="+")
+    baselines_parser.add_argument("--format", choices=["json"], default="json")
+    baselines_parser.add_argument("--out", type=Path, default=None)
+
+    ablations_parser = subparsers.add_parser("ablations", help="Evaluate PolicyStrata ablations for a run.")
+    ablations_parser.add_argument("run_dirs", type=Path, nargs="+")
+    ablations_parser.add_argument("--format", choices=["json"], default="json")
+    ablations_parser.add_argument("--out", type=Path, default=None)
 
     export_parser = subparsers.add_parser("export", help="Export a run through an external eval adapter.")
     export_parser.add_argument("run_dir", type=Path)
@@ -157,6 +195,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     scan_parser.add_argument("--out", type=Path, default=None, help="Output directory for scan artifacts.")
 
+    subparsers.add_parser("doctor", help="Check local dependencies for deterministic reproduction.")
+
     return parser
 
 
@@ -197,9 +237,49 @@ def run_command(args: argparse.Namespace) -> int:
         return 0
 
     if args.command == "run":
-        traces = run_suite(args.domain, args.suite, args.out, args.domain_path, args.count, args.seed)
+        traces = run_suite(
+            args.domain,
+            args.suite,
+            args.out,
+            args.domain_path,
+            args.count,
+            args.seed,
+            args.freeze_manifest,
+        )
         print(json.dumps({"traces": len(traces), "out": str(args.out)}, sort_keys=True))
         return 0
+
+    if args.command == "freeze-benchmark":
+        manifest = write_benchmark_manifest(
+            args.domain,
+            args.suite,
+            args.out,
+            args.domain_path,
+            args.count,
+            args.seed,
+        )
+        print(
+            json.dumps(
+                {
+                    "benchmark_manifest_id": manifest["benchmark_manifest_id"],
+                    "out": str(args.out),
+                },
+                sort_keys=True,
+            )
+        )
+        return 0
+
+    if args.command == "verify-freeze":
+        verification = verify_benchmark_manifest(
+            args.manifest,
+            args.domain,
+            args.suite,
+            args.domain_path,
+            args.count,
+            args.seed,
+        )
+        print(json.dumps(strip_manifest_payloads(verification), indent=2, sort_keys=True))
+        return 0 if verification["verified"] else 1
 
     if args.command == "minimize":
         print(json.dumps(minimize_witness_file(args.witness), indent=2, sort_keys=True))
@@ -210,7 +290,10 @@ def run_command(args: argparse.Namespace) -> int:
         return 0
 
     if args.command == "baselines":
-        print(json.dumps(evaluate_baseline_run(args.run_dir), indent=2, sort_keys=True))
+        return write_json_result(evaluate_baseline_runs(args.run_dirs), args.out)
+
+    if args.command == "ablations":
+        return write_json_result(evaluate_ablation_runs(args.run_dirs), args.out)
         return 0
 
     if args.command == "export":
@@ -264,7 +347,42 @@ def run_command(args: argparse.Namespace) -> int:
         )
         return 1 if scan_result.gate.outcome == GateOutcome.FAIL else 0
 
+    if args.command == "doctor":
+        print(json.dumps(run_doctor(), indent=2, sort_keys=True))
+        return 0
+
     raise ValueError(f"unknown command: {args.command}")
+
+
+def write_json_result(result: object, out_path: Path | None) -> int:
+    payload = json.dumps(result, indent=2, sort_keys=True) + "\n"
+    if out_path is not None:
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(payload, encoding="utf-8")
+        print(json.dumps({"out": str(out_path)}, sort_keys=True))
+    else:
+        print(payload, end="")
+    return 0
+
+
+def strip_manifest_payloads(verification: dict[str, object]) -> dict[str, object]:
+    manifest = verification.get("manifest")
+    manifest_id = manifest.get("benchmark_manifest_id") if isinstance(manifest, dict) else None
+    return {
+        "verified": verification["verified"],
+        "benchmark_manifest_id": manifest_id,
+        "mismatches": verification["mismatches"],
+    }
+
+
+def run_doctor() -> dict[str, object]:
+    return {
+        "python": sys.version.split()[0],
+        "uv": shutil.which("uv") is not None,
+        "docker": shutil.which("docker") is not None,
+        "requires_llm_api_key": False,
+        "requires_host_psql": False,
+    }
 
 
 def format_validation_error(exc: ValidationError) -> str:

@@ -89,6 +89,12 @@ def metric_expression_for_mutation(metric_expression: str, mutation: str, domain
         return f"({metric_expression}) * 2"
     if mutation == "compiler_removes_distinct":
         return metric_expression.replace("count(distinct ", "count(").replace("distinct ", "")
+    if mutation == "uniq_to_count_drift":
+        return metric_expression.replace("uniqExact(", "count(").replace("uniq(", "count(")
+    if mutation == "materialized_view_lineage_drop" and domain == "analytics_clickhouse":
+        return metric_expression.replace("events.", "events_mv.")
+    if mutation == "sample_clause_release_drift" and domain == "analytics_clickhouse":
+        return f"{metric_expression} /* sample 0.1 without release disclosure */"
     return metric_expression
 
 
@@ -102,6 +108,8 @@ def dimension_sql(policy: Policy, dimension: str) -> str:
 def drift_metric_expression(domain: str) -> str:
     if domain == "finance_saas":
         return "sum(transactions.gross_amount_cents)"
+    if domain == "analytics_clickhouse":
+        return "count()"
     return "sum(invoices.gross_amount_cents)"
 
 
@@ -120,6 +128,12 @@ def join_path(domain: str) -> list[str]:
             "left join accounts on accounts.household_id = households.id",
             "left join transactions on transactions.account_id = accounts.id",
             "left join balances on balances.account_id = accounts.id",
+        ]
+    if domain == "analytics_clickhouse":
+        return [
+            "from events",
+            "left join sessions on sessions.session_id = events.session_id",
+            "left join projects on projects.id = events.project_id",
         ]
     return [
         "from accounts",
@@ -156,18 +170,29 @@ def time_predicates(time_range: str, date_column: str, mutation: str) -> list[st
         return [f"{date_column} >= date '2026-04-27'", f"{date_column} < date '2026-05-25'"]
     if time_range == "quarter_to_date":
         return [f"{date_column} >= date '2026-04-01'", f"{date_column} < date '2026-06-24'"]
+    if time_range == "last_7_days":
+        lower = "toDateTime('2026-06-17 00:00:00', 'America/Los_Angeles')"
+        upper = "toDateTime('2026-06-24 00:00:00', 'America/Los_Angeles')"
+        if mutation == "timezone_bucket_drift":
+            lower = "toDateTime('2026-06-17 00:00:00', 'UTC')"
+            upper = "toDateTime('2026-06-24 00:00:00', 'UTC')"
+        return [f"{date_column} >= {lower}", f"{date_column} < {upper}"]
     return []
 
 
 def tenant_column(domain: str) -> str:
     if domain == "finance_saas":
         return "households.firm_id"
+    if domain == "analytics_clickhouse":
+        return "events.project_id"
     return "accounts.tenant_id"
 
 
 def legacy_tenant_column(domain: str) -> str:
     if domain == "finance_saas":
         return "households.legacy_firm_id"
+    if domain == "analytics_clickhouse":
+        return "events.legacy_project_id"
     return "accounts.legacy_tenant_id"
 
 
@@ -176,4 +201,6 @@ def time_column(domain: str, table: str) -> str:
         if table == "balances":
             return "balances.balance_date"
         return "transactions.transaction_date"
+    if domain == "analytics_clickhouse":
+        return "events.event_time"
     return "invoices.invoice_date"

@@ -14,7 +14,7 @@ except ImportError:  # Python 3.10 exposes Traversable from importlib.abc.
 from policystrata.domain import BUILTIN_DOMAINS, domain_root
 from policystrata.evidence import load_run_metadata, markdown_table, run_artifact_path
 from policystrata.models import Trace, WitnessClass
-from policystrata.summary import load_traces
+from policystrata.summary import accounting_status, load_traces
 
 
 def build_artifact_report(run_dir: Path, domain_path: Path | None = None) -> dict[str, Any]:
@@ -24,6 +24,12 @@ def build_artifact_report(run_dir: Path, domain_path: Path | None = None) -> dic
     witness_sizes = witness_byte_sizes(run_dir, traces)
     artifact_stats = local_tree_stats(run_dir)
     fixture_stats = domain_fixture_stats(domain, domain_path)
+    statuses = dict.fromkeys(
+        ("killed", "survived", "equivalent", "invalid", "clean_control", "false_positive"),
+        0,
+    )
+    for trace in traces:
+        statuses[accounting_status(trace)] += 1
 
     return {
         "run_dir": str(run_dir),
@@ -32,8 +38,17 @@ def build_artifact_report(run_dir: Path, domain_path: Path | None = None) -> dic
         "evidence_level": metadata.get("evidence_level", "deterministic_fixture"),
         "suite_provenance": metadata.get("suite_provenance", "hand_authored"),
         "detector_frozen": bool(metadata.get("detector_frozen", False)),
+        "benchmark_manifest_id": metadata.get("benchmark_manifest_id"),
+        "detector_hash": metadata.get("detector_hash"),
+        "mutation_operator_hash": metadata.get("mutation_operator_hash"),
         "traces": len(traces),
         "non_clean_traces": sum(1 for trace in traces if trace.witness_class != WitnessClass.CLEAN),
+        "killed": statuses["killed"],
+        "survived": statuses["survived"],
+        "equivalent": statuses["equivalent"],
+        "invalid": statuses["invalid"],
+        "clean_controls": statuses["clean_control"],
+        "false_positives": statuses["false_positive"],
         "minimized_witnesses": len(witness_sizes),
         "median_witness_bytes": int(median(witness_sizes)) if witness_sizes else 0,
         "run_artifact_files": artifact_stats["files"],
@@ -57,8 +72,17 @@ def render_artifact_report(run_dir: Path, domain_path: Path | None = None) -> st
         ["Evidence level", report["evidence_level"]],
         ["Suite provenance", report["suite_provenance"]],
         ["Detector frozen", "yes" if report["detector_frozen"] else "no"],
+        ["Benchmark manifest id", str(report["benchmark_manifest_id"])],
+        ["Detector hash", short_hash(report["detector_hash"])],
+        ["Mutation operator hash", short_hash(report["mutation_operator_hash"])],
         ["Traces", str(report["traces"])],
         ["Non-clean traces", str(report["non_clean_traces"])],
+        ["Killed", str(report["killed"])],
+        ["Survived", str(report["survived"])],
+        ["Equivalent", str(report["equivalent"])],
+        ["Invalid", str(report["invalid"])],
+        ["Clean controls", str(report["clean_controls"])],
+        ["False positives", str(report["false_positives"])],
         ["Minimized witnesses", str(report["minimized_witnesses"])],
         ["Median witness bytes", str(report["median_witness_bytes"])],
         ["Average trace latency ms", str(report["avg_latency_ms"])],
@@ -148,3 +172,9 @@ def percentile_latency(traces: list[Trace], percentile: float) -> float:
 
 def artifact_report_json(run_dir: Path, domain_path: Path | None = None) -> str:
     return json.dumps(build_artifact_report(run_dir, domain_path), indent=2, sort_keys=True) + "\n"
+
+
+def short_hash(value: object) -> str:
+    if not isinstance(value, str) or not value:
+        return ""
+    return value[:12]

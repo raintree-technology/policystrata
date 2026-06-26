@@ -20,6 +20,14 @@ SuiteProvenance = Literal[
     "externally_authored",
     "incident_reconstruction",
 ]
+AccountingStatus = Literal[
+    "killed",
+    "survived",
+    "equivalent",
+    "invalid",
+    "clean_control",
+    "false_positive",
+]
 SurfaceMode = Literal[
     "capability_exposure",
     "intent_space",
@@ -204,6 +212,8 @@ class Trace(BaseModel):
     expected_localized_surface: SurfaceName
     containment_layer: SurfaceName | None = None
     expected_containment_layer: SurfaceName | None = None
+    accounting_status: AccountingStatus | None = None
+    accounting_reason: str | None = None
     semantic_difference: bool = False
     witness_path: str | None = None
     latency_ms: float = 0.0
@@ -213,6 +223,12 @@ class Trace(BaseModel):
 
 class Summary(BaseModel):
     total: int
+    killed: int = 0
+    survived: int = 0
+    equivalent: int = 0
+    invalid: int = 0
+    clean_controls: int = 0
+    false_positives: int = 0
     mutant_kill_rate: float
     over_permissive_rate: float
     over_restrictive_rate: float

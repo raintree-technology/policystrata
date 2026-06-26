@@ -9,9 +9,11 @@ from typing import Any
 from policystrata.compiler import compile_query
 from policystrata.detection import detect_witness
 from policystrata.domain import load_policy, load_suite_metadata, load_surface_config, load_tasks
+from policystrata.freeze import freeze_metadata, load_benchmark_manifest, verify_benchmark_manifest
 from policystrata.minimize import minimize_trace
 from policystrata.models import (
     SAFE_IDENTIFIER_PATTERN,
+    AccountingStatus,
     Decision,
     Policy,
     SemanticQuery,
@@ -45,6 +47,12 @@ INTENDED_METRIC_VALUES = {
     "fee_revenue": 17500,
     "advisory_fees": 17500,
     "average_resolution_hours": 18,
+    "events": 1800,
+    "sessions": 420,
+    "active_users": 260,
+    "conversions": 64,
+    "retention": 37,
+    "sampled_events": 180,
 }
 
 
@@ -55,11 +63,35 @@ def run_suite(
     base_path: Path | None = None,
     generated_count: int | None = None,
     generated_seed: int | None = None,
+    freeze_manifest: Path | None = None,
 ) -> list[Trace]:
+    manifest: dict[str, Any] | None = None
+    if freeze_manifest is not None:
+        verification = verify_benchmark_manifest(
+            freeze_manifest,
+            domain=domain,
+            suite=suite,
+            base_path=base_path,
+            generated_count=generated_count,
+            generated_seed=generated_seed,
+        )
+        if not verification["verified"]:
+            mismatches = ", ".join(item["field"] for item in verification["mismatches"])
+            raise ValueError(f"freeze manifest verification failed: {mismatches or 'invalid manifest id'}")
+        manifest = load_benchmark_manifest(freeze_manifest)
+
     policy = load_policy(domain, base_path)
     surface_config = load_surface_config(domain, base_path)
     tasks = load_tasks(domain, suite, base_path, generated_count, generated_seed)
     suite_metadata = load_suite_metadata(domain, suite, base_path)
+    if manifest is not None:
+        suite_metadata = suite_metadata.model_copy(
+            update={
+                "detector_frozen": True,
+                "detector_freeze_id": manifest["benchmark_manifest_id"],
+                "authored_after_detector_freeze": True,
+            }
+        )
     traces = [evaluate_task(policy, task, surface_config) for task in tasks]
 
     out_dir = out_dir.resolve()
@@ -74,6 +106,7 @@ def run_suite(
         tasks,
         traces,
         out_dir,
+        manifest,
     )
     return traces
 
@@ -89,6 +122,7 @@ def write_run_outputs(
     tasks: list[Task],
     traces: list[Trace],
     out_dir: Path,
+    freeze_manifest: dict[str, Any] | None = None,
 ) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     witness_dir = out_dir / "witnesses"
@@ -107,7 +141,13 @@ def write_run_outputs(
         suite_metadata,
         traces,
         out_dir,
+        freeze_manifest,
     )
+    if freeze_manifest is not None:
+        (out_dir / "benchmark_manifest.json").write_text(
+            json.dumps(freeze_manifest, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
 
 
 def write_traces(
@@ -162,7 +202,9 @@ def write_run_metadata(
     suite_metadata: SuiteMetadata,
     traces: list[Trace],
     out_dir: Path,
+    freeze_manifest: dict[str, Any] | None = None,
 ) -> None:
+    manifest_metadata = freeze_metadata(freeze_manifest) if freeze_manifest is not None else {}
     (out_dir / "metadata.json").write_text(
         json.dumps(
             {
@@ -178,6 +220,7 @@ def write_run_metadata(
                 "detector_frozen": suite_metadata.detector_frozen,
                 "detector_freeze_id": suite_metadata.detector_freeze_id,
                 "authored_after_detector_freeze": suite_metadata.authored_after_detector_freeze,
+                **manifest_metadata,
                 "surface_contracts": surface_config.contract_dict(),
                 "transition_obligations": surface_config.transition_obligations,
                 "mutation_operator_ids": list(MUTATIONS),
@@ -205,7 +248,9 @@ def evaluate_task(policy: Policy, task: Task, surface_config: SurfaceConfig) -> 
     surface_decisions = evaluate_surfaces(task, canonical)
     db_result = simulate_db_result(task.semantic_query, mutation.family, canonical.allowed)
     containment_layer = mutation.containment_layer if mutation.requires_db_containment else None
-    release_allowed = containment_layer is None
+    release_allowed = (
+        canonical.allowed if mutation.witness_class == WitnessClass.CLEAN else containment_layer is None
+    )
     release_decision = Decision(
         allowed=release_allowed,
         reasons=[] if release_allowed else [f"contained by {containment_layer}"],
@@ -253,6 +298,8 @@ def evaluate_task(policy: Policy, task: Task, surface_config: SurfaceConfig) -> 
         expected_localized_surface=task.expected_localized_surface,
         containment_layer=detection.containment_layer,
         expected_containment_layer=task.expected_containment_layer,
+        accounting_status=classify_accounting(task, detection.witness_class),
+        accounting_reason=accounting_reason(task, detection.witness_class),
         semantic_difference=semantic_difference,
         latency_ms=latency_ms,
         cost={"estimated": compile_result.estimated_cost, "tokens": 0, "usd": 0.0},
@@ -279,6 +326,9 @@ def evaluate_contracts(
 ) -> dict[str, Decision]:
     mutation = get_mutation(task.mutation)
     decisions: dict[str, Decision] = {}
+
+    if mutation.witness_class == WitnessClass.CLEAN:
+        return {surface: Decision(allowed=True, reasons=[]) for surface in SURFACES}
 
     for surface in SURFACES:
         if surface == mutation.affected_surface:
@@ -310,6 +360,8 @@ def evaluate_contracts(
 
 def evaluate_surfaces(task: Task, canonical: Decision) -> dict[str, Decision]:
     mutation = get_mutation(task.mutation)
+    if mutation.witness_class == WitnessClass.CLEAN:
+        return dict.fromkeys(SURFACES, canonical)
     decisions: dict[str, Decision] = {}
     for surface in SURFACES:
         if surface == mutation.affected_surface:
@@ -371,6 +423,20 @@ def simulate_db_result(query: SemanticQuery, mutation: str, canonical_allowed: b
         actual = 12000
     elif mutation == "cost_estimate_ignores_expansion":
         actual = intended if canonical_allowed else intended + 1
+    elif mutation in {"clickhouse_row_policy_missing_project_filter", "distributed_table_policy_gap"}:
+        actual = intended + 12
+    elif mutation == "clickhouse_row_policy_readonly_assumption_violation":
+        actual = intended + 7
+    elif mutation == "aggregate_small_cohort_release":
+        actual = intended
+    elif mutation == "materialized_view_lineage_drop":
+        actual = intended + 2
+    elif mutation == "timezone_bucket_drift":
+        actual = max(0, intended - 5)
+    elif mutation == "uniq_to_count_drift":
+        actual = intended + 42
+    elif mutation == "sample_clause_release_drift":
+        actual = intended
 
     return {
         "intended_value": intended,
@@ -382,6 +448,22 @@ def simulate_db_result(query: SemanticQuery, mutation: str, canonical_allowed: b
 
 def intended_value(query: SemanticQuery) -> int:
     return INTENDED_METRIC_VALUES.get(query.metric, 1)
+
+
+def classify_accounting(task: Task, observed: WitnessClass) -> AccountingStatus:
+    if task.expected_witness_class == WitnessClass.CLEAN:
+        return "false_positive" if observed != WitnessClass.CLEAN else "clean_control"
+    return "survived" if observed == WitnessClass.CLEAN else "killed"
+
+
+def accounting_reason(task: Task, observed: WitnessClass) -> str:
+    if task.expected_witness_class == WitnessClass.CLEAN and observed != WitnessClass.CLEAN:
+        return "clean control produced an unexpected witness"
+    if task.expected_witness_class == WitnessClass.CLEAN:
+        return "clean control produced no witness"
+    if observed == WitnessClass.CLEAN:
+        return "expected drift was not detected"
+    return "expected drift produced a witness"
 
 
 def build_reasons(

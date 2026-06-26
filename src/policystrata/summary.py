@@ -5,7 +5,7 @@ from collections import Counter
 from collections.abc import Callable
 from pathlib import Path
 
-from policystrata.models import Summary, Trace, WitnessClass
+from policystrata.models import AccountingStatus, Summary, Trace, WitnessClass
 
 
 def load_traces(run_dir: Path) -> list[Trace]:
@@ -24,9 +24,17 @@ def summarize_traces(traces: list[Trace]) -> Summary:
         return empty_summary()
 
     witness_counts = Counter(trace.witness_class for trace in traces)
+    accounting_counts = Counter(accounting_status(trace) for trace in traces)
+    mutation_total = accounting_counts["killed"] + accounting_counts["survived"]
     return Summary(
         total=total,
-        mutant_kill_rate=1.0 - witness_counts[WitnessClass.CLEAN] / total,
+        killed=accounting_counts["killed"],
+        survived=accounting_counts["survived"],
+        equivalent=accounting_counts["equivalent"],
+        invalid=accounting_counts["invalid"],
+        clean_controls=accounting_counts["clean_control"],
+        false_positives=accounting_counts["false_positive"],
+        mutant_kill_rate=accounting_counts["killed"] / mutation_total if mutation_total else 0.0,
         over_permissive_rate=class_rate(witness_counts, WitnessClass.OVER_PERMISSIVE, total),
         over_restrictive_rate=class_rate(witness_counts, WitnessClass.OVER_RESTRICTIVE, total),
         lowering_violation_rate=class_rate(witness_counts, WitnessClass.LOWERING_VIOLATION, total),
@@ -50,6 +58,12 @@ def summarize_traces(traces: list[Trace]) -> Summary:
 def empty_summary() -> Summary:
     return Summary(
         total=0,
+        killed=0,
+        survived=0,
+        equivalent=0,
+        invalid=0,
+        clean_controls=0,
+        false_positives=0,
         mutant_kill_rate=0.0,
         over_permissive_rate=0.0,
         over_restrictive_rate=0.0,
@@ -79,3 +93,11 @@ def cost_totals(traces: list[Trace]) -> dict[str, int | float]:
         "tokens": sum(int(trace.cost.get("tokens", 0)) for trace in traces),
         "usd": sum(float(trace.cost.get("usd", 0.0)) for trace in traces),
     }
+
+
+def accounting_status(trace: Trace) -> AccountingStatus:
+    if trace.accounting_status is not None:
+        return trace.accounting_status
+    if trace.expected_witness_class == WitnessClass.CLEAN:
+        return "false_positive" if trace.witness_class != WitnessClass.CLEAN else "clean_control"
+    return "survived" if trace.witness_class == WitnessClass.CLEAN else "killed"

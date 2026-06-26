@@ -5,16 +5,18 @@ it does not measure.
 
 ## Current Claim
 
-The current benchmark reports 620/620 killed mutants across the `seeded`, `generated`,
-`generated_alt_seed`, and `finance_saas` seeded suites. These results measure coverage over the
-current deterministic mutation operators and fixtures. They do not imply recall on unknown
-production incidents.
+The current final reproduction path reports 1720/1720 killed non-clean injected cases and 0 false
+positives across 80 clean controls. The result spans support SaaS, finance SaaS, and
+ClickHouse-style analytics domains, including detector-frozen generated and `heldout_v1` suites.
+These results measure coverage over the current deterministic mutation operators and fixtures. They
+do not imply recall on unknown production incidents.
 
 PolicyStrata should be described as:
 
-> On the current deterministic public and generated mutant suites, PolicyStrata kills 620/620
-> non-equivalent mutants. This establishes artifact coverage over the implemented mutation
-> operators, not recall on unknown production faults.
+> On the current deterministic public, generated, and detector-frozen generated suites,
+> PolicyStrata kills 1720/1720 non-clean injected cases and reports 0 false positives on 80 clean
+> controls. This establishes artifact coverage over the implemented mutation operators, not recall
+> on unknown production faults.
 
 Do not describe the result as detecting all policy drift.
 
@@ -55,6 +57,12 @@ independently.
 `finance_saas` is a second domain with different entities and scope semantics. It reduces the
 single-domain artifact risk, but it is still a built-in synthetic fixture.
 
+`analytics_clickhouse` is a ClickHouse-style product analytics domain. It exercises project-scope
+row policies for read-only users, aggregate-only roles, cohort release thresholds, timezone
+bucketing, unique-user/session grain, and materialized-view lineage. The deterministic benchmark
+simulates effects; the optional ClickHouse Docker test is a service smoke test, not part of the
+kill-rate claim.
+
 ## Killed, Survived, Equivalent, Stillborn
 
 A mutant is counted as killed when PolicyStrata emits a non-clean witness for the trace.
@@ -67,10 +75,10 @@ generated principal, query, and database state.
 A stillborn mutant is malformed before evaluation, for example because it creates an invalid
 semantic query or cannot be compiled into the expected trace shape.
 
-The evidence table computes `Equivalent declared` from clean expected witness labels. It is zero for
-the current suites because the current generators do not emit equivalent or stillborn mutants.
-Equivalent-mutant discovery is not implemented yet. If future generators can produce equivalent or
-stillborn cases, they should be counted separately rather than silently removed.
+The evidence table reports killed, survived, equivalent, invalid, clean-control, and false-positive
+counts separately. Equivalent and invalid counts are zero for the current suites because the current
+generators do not emit those cases. If future generators can produce equivalent or stillborn cases,
+they should be counted separately rather than silently removed.
 
 ## What PolicyStrata Can Observe
 
@@ -153,6 +161,12 @@ an external author who does not tune cases against PolicyStrata behavior. Until 
 The working protocol for these suites is in
 [`external-suite-protocol.md`](external-suite-protocol.md).
 
+`policystrata freeze-benchmark` creates a benchmark manifest with hashes for detector source,
+mutation operators, generator source, policy YAML, surfaces YAML, suite materialization, task
+materialization, package version, and git commit when available. `policystrata run
+--freeze-manifest` verifies those hashes before producing traces and copies the manifest into the
+run directory.
+
 ## What Baselines Can Observe
 
 The current baselines are deliberately simple:
@@ -170,6 +184,10 @@ The current baselines are deliberately simple:
   `db_rls_only`, or `final_answer_only` would catch it. This approximates a plausible layered
   production control stack, but it still lacks PolicyStrata's cross-layer responsibility contracts
   and witness localization.
+- `grammar_only`, `semantic_validator_only`, `sql_ast_policy_checker`, `db_policy_only`,
+  `release_filter_only`, `lineage_only`, `policy_as_code_precheck`, and
+  `defense_in_depth_stack_v2`: reviewer-facing variants that separate layer-local controls from
+  cross-layer responsibility checks.
 
 All baselines receive the same traces. They are not full reimplementations of production testing
 systems, and their purpose is to make the observability gap explicit. PolicyStrata's own killed
@@ -211,6 +229,8 @@ meaning, database distinction, and containment status remain unchanged.
   expected-label fixtures.
 - `generated_alt_seed` is not a blinded held-out set; legacy `held_out` is only a compatibility
   alias for that secondary generated suite.
+- `heldout_v1` is detector-frozen generated evidence when run with a freeze manifest, but it is not
+  externally authored by default.
 - Equivalent and stillborn mutant accounting is defined, but the current generators do not emit
   those cases.
 - Database effects are simulated for deterministic benchmark runs.
@@ -218,5 +238,5 @@ meaning, database distinction, and containment status remain unchanged.
   unless run against a representative warehouse clone.
 - The dbt integration is a semantic-name comparison adapter, not an end-to-end dbt execution
   harness.
-- Finance and support domains are still synthetic built-in fixtures.
+- Finance, support, and analytics domains are still synthetic built-in fixtures.
 - Baselines are simple observability models, not full production test suites.

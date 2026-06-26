@@ -118,8 +118,9 @@ policy-drift failures.
 
 ## Run Benchmarks
 
-PolicyStrata ships with deterministic `support_saas` and `finance_saas` benchmarks, generated
-mutation suites, minimized witnesses, JSONL traces, baseline comparisons, and evidence tables.
+PolicyStrata ships with deterministic `support_saas`, `finance_saas`, and
+`analytics_clickhouse` benchmarks, generated mutation suites, held-out suite support, clean
+controls, minimized witnesses, JSONL traces, baseline comparisons, and evidence tables.
 
 ```bash
 uv run policystrata run --domain support_saas --suite seeded --out runs/example
@@ -130,7 +131,10 @@ uv run policystrata run \
   --seed 1729 \
   --out runs/generated
 uv run policystrata run --domain finance_saas --suite seeded --out runs/finance
-uv run policystrata baselines runs/example
+uv run policystrata freeze-benchmark --domain support_saas --suite heldout_v1 --count 500 --seed 260626 --out runs/freeze/support-heldout-v1.json
+uv run policystrata run --domain support_saas --suite heldout_v1 --count 500 --seed 260626 --freeze-manifest runs/freeze/support-heldout-v1.json --out runs/support-heldout-v1
+uv run policystrata baselines runs/example runs/support-heldout-v1
+uv run policystrata ablations runs/example runs/support-heldout-v1
 ```
 
 The default `run` command writes:
@@ -139,18 +143,20 @@ The default `run` command writes:
 runs/<id>/traces.jsonl
 runs/<id>/summary.json
 runs/<id>/metadata.json
+runs/<id>/benchmark_manifest.json  # for frozen runs
 runs/<id>/witnesses/*.json
 ```
 
 `metadata.json` records the mutation operator set, suite provenance, evidence level, and
-detector-freeze status. Static suite YAML can declare `suite_metadata` so externally authored,
-detector-frozen, or incident-reconstruction cases stay separate from public/generated benchmark
-scores.
+detector-freeze status. Frozen runs verify the manifest before writing traces. Static suite YAML can
+declare `suite_metadata` so externally authored, detector-frozen, or incident-reconstruction cases
+stay separate from public/generated benchmark scores.
 
 Regenerate paper-style evidence tables with:
 
 ```bash
 scripts/reproduce-evidence.sh
+scripts/reproduce-final.sh
 ```
 
 Generate reviewer-facing artifact metrics for a run:

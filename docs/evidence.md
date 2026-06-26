@@ -8,29 +8,13 @@ The tables below were generated with:
 
 ```bash
 scripts/reproduce-evidence.sh
+scripts/reproduce-final.sh
 ```
 
 Equivalent command sequence:
 
 ```bash
-uv run policystrata run --domain support_saas --suite seeded --out runs/repro/seeded
-uv run policystrata run \
-  --domain support_saas \
-  --suite generated \
-  --count 500 \
-  --seed 1729 \
-  --out runs/repro/generated
-uv run policystrata run \
-  --domain support_saas \
-  --suite generated_alt_seed \
-  --out runs/repro/generated_alt_seed
-uv run policystrata run --domain finance_saas --suite seeded --out runs/repro/finance
-uv run policystrata evidence \
-  seeded=runs/repro/seeded \
-  generated=runs/repro/generated \
-  generated_alt_seed=runs/repro/generated_alt_seed \
-  finance_saas=runs/repro/finance \
-  --out runs/repro/evidence.md
+scripts/reproduce-final.sh
 ```
 
 `generated_alt_seed` is currently a secondary deterministic generated suite with a different
@@ -40,7 +24,8 @@ a compatibility alias.
 What this proves:
 
 - PolicyStrata kills every mutant in the current deterministic `seeded`, `generated`,
-  `generated_alt_seed`, and `finance_saas` seeded suites.
+  detector-frozen generated, detector-frozen `heldout_v1`, finance, and analytics suites.
+- Clean controls produce no false positives in the final reproduction path.
 - The result is reproducible without an LLM API key.
 - Each non-clean trace has a minimized witness and a localized surface responsibility.
 - Run metadata records suite provenance and detector-freeze status, so future blinded or
@@ -55,40 +40,53 @@ What this does not prove:
 
 ## Suite Results
 
-| Suite | Mutants | Killed | Survived | Equivalent declared | Median witness bytes | Evidence level | Provenance | Detector frozen |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| seeded | 50 | 50 | 0 | 0 | 3138 | deterministic_fixture | hand_authored | no |
-| generated | 500 | 500 | 0 | 0 | 3227 | property_generated | generated | no |
-| generated_alt_seed | 50 | 50 | 0 | 0 | 3227 | property_generated | secondary_generated | no |
-| finance_saas | 20 | 20 | 0 | 0 | 3253 | deterministic_fixture | hand_authored | no |
+| Suite | Mutants | Killed | Survived | Equivalent | Invalid | Clean controls | False positives | Median witness bytes | Evidence level | Provenance | Detector frozen |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| support_seeded | 50 | 50 | 0 | 0 | 0 | 0 | 0 | 3138 | deterministic_fixture | hand_authored | no |
+| support_generated | 500 | 500 | 0 | 0 | 0 | 0 | 0 | 3227 | property_generated | generated | yes |
+| support_heldout_v1 | 500 | 500 | 0 | 0 | 0 | 0 | 0 | 3227 | blinded_suite | secondary_generated | yes |
+| finance_seeded | 20 | 20 | 0 | 0 | 0 | 0 | 0 | 3253 | deterministic_fixture | hand_authored | no |
+| finance_heldout_v1 | 250 | 250 | 0 | 0 | 0 | 0 | 0 | 3336 | blinded_suite | secondary_generated | yes |
+| analytics_clickhouse_seeded | 100 | 100 | 0 | 0 | 0 | 0 | 0 | 3427 | deterministic_fixture | hand_authored | no |
+| analytics_clickhouse_generated | 300 | 300 | 0 | 0 | 0 | 0 | 0 | 3423 | property_generated | generated | yes |
+| clean_controls | 80 | 0 | 0 | 0 | 0 | 80 | 0 | 0 | blinded_suite | secondary_generated | yes |
 
 ## Evidence Provenance
 
 | Evidence level | Suites | Mutants |
 | --- | --- | --- |
-| deterministic_fixture | 2 | 70 |
-| property_generated | 2 | 550 |
+| blinded_suite | 3 | 830 |
+| deterministic_fixture | 3 | 170 |
+| property_generated | 2 | 800 |
 
 ## Baselines
 
 | Baseline | Failures caught | Catch rate |
 | --- | --- | --- |
-| final_answer_only | 304/620 | 0.49 |
-| sql_snapshot | 350/620 | 0.56 |
-| validator_only | 178/620 | 0.29 |
-| db_rls_only | 134/620 | 0.22 |
-| random_data_generation | 438/620 | 0.71 |
-| naive_surface_equality | 225/620 | 0.36 |
-| defense_in_depth_stack | 573/620 | 0.92 |
+| grammar_only | 121/1720 | 0.07 |
+| semantic_validator_only | 573/1720 | 0.33 |
+| sql_ast_policy_checker | 1043/1720 | 0.61 |
+| db_policy_only | 326/1720 | 0.19 |
+| release_filter_only | 364/1720 | 0.21 |
+| lineage_only | 239/1720 | 0.14 |
+| policy_as_code_precheck | 363/1720 | 0.21 |
+| defense_in_depth_stack_v2 | 1550/1720 | 0.90 |
+| final_answer_only | 920/1720 | 0.53 |
+| sql_snapshot | 939/1720 | 0.55 |
+| validator_only | 452/1720 | 0.26 |
+| db_rls_only | 326/1720 | 0.19 |
+| random_data_generation | 1246/1720 | 0.72 |
+| naive_surface_equality | 573/1720 | 0.33 |
+| defense_in_depth_stack | 1561/1720 | 0.91 |
 
 `defense_in_depth_stack` approximates a layered production control stack by taking the union of
-validator-only, SQL-snapshot, database/RLS, and final-answer checks. The remaining 47 misses are
+validator-only, SQL-snapshot, database/RLS, and final-answer checks. The remaining 159 misses are
 the clearest paper examples for why cross-layer responsibility contracts and witness localization
 matter beyond stacked point controls.
 
 ## Known Limitations
 
-- The 620/620 result establishes coverage over implemented operators and fixtures, not unknown
+- The 1720/1720 result establishes coverage over implemented operators and fixtures, not unknown
   production-fault recall.
 - Generated mutants are policy-driven, but they are generated from the same operator taxonomy used
   by the deterministic simulator and expected-label fixtures.
@@ -100,7 +98,7 @@ matter beyond stacked point controls.
 
 ## Optional Real PostgreSQL RLS Check
 
-This fixture is outside the 620-mutant deterministic benchmark, but it exercises one containment
+This fixture is outside the deterministic benchmark score, but it exercises one containment
 table against Dockerized PostgreSQL through the Python adapter:
 
 ```bash
