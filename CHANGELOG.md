@@ -4,6 +4,16 @@
 
 - No changes yet.
 
+## [0.1.5] - 2026-06-26
+
+- Render `policystrata doctor --format markdown` as Markdown even when no scanner config is
+  supplied.
+- Clarify that doctor audits only the selected config, and document
+  `policystrata_real_db_clean.yaml` as the Postgres/dbt example config for DB/RLS readiness.
+- Recommend both CI gates: `policystrata scan` for policy drift and
+  `policystrata doctor --strict` for implementation readiness.
+- Keep GitHub Action examples pinned to the current release tag.
+
 ## [0.1.4] - 2026-06-26
 
 - Add `policystrata doctor --config` as a first-class stack audit mode for scanner wiring,
