@@ -4,6 +4,13 @@
 
 No changes yet.
 
+## [1.0.0] - 2026-06-27
+
+- Promote the polished public paper-backed release line to `1.0.0`.
+- Keep the paper PDF, release post, canonical artifact zip, website mirror, exact SHA256 checksums,
+  and reproduction command in the public package metadata.
+- Pin GitHub Action examples to `v1.0.0`.
+
 ## [0.1.6] - 2026-06-26
 
 - Document the public paper PDF, release post, canonical artifact zip, website mirror, SHA256
