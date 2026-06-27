@@ -5,6 +5,7 @@ type: software
 version: "0.1.5"
 date-released: "2026-06-26"
 license: MIT
+url: "https://raintree.technology/blog/policystrata-release"
 repository-code: "https://github.com/raintree-technology/policystrata"
 authors:
   - name: "Raintree Technology"

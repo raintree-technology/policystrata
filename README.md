@@ -16,6 +16,31 @@ PolicyStrata is not an authorization boundary, and it is not another generic tex
 It is a reproducible research artifact and regression gate for finding reachable disagreements
 between layers.
 
+## Paper And Artifact
+
+- Paper PDF: <https://raintree.technology/papers/PolicyStrata.pdf>
+- Release note: <https://raintree.technology/blog/policystrata-release>
+- GitHub release: <https://github.com/raintree-technology/policystrata/releases/tag/policystrata-paper-2026-06-26>
+- Artifact zip: <https://github.com/raintree-technology/policystrata/releases/download/policystrata-paper-2026-06-26/policystrata-submission-kit-2026-06-26.zip>
+- Website mirror: <https://raintree.technology/artifacts/policystrata/policystrata-submission-kit-2026-06-26.zip>
+
+SHA256:
+
+```text
+9a4da81d78c37fd81e9ab6b36f094756e61e6b88cfcd74dcab51cfdd8e5bbcd9  PolicyStrata.pdf
+961778c1e8affc04f76e27ce7958572d904e69d7701494e0047e4f7bffbc466d  policystrata-submission-kit-2026-06-26.zip
+```
+
+Reproduce the paper-facing artifact run:
+
+```bash
+POLICYSTRATA_RUN_ROOT=/tmp/policystrata-final ./scripts/reproduce-final.sh
+```
+
+The paper reports deterministic artifact-suite coverage: 1720/1720 non-clean injected cases and
+0 false positives on 80 clean controls. This is not a production-recall claim and not an
+authorization boundary.
+
 ## Quick Start
 
 From PyPI:
