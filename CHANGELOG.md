@@ -2,7 +2,8 @@
 
 ## [Unreleased]
 
-- No changes yet.
+- Document the public paper PDF, release post, canonical artifact zip, website mirror, SHA256
+  checksums, and reproduction command in the README and project metadata.
 
 ## [0.1.5] - 2026-06-26
 
