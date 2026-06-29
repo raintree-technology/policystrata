@@ -1,0 +1,426 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import shutil
+import stat
+import tempfile
+import zipfile
+from collections.abc import Callable
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_OUT = ROOT / "dist" / "policystrata-secute-2026-anonymous-artifact.zip"
+STABLE_ZIP_TIME = (2026, 6, 29, 0, 0, 0)
+FORBIDDEN_STRINGS = (
+    "Raintree",
+    "Zachary",
+    "raintree",
+    "BetterOff",
+    "/Users/mb1",
+    " mb1",
+    "mb1/",
+    "support@",
+    "admin@",
+    "github.com/raintree",
+)
+TREE_EXCLUDES = {
+    "__pycache__",
+    ".pytest_cache",
+    ".mypy_cache",
+    ".ruff_cache",
+    ".hypothesis",
+    ".git",
+    ".DS_Store",
+    "node_modules",
+    "dist",
+    "runs",
+    "scan-out",
+}
+DOC_ALLOWLIST = {
+    "benchmark-reference.md",
+    "evidence.md",
+    "external-suite-protocol.md",
+    "failure-taxonomy.md",
+    "incident-reconstruction-template.md",
+    "methodology.md",
+    "scanner.md",
+    "trace-adapters.md",
+    "trace-contract.md",
+    "trace-interop.md",
+}
+
+PYPROJECT = """\
+[build-system]
+requires = ["setuptools>=77.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "policystrata"
+version = "1.0.0"
+description = "Cross-layer policy regression testing for LLM data-agent stacks"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{name = "Anonymous Authors"}]
+keywords = [
+    "llm",
+    "text-to-sql",
+    "data-agents",
+    "policy-testing",
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Testing",
+    "Typing :: Typed",
+]
+dependencies = [
+    "pydantic>=2.0",
+    "pyyaml>=6.0",
+    "psycopg[binary]>=3.2",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "hypothesis>=6.0",
+    "ruff>=0.8.0",
+    "mypy>=1.0",
+    "types-pyyaml>=6.0.0",
+]
+
+[project.scripts]
+policystrata = "policystrata.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["policystrata*"]
+
+[tool.setuptools.package-data]
+policystrata = [
+    "py.typed",
+    "domains/*/*.yaml",
+    "domains/*/*.sql",
+    "domains/*/tasks/*.yaml",
+    "scanner_examples/*/*.jsonl",
+    "scanner_examples/*/*.yaml",
+    "scanner_examples/*/*.yml",
+]
+
+[tool.ruff]
+line-length = 110
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "A", "C4", "SIM"]
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+no_implicit_optional = true
+strict_equality = true
+ignore_missing_imports = true
+exclude = ["tests/"]
+plugins = ["pydantic.mypy"]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = ["-ra", "--showlocals"]
+markers = [
+    "integration: tests requiring Dockerized PostgreSQL",
+]
+"""
+
+README = """\
+# PolicyStrata Anonymous Artifact
+
+This is the double-anonymous review artifact for the SECUTE 2026 tool/data-paper
+submission. It packages the deterministic PolicyStrata scanner, benchmark,
+fixtures, tests, and an anonymous security-case fixture.
+
+## Requirements
+
+- Python 3.10 or newer
+- uv
+- Docker only for optional PostgreSQL fixture checks
+- No LLM API key
+- No host psql
+
+## Smoke Commands
+
+```sh
+uv run --extra dev ruff check .
+uv run --extra dev mypy src
+uv run --extra dev pytest
+```
+
+## Main Reproduction
+
+```sh
+POLICYSTRATA_RUN_ROOT=/tmp/policystrata-final ./scripts/reproduce-final.sh
+```
+
+Expected deterministic summary: 1720/1720 injected non-clean cases killed and
+0 false positives on 80 clean controls. The generated report is written to:
+
+```text
+/tmp/policystrata-final/evidence.md
+```
+
+## SECUTE Security Fixture
+
+```sh
+uv run policystrata doctor \\
+  --config examples/secute_security_cases/policystrata.yaml \\
+  --format markdown \\
+  --out /tmp/policystrata-secute-doctor.md
+
+uv run policystrata scan \\
+  --config examples/secute_security_cases/policystrata.yaml \\
+  --out /tmp/policystrata-secute-scan
+```
+
+The security fixture is expected to fail the CI gate. It contains three
+representative cross-layer failures:
+
+- unauthorized metric exposure reaching SQL;
+- stale tenant-key lowering;
+- release of a result whose lineage requires withholding.
+
+The doctor report should show wired policy/TOS/DPA/internal-policy ingestion,
+source mapping, export coverage, and partial prompt-manifest checks because the
+manifest intentionally exposes unsafe capabilities.
+"""
+
+DATA_AVAILABILITY = """\
+# Data Availability Statement
+
+All data used by this artifact is synthetic or generated by deterministic
+fixtures included in this archive. The artifact contains:
+
+- built-in synthetic policy domains;
+- deterministic benchmark-generation code and seeds;
+- JSONL traces for scanner tests;
+- optional PostgreSQL schema and seed fixtures;
+- an anonymous SECUTE security-case fixture with privacy, terms, DPA, internal
+  policy, prompt-manifest, source-map, semantic-model, and SQL-trace inputs.
+
+The artifact does not require external private data, an LLM API key, or host
+psql. Docker is only needed for optional PostgreSQL fixture checks.
+"""
+
+ANONYMIZATION = """\
+# Anonymization Notes
+
+This review artifact is generated from the public package source with
+double-anonymous review constraints applied:
+
+- public project URLs and public release notes are omitted;
+- public GitHub Action documentation is omitted;
+- package authorship and license copyright are anonymized;
+- brownfield application names and private local paths are excluded;
+- generated caches, local run outputs, and node_modules are excluded.
+
+The source package name is preserved because tests and command examples import
+the `policystrata` Python package.
+"""
+
+LICENSE = """\
+MIT License
+
+Copyright (c) 2026 Anonymous Authors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+"""
+
+
+def main() -> None:
+    args = parse_args()
+    out_path = args.out.resolve()
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="policystrata-secute-anon-") as tmp:
+        stage = Path(tmp) / "policystrata-secute-2026-anonymous-artifact"
+        stage.mkdir()
+        build_stage(stage)
+        manifest = write_manifest(stage)
+        leaks = find_forbidden_strings(stage)
+        if leaks:
+            formatted = "\n".join(f"{path}: {term}" for path, term in leaks[:50])
+            raise SystemExit(f"anonymous artifact contains forbidden strings:\n{formatted}")
+        write_zip(stage, out_path)
+    result = {
+        "path": str(out_path),
+        "sha256": sha256_file(out_path),
+        "bytes": out_path.stat().st_size,
+        "files": len(manifest),
+    }
+    print(json.dumps(result, indent=2, sort_keys=True))
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Build SECUTE 2026 anonymous review artifact.")
+    parser.add_argument("--out", type=Path, default=DEFAULT_OUT, help="Output zip path.")
+    return parser.parse_args()
+
+
+def build_stage(stage: Path) -> None:
+    write_text(stage / "README.md", README)
+    write_text(stage / "DATA_AVAILABILITY.md", DATA_AVAILABILITY)
+    write_text(stage / "ANONYMIZATION.md", ANONYMIZATION)
+    write_text(stage / "LICENSE", LICENSE)
+    write_text(stage / "pyproject.toml", PYPROJECT)
+    copy_file("uv.lock", stage / "uv.lock")
+    copy_file("docker-compose.yml", stage / "docker-compose.yml")
+    copy_file("EVAL_CARD.md", stage / "EVAL_CARD.md")
+    copy_file("MANIFEST.in", stage / "MANIFEST.in")
+    copy_tree(ROOT / "src" / "policystrata", stage / "src" / "policystrata")
+    copy_tree(ROOT / "examples", stage / "examples")
+    copy_tree(ROOT / "scripts", stage / "scripts", skip=skip_builder_script)
+    copy_tree(ROOT / "packages" / "node", stage / "packages" / "node")
+    copy_tree(ROOT / "tests", stage / "tests", skip=skip_anonymous_test)
+    copy_docs(stage / "docs")
+
+
+def skip_anonymous_test(path: Path) -> bool:
+    return path.name == "test_cli.py"
+
+
+def skip_builder_script(path: Path) -> bool:
+    return path.name == Path(__file__).name
+
+
+def copy_docs(dest: Path) -> None:
+    dest.mkdir(parents=True, exist_ok=True)
+    for filename in sorted(DOC_ALLOWLIST):
+        copy_file(ROOT / "docs" / filename, dest / filename)
+
+
+def copy_file(src: str | Path, dest: Path) -> None:
+    source = ROOT / src if isinstance(src, str) else src
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source, dest)
+
+
+def copy_tree(src: Path, dest: Path, skip: Callable[[Path], bool] | None = None) -> None:
+    for path in sorted(src.rglob("*")):
+        rel = path.relative_to(src)
+        if should_skip(path, rel) or (skip is not None and skip(path)):
+            continue
+        target = dest / rel
+        if path.is_dir():
+            target.mkdir(parents=True, exist_ok=True)
+        else:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(path, target)
+
+
+def should_skip(path: Path, rel: Path) -> bool:
+    parts = set(rel.parts)
+    if parts & TREE_EXCLUDES:
+        return True
+    if path.name.endswith(".egg-info"):
+        return True
+    return bool(path.name.endswith((".pyc", ".pyo")))
+
+
+def write_manifest(stage: Path) -> list[dict[str, object]]:
+    entries = []
+    for path in sorted(item for item in stage.rglob("*") if item.is_file()):
+        rel = path.relative_to(stage).as_posix()
+        entries.append(
+            {
+                "path": rel,
+                "bytes": path.stat().st_size,
+                "sha256": sha256_file(path),
+            }
+        )
+    manifest_path = stage / "artifact-manifest.json"
+    write_text(manifest_path, json.dumps(entries, indent=2, sort_keys=True) + "\n")
+    return entries + [
+        {
+            "path": "artifact-manifest.json",
+            "bytes": manifest_path.stat().st_size,
+            "sha256": sha256_file(manifest_path),
+        }
+    ]
+
+
+def find_forbidden_strings(stage: Path) -> list[tuple[str, str]]:
+    leaks: list[tuple[str, str]] = []
+    for path in sorted(item for item in stage.rglob("*") if item.is_file()):
+        if path.suffix in {".png", ".jpg", ".jpeg", ".gif", ".zip"}:
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            continue
+        for term in FORBIDDEN_STRINGS:
+            if term in text:
+                leaks.append((path.relative_to(stage).as_posix(), term))
+    return leaks
+
+
+def write_zip(stage: Path, out_path: Path) -> None:
+    if out_path.exists():
+        out_path.unlink()
+    with zipfile.ZipFile(out_path, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
+        for path in sorted(item for item in stage.rglob("*") if item.is_file()):
+            rel = path.relative_to(stage).as_posix()
+            info = zipfile.ZipInfo(rel)
+            info.date_time = STABLE_ZIP_TIME
+            info.compress_type = zipfile.ZIP_DEFLATED
+            info.external_attr = zip_mode(path) << 16
+            archive.writestr(info, path.read_bytes())
+
+
+def zip_mode(path: Path) -> int:
+    mode = path.stat().st_mode
+    return 0o755 if mode & stat.S_IXUSR else 0o644
+
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def write_text(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+
+
+if __name__ == "__main__":
+    main()
