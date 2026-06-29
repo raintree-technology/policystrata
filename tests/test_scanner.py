@@ -119,6 +119,61 @@ fuzz:
     assert not any(item.id.startswith("tenant_scope_missing") for item in result.findings)
 
 
+def test_trace_expected_policy_cannot_suppress_tenant_scope_finding() -> None:
+    policy = load_policy()
+    config = load_scan_config(Path("examples/postgres_dbt/policystrata_clean.yaml"))
+    trace = ImportedTrace(
+        id="rls_only_metadata_bypass",
+        principal="acme_analyst",
+        tenant_ids=["acme"],
+        release_allowed=True,
+        semantic_ir=SemanticQuery(metric="ticket_count", limit=100),
+        expected_policy={"allow_rls_only": True},
+        sql="select count(*) from accounts",
+    )
+
+    findings = scan_imported_trace(config, Path("policystrata.yaml"), policy, trace)
+
+    assert any(item.id == "tenant_scope_missing_rls_only_metadata_bypass" for item in findings)
+
+
+def test_redaction_placeholder_without_trace_tenant_ids_is_not_tenant_binding() -> None:
+    policy = load_policy()
+    config = load_scan_config(Path("examples/postgres_dbt/policystrata_clean.yaml"))
+    trace = ImportedTrace(
+        id="redacted_placeholder_scope",
+        principal="acme_analyst",
+        release_allowed=True,
+        semantic_ir=SemanticQuery(metric="ticket_count", limit=100),
+        sql="select count(*) from accounts where accounts.tenant_id = ?",
+    )
+
+    findings = scan_imported_trace(config, Path("policystrata.yaml"), policy, trace)
+
+    assert any(item.id == "tenant_scope_missing_redacted_placeholder_scope" for item in findings)
+
+
+def test_hashed_semantic_tenant_filter_fails_closed() -> None:
+    policy = load_policy()
+    config = load_scan_config(Path("examples/postgres_dbt/policystrata_clean.yaml"))
+    trace = ImportedTrace(
+        id="hashed_tenant_filter",
+        principal="acme_analyst",
+        tenant_ids=["acme"],
+        release_allowed=True,
+        semantic_ir=SemanticQuery(
+            metric="ticket_count",
+            filters={"tenant_id": "hmac-sha256:abcdef"},
+            limit=100,
+        ),
+        sql="select count(*) from accounts where accounts.tenant_id in ('acme')",
+    )
+
+    findings = scan_imported_trace(config, Path("policystrata.yaml"), policy, trace)
+
+    assert any(item.id == "unsafe_release_hashed_tenant_filter" for item in findings)
+
+
 def test_scan_accepts_policystrata_node_mixed_jsonl(tmp_path) -> None:
     trace_path = tmp_path / "traces.jsonl"
     config_path = tmp_path / "policystrata.yaml"
@@ -363,6 +418,11 @@ def test_scan_imported_trace_compares_real_db_rows() -> None:
 
     assert any(item.id.startswith("real_db_semantic_drift") for item in findings)
     assert fake_db.tenant_ids == ["acme", "acme"]
+
+    redacted_trace = trace.model_copy(update={"tenant_ids": ["hmac-sha256:abc123"]})
+    redacted_fake_db = FakePostgresAdapter()
+    scan_imported_trace(config, Path("policystrata.yaml"), policy, redacted_trace, redacted_fake_db)
+    assert redacted_fake_db.tenant_ids == ["acme", "acme"]
 
 
 def test_scan_imported_trace_reports_database_execution_errors() -> None:

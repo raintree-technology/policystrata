@@ -58,15 +58,9 @@ Emit one JSONL line per SQL tool call:
 }
 ```
 
-If SQL relies on RLS rather than literal tenant predicates, declare that explicitly:
-
-```json
-{
-  "expected_policy": {"allow_rls_only": true}
-}
-```
-
-Then add RLS or state assertions under `database:` so the containment layer is still checked.
+If SQL relies on RLS rather than literal tenant predicates, do not use trace-supplied metadata as a
+scanner control. Add RLS or state assertions under `database:` so the containment layer is checked
+from trusted scan configuration.
 
 ## 4. Configure Tenancy Vocabulary
 

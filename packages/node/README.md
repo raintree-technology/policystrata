@@ -7,7 +7,7 @@ applications. Read-tool SQL records are compatible with `policystrata scan` JSON
 import { createPolicyStrataRecorder } from "policystrata/node";
 
 const recorder = createPolicyStrataRecorder({
-  service: "betteroff-ask-ai",
+  service: "demo-data-agent",
   environment: process.env.NODE_ENV,
   out: ".policystrata/traces.jsonl",
   tenancy: {
@@ -30,8 +30,15 @@ const searchTransactions = recorder.wrapTool("searchTransactions", {
 });
 ```
 
-By default the recorder hashes ID fields, drops prompt text, redacts SQL literal values, records
-argument shape instead of argument values, and summarizes result rows as field names plus row count.
+By default the recorder hashes ID fields with a per-recorder HMAC key, drops prompt text,
+redacts raw error messages and SQL literal values, records sanitized argument shape instead of
+argument values, and summarizes result rows as sanitized field names plus row count. Pass a deployment-specific
+`redaction.hashSalt` when traces need stable pseudonymous IDs across recorder instances. With
+default ID hashing, scanner-contract `tenant_ids` are omitted rather than HMACed; use
+`redaction.hashIds: false` only for trusted fixture traces that need explicit tenant IDs for real
+database comparison. Structured payloads such as `semantic_ir`, `expected_policy`, mutation, and
+audit metadata are recursively redacted; `semantic_ir.filters.tenant_id` is HMACed under default ID
+hashing and preserved raw only when trusted fixtures set `redaction.hashIds: false`.
 
 ## Drizzle
 
@@ -47,8 +54,8 @@ tool boundary where request context and release decisions are available.
 
 ## Record Types
 
-- `sql_trace`: read-tool SQL records with top-level `sql`, `principal`, and `tenant_ids`; these can
-  be consumed by `policystrata scan`.
+- `sql_trace`: read-tool SQL records with top-level `sql` and `principal`; trusted fixture traces
+  may also include raw `tenant_ids` for `policystrata scan`.
 - `agent_session`: session metadata such as model, prompt class, available tools, approval policy,
   and write-tool enablement. Prompt text is omitted unless explicitly enabled.
 - `mutation`: write-tool metadata such as touched table, ownership predicates, written columns, and

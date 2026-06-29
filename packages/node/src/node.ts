@@ -1,5 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import { createHash, randomUUID } from "node:crypto";
+import { createHmac, randomUUID } from "node:crypto";
 import { appendFileSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 
@@ -8,6 +8,7 @@ export type PolicyStrataToolKind = "read" | "write" | "memory" | "external";
 export interface PolicyStrataRedactionConfig {
   hashIds?: boolean;
   hashSalt?: string;
+  includeErrorMessages?: boolean;
   includePromptText?: boolean;
   includeSqlValues?: boolean;
   includeResultRows?: boolean;
@@ -254,8 +255,23 @@ const DEFAULT_ID_FIELDS = [
   "accountId",
 ];
 const SENSITIVE_FIELD_PATTERN =
-  /(email|phone|ssn|social|token|secret|password|dob|birth|address|account_number|routing_number|card|pan|pii)/i;
+  /(email|phone|ssn|social|token|secret|password|passwd|pwd|auth|authorization|cookie|credential|session|csrf|xsrf|dob|birth|address|account_number|routing_number|card|pan|pii)/i;
+const LONG_NUMERIC_KEY_PATTERN = /\b\d{6,}\b/;
 const SQL_AGGREGATE_PATTERN = /\b(count|sum|avg|min|max)\s*\(/i;
+const SECRET_ASSIGNMENT_PATTERN =
+  /\b(api[_-]?key|authorization|password|passwd|pwd|secret|token)\s*[:=]\s*([^\s,;]+)/gi;
+const BEARER_TOKEN_PATTERN = /\bbearer\s+[A-Za-z0-9._~+/=-]+/gi;
+const BASIC_AUTH_PATTERN = /\bbasic\s+[A-Za-z0-9+/=:_-]+/gi;
+const URL_CREDENTIAL_PATTERN = /\b([A-Za-z][A-Za-z0-9+.-]*:\/\/)([^/@\s]+)@/g;
+const AUTHORIZATION_BOOLEAN_FIELDS = [
+  "consent_checked",
+  "household_actor_required",
+  "write_context_required",
+  "write_tools_enabled",
+  "approval_required",
+  "approval_token_present",
+] as const;
+const AUTHORIZATION_STRING_FIELDS = ["actor_role", "privileged_reason"] as const;
 
 export class PolicyStrataRecorder {
   private readonly options: Required<Pick<PolicyStrataRecorderOptions, "service">> &
@@ -266,9 +282,11 @@ export class PolicyStrataRecorder {
 
   constructor(options: PolicyStrataRecorderOptions) {
     this.options = options;
+    const hashSalt = options.redaction?.hashSalt ?? randomUUID();
     this.redaction = {
       hashIds: true,
-      hashSalt: "policystrata",
+      hashSalt,
+      includeErrorMessages: false,
       includePromptText: false,
       includeSqlValues: false,
       includeResultRows: false,
@@ -299,7 +317,7 @@ export class PolicyStrataRecorder {
         toolKind: spec.kind,
         toolScope: spec.scope,
         approvalRequired: spec.approvalRequired ?? spec.approval_required ?? false,
-        argsShape: argumentShape(args),
+        argsShape: argumentShape(args, this.redaction),
         context: normalized,
         queries: [],
       };
@@ -476,7 +494,7 @@ export class PolicyStrataRecorder {
         sql: captured.analysis.sql,
         query,
         result,
-        error: errorRecord(error),
+        error: errorRecord(error, this.redaction),
         argumentShape: state.argsShape,
         releaseAllowed:
           captured.input.releaseAllowed ?? captured.input.release_allowed ?? state.context.releaseAllowed,
@@ -508,7 +526,7 @@ export class PolicyStrataRecorder {
       query: captured?.analysis,
       result,
       mutation,
-      error: errorRecord(error),
+      error: errorRecord(error, this.redaction),
       argumentShape: state.argsShape,
     });
   }
@@ -553,20 +571,20 @@ export class PolicyStrataRecorder {
       trace_id: input.traceId ?? input.id,
       session_id: input.context.sessionId,
       principal: input.context.principal,
-      tenant_ids: input.context.tenantIds,
+      tenant_ids: input.context.tenantIds.length > 0 ? input.context.tenantIds : undefined,
       release_allowed: input.releaseAllowed ?? input.context.releaseAllowed,
       sql: input.sql,
-      semantic_ir: input.semanticIr ?? input.context.semanticIr,
-      expected_policy: input.context.expectedPolicy,
+      semantic_ir: sanitizeSemanticIr(input.semanticIr ?? input.context.semanticIr, this.redaction),
+      expected_policy: redactTraceValue(input.context.expectedPolicy, this.redaction),
       actor: input.context.actor,
       tool: input.tool,
       authorization: input.authorization ?? input.context.authorization,
-      query: input.query,
-      result: input.result,
-      mutation: input.mutation,
-      audit: input.audit,
+      query: redactTraceValue(input.query, this.redaction) as PolicyStrataTraceRecord["query"],
+      result: redactTraceValue(input.result, this.redaction) as PolicyStrataResultTrace | undefined,
+      mutation: redactTraceValue(input.mutation, this.redaction),
+      audit: redactTraceValue(input.audit, this.redaction),
       argument_shape: input.argumentShape,
-      agent_session: input.agentSession,
+      agent_session: redactTraceValue(input.agentSession, this.redaction) as Record<string, unknown> | undefined,
       error: input.error,
     }) as PolicyStrataTraceRecord;
   }
@@ -577,9 +595,11 @@ export class PolicyStrataRecorder {
     const tenantIds = stringArray(merged.tenantIds ?? merged.tenant_ids ?? this.options.tenantIds);
     const actorTenant = actor?.household_id ?? actor?.organization_id;
     const rawTenantIds = tenantIds.length > 0 ? tenantIds : actorTenant ? [actorTenant] : [];
-    const authorization = valueAsRecord(merged.authorization) as PolicyStrataAuthorization | undefined;
+    const authorization = sanitizeAuthorization(valueAsRecord(merged.authorization), this.redaction);
     const approvalToken = merged.approvalToken ?? merged.approval_token;
     const privilegedReason = stringValue(merged.privilegedReason ?? merged.privileged_reason);
+    const authorizationPrivilegedReason =
+      privilegedReason ?? stringValue(authorization.privileged_reason);
 
     return {
       sessionId: stringValue(merged.sessionId ?? merged.session_id),
@@ -588,7 +608,7 @@ export class PolicyStrataRecorder {
         this.options.principal ??
         actor?.role ??
         (this.redaction.hashIds ? "redacted_principal" : undefined),
-      tenantIds: rawTenantIds.map((id) => this.redactId(id)),
+      tenantIds: this.redaction.hashIds ? [] : rawTenantIds,
       actor: actor ? this.redactActor(actor) : undefined,
       semanticIr: recordValue(merged.semanticIr ?? merged.semantic_ir),
       releaseAllowed: booleanValue(merged.releaseAllowed ?? merged.release_allowed),
@@ -596,10 +616,10 @@ export class PolicyStrataRecorder {
         ...authorization,
         approval_token_present:
           booleanValue(authorization?.approval_token_present) ?? approvalToken !== undefined,
-        privileged_reason: privilegedReason,
+        privileged_reason: authorizationPrivilegedReason,
       }) as PolicyStrataAuthorization,
       expectedPolicy: recordValue(merged.expectedPolicy ?? merged.expected_policy),
-      privilegedReason,
+      privilegedReason: authorizationPrivilegedReason,
     };
   }
 
@@ -645,10 +665,14 @@ export class PolicyStrataRecorder {
           return isPlainObject(value) ? recorder.wrapObject(value, contextProvider, seen) : value;
         }
         return function wrappedMethod(this: unknown, ...args: unknown[]) {
-          const result = value.apply(rawTarget, args) as unknown;
           if (prop === "transaction" && typeof args[0] === "function") {
-            return result;
+            const callback = args[0] as (...callbackArgs: unknown[]) => unknown;
+            const wrappedArgs = [...args];
+            wrappedArgs[0] = (tx: unknown, ...callbackArgs: unknown[]) =>
+              callback(recorder.wrapTransactionClient(tx, contextProvider, seen), ...callbackArgs);
+            return value.apply(rawTarget, wrappedArgs) as unknown;
           }
+          const result = value.apply(rawTarget, args) as unknown;
           recorder.captureSqlFromMethod(rawTarget, prop, args, contextProvider);
           return recorder.wrapPotentialQuery(result, contextProvider, seen);
         };
@@ -656,6 +680,14 @@ export class PolicyStrataRecorder {
     });
     seen.set(target, proxy);
     return proxy;
+  }
+
+  private wrapTransactionClient(
+    tx: unknown,
+    contextProvider: (() => PolicyStrataExecutionContext | undefined) | undefined,
+    seen: WeakMap<object, object>,
+  ): unknown {
+    return isObject(tx) ? this.wrapObject(tx, contextProvider, seen) : tx;
   }
 
   private wrapPotentialQuery(
@@ -758,7 +790,8 @@ export function analyzePolicyStrataSql(
     Boolean(options.privileged),
     {
       hashIds: true,
-      hashSalt: "policystrata",
+      hashSalt: options.redaction?.hashSalt ?? randomUUID(),
+      includeErrorMessages: false,
       includePromptText: false,
       includeSqlValues: false,
       includeResultRows: false,
@@ -884,14 +917,129 @@ function callSqlMethod(input: Record<string, unknown>, method: string): PolicySt
 }
 
 function normalizeSqlForTrace(sql: string, redaction: Required<PolicyStrataRedactionConfig>): string {
-  const compact = sql.replace(/\s+/g, " ").trim();
+  const compact = stripSqlComments(sql).replace(/\s+/g, " ").trim();
   if (redaction.includeSqlValues) {
-    return compact;
+    return sanitizeSecretTokens(compact);
   }
-  return compact
-    .replace(/'(?:''|[^'])*'/g, "?")
-    .replace(/\b(true|false)\b/gi, "?")
-    .replace(/(?<![$A-Za-z0-9_])\d+(?:\.\d+)?\b/g, "?");
+  return sanitizeSecretTokens(
+    redactSqlDollarQuotedLiterals(compact)
+      .replace(/'(?:''|[^'])*'/g, "?")
+      .replace(/\b(true|false)\b/gi, "?")
+      .replace(/(?<![$A-Za-z0-9_])\d+(?:\.\d+)?\b/g, "?"),
+  );
+}
+
+function redactSqlDollarQuotedLiterals(sql: string): string {
+  let output = "";
+  let i = 0;
+  while (i < sql.length) {
+    const tag = readDollarQuoteTag(sql, i);
+    if (!tag) {
+      output += sql[i];
+      i += 1;
+      continue;
+    }
+    const end = sql.indexOf(tag, i + tag.length);
+    output += "?";
+    i = end === -1 ? sql.length : end + tag.length;
+  }
+  return output;
+}
+
+function stripSqlComments(sql: string): string {
+  let output = "";
+  let i = 0;
+  let inSingleQuote = false;
+  let inDoubleQuote = false;
+  let dollarQuoteTag: string | undefined;
+
+  while (i < sql.length) {
+    if (dollarQuoteTag) {
+      if (sql.startsWith(dollarQuoteTag, i)) {
+        output += dollarQuoteTag;
+        i += dollarQuoteTag.length;
+        dollarQuoteTag = undefined;
+        continue;
+      }
+      output += sql[i];
+      i += 1;
+      continue;
+    }
+
+    const char = sql[i];
+    const next = sql[i + 1];
+
+    if (inSingleQuote) {
+      output += char;
+      if (char === "'" && next === "'") {
+        output += next;
+        i += 2;
+        continue;
+      }
+      if (char === "'") {
+        inSingleQuote = false;
+      }
+      i += 1;
+      continue;
+    }
+
+    if (inDoubleQuote) {
+      output += char;
+      if (char === '"') {
+        inDoubleQuote = false;
+      }
+      i += 1;
+      continue;
+    }
+
+    if (char === "-" && next === "-") {
+      output += " ";
+      i += 2;
+      while (i < sql.length && sql[i] !== "\n" && sql[i] !== "\r") {
+        i += 1;
+      }
+      continue;
+    }
+
+    if (char === "/" && next === "*") {
+      output += " ";
+      i += 2;
+      while (i < sql.length && !(sql[i] === "*" && sql[i + 1] === "/")) {
+        i += 1;
+      }
+      i = Math.min(i + 2, sql.length);
+      continue;
+    }
+
+    if (char === "'") {
+      inSingleQuote = true;
+      output += char;
+      i += 1;
+      continue;
+    }
+
+    if (char === '"') {
+      inDoubleQuote = true;
+      output += char;
+      i += 1;
+      continue;
+    }
+
+    if (char === "$") {
+      const tag = readDollarQuoteTag(sql, i);
+      if (tag) {
+        dollarQuoteTag = tag;
+        output += tag;
+        i += tag.length;
+        continue;
+      }
+    }
+
+    output += char;
+    i += 1;
+  }
+
+  return output;
 }
 
 function extractTables(sql: string): string[] {
@@ -971,7 +1119,7 @@ function splitTopLevel(input: string): string[] {
 
 function summarizeResult(result: unknown, redaction: Required<PolicyStrataRedactionConfig>): PolicyStrataResultTrace {
   const rows = rowsFromResult(result);
-  const fields = fieldsFromRows(rows, result);
+  const fields = fieldsFromRows(rows, result, redaction);
   return pruneUndefined({
     row_count: rowCountFromResult(result, rows),
     fields_returned: fields,
@@ -994,21 +1142,26 @@ function rowsFromResult(result: unknown): Record<string, unknown>[] {
   return [];
 }
 
-function fieldsFromRows(rows: Record<string, unknown>[], result: unknown): string[] {
+function fieldsFromRows(
+  rows: Record<string, unknown>[],
+  result: unknown,
+  redaction: Required<PolicyStrataRedactionConfig>,
+): string[] {
   if (isObject(result) && Array.isArray(result.fields)) {
     return result.fields
       .map((field) => {
         if (typeof field === "string") {
-          return field;
+          return sanitizeTraceKey(field, redaction);
         }
-        return isObject(field) ? stringValue(field.name) : undefined;
+        const name = isObject(field) ? stringValue(field.name) : undefined;
+        return name ? sanitizeTraceKey(name, redaction) : undefined;
       })
       .filter((field): field is string => Boolean(field))
       .sort();
   }
   const fields = new Set<string>();
   for (const row of rows) {
-    Object.keys(row).forEach((key) => fields.add(key));
+    Object.keys(row).forEach((key) => fields.add(sanitizeTraceKey(key, redaction)));
   }
   return [...fields].sort();
 }
@@ -1026,7 +1179,7 @@ function rowCountFromResult(result: unknown, rows: Record<string, unknown>[]): n
   return rows.length > 0 ? rows.length : undefined;
 }
 
-function argumentShape(value: unknown): unknown {
+function argumentShape(value: unknown, redaction: Required<PolicyStrataRedactionConfig>): unknown {
   if (value === null) {
     return { type: "null" };
   }
@@ -1034,7 +1187,7 @@ function argumentShape(value: unknown): unknown {
     return {
       type: "array",
       length: value.length,
-      items: value.length > 0 ? argumentShape(value[0]) : undefined,
+      items: value.length > 0 ? argumentShape(value[0], redaction) : undefined,
     };
   }
   if (isObject(value)) {
@@ -1043,7 +1196,7 @@ function argumentShape(value: unknown): unknown {
       fields: Object.fromEntries(
         Object.keys(value)
           .sort()
-          .map((key) => [key, argumentShape(value[key])]),
+          .map((key) => [sanitizeTraceKey(key, redaction), argumentShape(value[key], redaction)]),
       ),
     };
   }
@@ -1056,6 +1209,116 @@ function mergePolicyStrataContext(ctx: unknown): Record<string, unknown> {
   }
   const nested = isObject(ctx.policystrata) ? ctx.policystrata : {};
   return { ...ctx, ...nested };
+}
+
+function sanitizeAuthorization(
+  input: Record<string, unknown> | undefined,
+  redaction: Required<PolicyStrataRedactionConfig>,
+): PolicyStrataAuthorization {
+  if (!input) {
+    return {};
+  }
+  const output: Record<string, unknown> = {};
+  for (const field of AUTHORIZATION_BOOLEAN_FIELDS) {
+    const value = booleanValue(input[field]);
+    if (value !== undefined) {
+      output[field] = value;
+    }
+  }
+  for (const field of AUTHORIZATION_STRING_FIELDS) {
+    const value = stringValue(input[field]);
+    if (value !== undefined) {
+      output[field] = sanitizeTraceString(value, redaction);
+    }
+  }
+  return output as PolicyStrataAuthorization;
+}
+
+function sanitizeSemanticIr(
+  value: Record<string, unknown> | undefined,
+  redaction: Required<PolicyStrataRedactionConfig>,
+): Record<string, unknown> | undefined {
+  if (!value) {
+    return undefined;
+  }
+  const redacted = redactTraceValue(value, redaction);
+  if (!isObject(redacted)) {
+    return undefined;
+  }
+  return redacted;
+}
+
+function redactTraceValue(
+  value: unknown,
+  redaction: Required<PolicyStrataRedactionConfig>,
+  key?: string,
+): unknown {
+  if (key && redaction.hashIds && isIdLikeTraceKey(key, redaction)) {
+    if (Array.isArray(value)) {
+      return value.map((item) =>
+        typeof item === "string" ? hashValue(item, redaction.hashSalt) : "[redacted]",
+      );
+    }
+    if (typeof value === "string") {
+      return hashValue(value, redaction.hashSalt);
+    }
+    return "[redacted]";
+  }
+  if (key && isSensitiveTraceKey(key)) {
+    return "[redacted]";
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => redactTraceValue(item, redaction, key));
+  }
+  if (isObject(value)) {
+    return redactTraceObject(value, redaction);
+  }
+  if (typeof value === "string") {
+    return sanitizeTraceString(value, redaction);
+  }
+  return value;
+}
+
+function redactTraceObject(
+  value: Record<string, unknown>,
+  redaction: Required<PolicyStrataRedactionConfig>,
+): Record<string, unknown> {
+  const output: Record<string, unknown> = {};
+  const seen = new Map<string, number>();
+  for (const [itemKey, item] of Object.entries(value)) {
+    const sanitizedKey = sanitizeTraceKey(itemKey, redaction);
+    const count = (seen.get(sanitizedKey) ?? 0) + 1;
+    seen.set(sanitizedKey, count);
+    const outputKey = count === 1 ? sanitizedKey : `${sanitizedKey}_${count}`;
+    output[outputKey] = redactTraceValue(item, redaction, itemKey);
+  }
+  return output;
+}
+
+function isIdLikeTraceKey(key: string, redaction: Required<PolicyStrataRedactionConfig>): boolean {
+  return (
+    redaction.idFields.includes(key) ||
+    /(^|_)(id|ids)$/i.test(key) ||
+    /[A-Za-z0-9](?:Id|Ids|ID|IDs)$/.test(key)
+  );
+}
+
+function isSensitiveTraceKey(key: string): boolean {
+  return (
+    SENSITIVE_FIELD_PATTERN.test(key) ||
+    LONG_NUMERIC_KEY_PATTERN.test(key) ||
+    containsEmailLikeValue(key)
+  );
+}
+
+function sanitizeTraceKey(key: string, redaction: Required<PolicyStrataRedactionConfig>): string {
+  if (isSensitiveTraceKey(key)) {
+    return "[redacted_key]";
+  }
+  if (redaction.hashIds && isIdLikeTraceKey(key, redaction)) {
+    return hashValue(key, redaction.hashSalt);
+  }
+  return sanitizeTraceString(key, redaction);
 }
 
 function normalizeActor(input?: Record<string, unknown>): PolicyStrataActor | undefined {
@@ -1071,7 +1334,7 @@ function normalizeActor(input?: Record<string, unknown>): PolicyStrataActor | un
 }
 
 function hashValue(value: string, salt: string): string {
-  return `sha256:${createHash("sha256").update(`${salt}:${value}`).digest("hex").slice(0, 24)}`;
+  return `hmac-sha256:${createHmac("sha256", salt).update(value).digest("hex").slice(0, 24)}`;
 }
 
 function tablesFromTenantColumns(columns: string[]): string[] {
@@ -1091,14 +1354,170 @@ function safeIdentifier(value: string): string {
   return (withStart || `trace-${randomUUID()}`).slice(0, 128);
 }
 
-function errorRecord(error: unknown): PolicyStrataTraceRecord["error"] | undefined {
+function errorRecord(
+  error: unknown,
+  redaction: Required<PolicyStrataRedactionConfig>,
+): PolicyStrataTraceRecord["error"] | undefined {
   if (error === undefined) {
     return undefined;
   }
+  const rawMessage = error instanceof Error ? error.message : String(error);
+  const message = redaction.includeErrorMessages
+    ? sanitizeErrorMessage(rawMessage, redaction)
+    : "redacted";
   if (error instanceof Error) {
-    return { name: error.name, message: error.message };
+    return { name: error.name, message };
   }
-  return { name: "Error", message: String(error) };
+  return { name: "Error", message };
+}
+
+function sanitizeErrorMessage(
+  message: string,
+  redaction: Required<PolicyStrataRedactionConfig>,
+): string {
+  return sanitizeTraceString(message, redaction);
+}
+
+function sanitizeTraceString(
+  message: string,
+  redaction: Required<PolicyStrataRedactionConfig>,
+): string {
+  return sanitizeSecretTokens(normalizeSqlForTrace(message, redaction))
+    .replace(URL_CREDENTIAL_PATTERN, "$1[redacted]@")
+    .replace(BEARER_TOKEN_PATTERN, "Bearer [redacted]")
+    .replace(BASIC_AUTH_PATTERN, "Basic [redacted]")
+    .replace(SECRET_ASSIGNMENT_PATTERN, "$1=[redacted]")
+    .slice(0, 512);
+}
+
+function sanitizeSecretTokens(message: string): string {
+  return redactEmailLikeValues(message)
+    .replace(URL_CREDENTIAL_PATTERN, "$1[redacted]@")
+    .replace(BEARER_TOKEN_PATTERN, "Bearer [redacted]")
+    .replace(SECRET_ASSIGNMENT_PATTERN, "$1=[redacted]")
+    .replace(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g, "[redacted_token]")
+    .replace(/\b(?:sk|pk|tok|key|secret|token)[_-]?[A-Za-z0-9._~+/=-]{8,}\b/gi, "[redacted_token]")
+    .replace(/\b\d{8,}\b/g, "[redacted_number]");
+}
+
+function redactEmailLikeValues(message: string): string {
+  let output = "";
+  let last = 0;
+  let i = 0;
+  while (i < message.length) {
+    if (message[i] !== "@") {
+      i += 1;
+      continue;
+    }
+
+    const start = emailLocalStart(message, i - 1);
+    const end = emailDomainEnd(message, i + 1);
+    if (start < i && end > i + 1 && emailDomainHasDotWithTld(message, i + 1, end)) {
+      output += `${message.slice(last, start)}[redacted_email]`;
+      last = end;
+      i = end;
+      continue;
+    }
+
+    i += 1;
+  }
+  return output + message.slice(last);
+}
+
+function containsEmailLikeValue(message: string): boolean {
+  let i = 0;
+  while (i < message.length) {
+    if (message[i] !== "@") {
+      i += 1;
+      continue;
+    }
+    const start = emailLocalStart(message, i - 1);
+    const end = emailDomainEnd(message, i + 1);
+    if (start < i && end > i + 1 && emailDomainHasDotWithTld(message, i + 1, end)) {
+      return true;
+    }
+    i += 1;
+  }
+  return false;
+}
+
+function emailLocalStart(message: string, index: number): number {
+  let i = index;
+  while (i >= 0 && isEmailLocalChar(message.charCodeAt(i))) {
+    i -= 1;
+  }
+  return i + 1;
+}
+
+function emailDomainEnd(message: string, index: number): number {
+  let i = index;
+  while (i < message.length && isEmailDomainChar(message.charCodeAt(i))) {
+    i += 1;
+  }
+  return i;
+}
+
+function emailDomainHasDotWithTld(message: string, start: number, end: number): boolean {
+  const lastDot = message.lastIndexOf(".", end - 1);
+  if (lastDot <= start || end - lastDot - 1 < 2) {
+    return false;
+  }
+  for (let i = lastDot + 1; i < end; i += 1) {
+    if (!isAsciiLetter(message.charCodeAt(i))) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function readDollarQuoteTag(sql: string, start: number): string | undefined {
+  if (sql[start] !== "$") {
+    return undefined;
+  }
+  let i = start + 1;
+  if (sql[i] === "$") {
+    return "$$";
+  }
+  if (!isSqlIdentifierStart(sql.charCodeAt(i))) {
+    return undefined;
+  }
+  i += 1;
+  while (i < sql.length && isSqlIdentifierPart(sql.charCodeAt(i))) {
+    i += 1;
+  }
+  return sql[i] === "$" ? sql.slice(start, i + 1) : undefined;
+}
+
+function isSqlIdentifierStart(code: number): boolean {
+  return code === 95 || isAsciiLetter(code);
+}
+
+function isSqlIdentifierPart(code: number): boolean {
+  return isSqlIdentifierStart(code) || isAsciiDigit(code);
+}
+
+function isEmailLocalChar(code: number): boolean {
+  return (
+    isAsciiLetter(code) ||
+    isAsciiDigit(code) ||
+    code === 37 ||
+    code === 43 ||
+    code === 45 ||
+    code === 46 ||
+    code === 95
+  );
+}
+
+function isEmailDomainChar(code: number): boolean {
+  return isAsciiLetter(code) || isAsciiDigit(code) || code === 45 || code === 46;
+}
+
+function isAsciiLetter(code: number): boolean {
+  return (code >= 65 && code <= 90) || (code >= 97 && code <= 122);
+}
+
+function isAsciiDigit(code: number): boolean {
+  return code >= 48 && code <= 57;
 }
 
 function pruneUndefined<T>(value: T): T {
