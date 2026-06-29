@@ -11,7 +11,7 @@ Use the Node recorder when your agent stack runs in TypeScript/Next/Drizzle:
 import { createPolicyStrataRecorder } from "policystrata/node";
 
 const recorder = createPolicyStrataRecorder({
-  service: "betteroff-ask-ai",
+  service: "demo-data-agent",
   environment: process.env.NODE_ENV,
   out: ".policystrata/traces.jsonl",
   tenancy: {
@@ -35,9 +35,16 @@ Read-tool SQL records include top-level `sql`, `principal`, `tenant_ids`, and `s
 `agent_session`, `tool_execution`, and `mutation` records; the SQL scanner ignores those non-SQL
 records while preserving them for downstream agent-session analysis.
 
-The recorder redacts by default: ID-like fields are hashed, prompt text is omitted, SQL literal
-values are replaced with placeholders, arguments are recorded by shape, and results are summarized
-as row counts plus field names.
+The recorder redacts by default: ID-like fields are HMACed with a per-recorder key, prompt text and
+raw error messages are omitted, SQL literal values are replaced with placeholders, arguments are
+recorded by sanitized shape, and results are summarized as row counts plus sanitized field names. Pass a
+deployment-specific `redaction.hashSalt` when traces need stable pseudonymous IDs across recorder
+instances. With default ID hashing, the Node recorder omits scanner-contract `tenant_ids` rather
+than writing HMAC values there; use `redaction.hashIds: false` only for trusted fixture traces that
+need explicit tenant IDs for real database comparison. Structured payloads such as `semantic_ir`,
+`expected_policy`, mutation, and audit metadata are recursively redacted; `semantic_ir.filters.tenant_id`
+is HMACed under default ID hashing and preserved raw only when trusted fixtures set
+`redaction.hashIds: false`.
 
 ## Prisma
 

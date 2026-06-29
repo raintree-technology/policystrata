@@ -23,12 +23,16 @@ from policystrata.domain import (
 from policystrata.mutations import MUTATIONS
 
 MANIFEST_VERSION = "policystrata.benchmark-manifest.v1"
+# created_at is display-only; it records when the manifest was written and is not reproducible.
 FREEZE_HASH_FIELDS = (
     "manifest_version",
     "domain",
     "suite",
     "generated_count",
     "generated_seed",
+    "policy_version",
+    "surface_versions",
+    "suite_metadata",
     "policy_hash",
     "surfaces_hash",
     "suite_hash",
@@ -36,9 +40,11 @@ FREEZE_HASH_FIELDS = (
     "mutation_operator_hash",
     "detector_hash",
     "generator_hash",
+    "package_version",
+    "git_commit",
 )
 VERIFY_FIELDS = FREEZE_HASH_FIELDS[1:]
-DETECTOR_SOURCE_FILES = ("detection.py", "policy.py", "runner.py", "models.py")
+DETECTOR_SOURCE_FILES = ("compiler.py", "detection.py", "policy.py", "runner.py", "models.py")
 GENERATOR_SOURCE_FILES = ("generator.py",)
 
 

@@ -347,7 +347,7 @@ Drizzle, and other Node agent stacks:
 import { createPolicyStrataRecorder } from "policystrata/node";
 
 const recorder = createPolicyStrataRecorder({
-  service: "betteroff-ask-ai",
+  service: "demo-data-agent",
   out: ".policystrata/traces.jsonl",
   tenancy: {
     tenantColumns: ["transactions.household_id", "accounts.household_id"],
@@ -357,6 +357,13 @@ const recorder = createPolicyStrataRecorder({
 
 `wrapTool()` records sanitized tool executions, `captureQuery()` captures Drizzle `.toSQL()` output
 when available, and read-tool SQL records can be scanned with `policystrata scan`.
+By default, the recorder HMACs ID fields with a per-recorder key, omits prompt text and raw error
+messages, redacts SQL literal values, and records sanitized argument shape rather than argument values.
+Default-redacted Node traces omit scanner `tenant_ids`; trusted fixture traces can set
+`redaction.hashIds: false` when real database comparison needs raw tenant IDs.
+Structured trace payloads such as semantic filters and expected-policy notes are redacted
+recursively by default; `semantic_ir.filters.tenant_id` is HMACed unless trusted fixtures set
+`redaction.hashIds: false`.
 
 ## Reference Docs
 

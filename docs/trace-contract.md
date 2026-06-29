@@ -34,10 +34,10 @@ the SQL scanner unless they include top-level read-only `sql`.
 | `id` | yes | Stable trace identifier. Use letters, numbers, `_`, `.`, or `-`. |
 | `principal` | yes | Policy principal id from `domain/policy.yaml`. |
 | `sql` | yes | Read-only SQL emitted by the application, ORM, semantic layer, or traced span. |
-| `tenant_ids` | recommended | Tenant ids bound for the principal/request. These can be absent from parameterized SQL. |
+| `tenant_ids` | recommended | Tenant ids bound for the principal/request. These are required for static validation when tenant predicates are parameterized. |
 | `semantic_ir` | recommended | PolicyStrata semantic query to authorize independently of SQL generation. |
 | `release_allowed` | recommended | Whether the application released the result to the user. |
-| `expected_policy` | optional | Free-form expected-policy notes, including `allow_rls_only: true` when SQL intentionally relies on RLS. |
+| `expected_policy` | optional | Free-form expected-policy notes for review and reporting. These notes are advisory and do not suppress scanner findings. |
 | `source` | optional | Adapter or service that emitted the trace, such as `prisma`, `sqlalchemy`, or `otel`. |
 | `timestamp` | optional | ISO-8601 event timestamp. |
 | `regression_case` | optional | One of `fail_to_pass`, `pass_to_pass`, `contain_to_contain`, `deny_to_deny`, `allow_to_allow`, `unclassified`. |
@@ -69,8 +69,9 @@ tenancy:
     - organization_id
 ```
 
-Use `expected_policy.allow_rls_only: true` only when the trace intentionally omits tenant literals
-because database RLS is the policy containment layer.
+Trace-supplied `expected_policy` fields are not trusted as scanner controls. If SQL intentionally
+relies on database RLS rather than literal tenant predicates, add trusted `database.rls_checks` or
+`database.state_assertions` in `policystrata.yaml` so the containment layer is exercised directly.
 
 ## Validation
 

@@ -1,7 +1,13 @@
 import json
 
 from policystrata.cli import main
-from policystrata.freeze import verify_benchmark_manifest, write_benchmark_manifest
+from policystrata.freeze import (
+    DETECTOR_SOURCE_FILES,
+    freeze_id,
+    source_hash,
+    verify_benchmark_manifest,
+    write_benchmark_manifest,
+)
 from policystrata.runner import run_suite
 
 
@@ -44,6 +50,12 @@ def test_freeze_manifest_verifies_and_marks_run_metadata(tmp_path) -> None:
     assert copied_manifest["benchmark_manifest_id"] == manifest["benchmark_manifest_id"]
 
 
+def test_detector_hash_covers_compiler_source() -> None:
+    assert "compiler.py" in DETECTOR_SOURCE_FILES
+    without_compiler = tuple(path for path in DETECTOR_SOURCE_FILES if path != "compiler.py")
+    assert source_hash(DETECTOR_SOURCE_FILES) != source_hash(without_compiler)
+
+
 def test_freeze_verification_detects_suite_tampering(tmp_path) -> None:
     manifest_path = tmp_path / "freeze.json"
     write_benchmark_manifest(
@@ -64,6 +76,32 @@ def test_freeze_verification_detects_suite_tampering(tmp_path) -> None:
 
     assert verification["verified"] is False
     assert {item["field"] for item in verification["mismatches"]} >= {"generated_count", "task_hash"}
+
+
+def test_freeze_verification_detects_provenance_tampering(tmp_path) -> None:
+    manifest_path = tmp_path / "freeze.json"
+    manifest = write_benchmark_manifest(
+        "support_saas",
+        "generated",
+        manifest_path,
+        generated_count=12,
+        generated_seed=1729,
+    )
+    manifest["git_commit"] = "tampered"
+    manifest["suite_metadata"]["notes"] = [*manifest["suite_metadata"].get("notes", []), "tampered"]
+    manifest["benchmark_manifest_id"] = freeze_id(manifest)
+    manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+    verification = verify_benchmark_manifest(
+        manifest_path,
+        domain="support_saas",
+        suite="generated",
+        generated_count=12,
+        generated_seed=1729,
+    )
+
+    assert verification["verified"] is False
+    assert {item["field"] for item in verification["mismatches"]} >= {"git_commit", "suite_metadata"}
 
 
 def test_freeze_cli_round_trip_and_tamper_exit_code(tmp_path, capsys) -> None:

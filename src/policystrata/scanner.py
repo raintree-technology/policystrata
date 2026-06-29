@@ -127,6 +127,7 @@ DBT_VALUE_FINDING_SPECS: tuple[DbtValueFindingSpec, ...] = (
         FindingConfidence.LOW,
     ),
 )
+REDACTED_TENANT_ID_PREFIXES = ("hmac-sha256:", "sha256:")
 
 
 def load_scan_config(path: Path) -> ScanConfig:
@@ -450,8 +451,7 @@ def scan_trace_static_sql(
     canonical: Decision | None,
 ) -> list[ScanFinding]:
     findings: list[ScanFinding] = []
-    allow_rls_only = bool(trace.expected_policy.get("allow_rls_only"))
-    if not allow_rls_only and not sql_preserves_tenant_scope(config, policy, trace):
+    if not sql_preserves_tenant_scope(config, policy, trace):
         findings.append(
             imported_trace_finding(
                 f"tenant_scope_missing_{trace.id}",
@@ -621,8 +621,9 @@ def query_trace_sql(
 
 
 def imported_trace_tenant_id(trace: ImportedTrace, principal_tenant_ids: list[str]) -> str | None:
-    if trace.tenant_ids:
-        return str(trace.tenant_ids[0])
+    trace_tenant_ids = usable_tenant_ids(trace.tenant_ids)
+    if trace_tenant_ids:
+        return str(trace_tenant_ids[0])
     if principal_tenant_ids:
         return str(principal_tenant_ids[0])
     return None
@@ -1070,23 +1071,26 @@ def sql_preserves_tenant_scope(config: ScanConfig, policy: Policy, trace: Import
     principal = policy.principals.get(trace.principal)
     if principal is None:
         return False
-    tenant_ids = trace.tenant_ids or principal.tenant_ids
+    trace_tenant_ids = usable_tenant_ids(trace.tenant_ids)
+    tenant_ids = trace_tenant_ids or principal.tenant_ids
+    allow_placeholder_binding = bool(trace_tenant_ids)
     if config.tenancy.canonical_predicates:
         return any(
-            tenant_predicate_matches_sql(predicate, trace.sql, tenant_ids)
+            tenant_predicate_matches_sql(predicate, trace.sql, tenant_ids, allow_placeholder_binding)
             for predicate in config.tenancy.canonical_predicates
         )
     columns = tenant_columns_for_scope_check(config)
     return sql_mentions_any_tenant_column(trace.sql, columns) and sql_has_tenant_binding(
         trace.sql,
         tenant_ids,
+        allow_placeholder_binding,
     )
 
 
 def tenant_scope_reason(config: ScanConfig, policy: Policy, trace: ImportedTrace) -> str:
     principal = policy.principals.get(trace.principal)
     tenants = [] if principal is None else principal.tenant_ids
-    expected_tenants = trace.tenant_ids or tenants
+    expected_tenants = usable_tenant_ids(trace.tenant_ids) or tenants
     if config.tenancy.canonical_predicates:
         predicates = ", ".join(config.tenancy.canonical_predicates)
         return (
@@ -1100,7 +1104,12 @@ def tenant_scope_reason(config: ScanConfig, policy: Policy, trace: ImportedTrace
     )
 
 
-def tenant_predicate_matches_sql(predicate: str, sql: str, tenant_ids: Sequence[str]) -> bool:
+def tenant_predicate_matches_sql(
+    predicate: str,
+    sql: str,
+    tenant_ids: Sequence[str],
+    allow_placeholder_binding: bool,
+) -> bool:
     normalized_sql = normalize_sql(sql)
     if ":principal.tenant_id" not in predicate:
         return normalize_sql(predicate) in normalized_sql
@@ -1108,7 +1117,11 @@ def tenant_predicate_matches_sql(predicate: str, sql: str, tenant_ids: Sequence[
         if normalize_sql(predicate.replace(":principal.tenant_id", str(tenant_id))) in normalized_sql:
             return True
     columns = tenant_columns_from_predicate(predicate)
-    return sql_mentions_any_tenant_column(sql, columns) and sql_has_tenant_binding(sql, tenant_ids)
+    return sql_mentions_any_tenant_column(sql, columns) and sql_has_tenant_binding(
+        sql,
+        tenant_ids,
+        allow_placeholder_binding,
+    )
 
 
 def sql_mentions_any_tenant_column(sql: str, columns: Sequence[str]) -> bool:
@@ -1116,11 +1129,25 @@ def sql_mentions_any_tenant_column(sql: str, columns: Sequence[str]) -> bool:
     return any(normalize_sql(column) in normalized_sql for column in columns)
 
 
-def sql_has_tenant_binding(sql: str, tenant_ids: Sequence[str]) -> bool:
+def sql_has_tenant_binding(
+    sql: str,
+    tenant_ids: Sequence[str],
+    allow_placeholder_binding: bool = False,
+) -> bool:
     normalized_sql = normalize_sql(sql)
     if any(normalize_sql(str(tenant_id)) in normalized_sql for tenant_id in tenant_ids):
         return True
+    if not allow_placeholder_binding:
+        return False
     return bool(re.search(r"(:[A-Za-z_][A-Za-z0-9_.]*|\$\d+|%s|\?)", sql))
+
+
+def usable_tenant_ids(tenant_ids: Sequence[str]) -> list[str]:
+    return [
+        str(tenant_id)
+        for tenant_id in tenant_ids
+        if not str(tenant_id).startswith(REDACTED_TENANT_ID_PREFIXES)
+    ]
 
 
 def tenant_columns_for_scope_check(config: ScanConfig) -> list[str]:
