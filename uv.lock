@@ -656,7 +656,7 @@ wheels = [
 
 [[package]]
 name = "policystrata"
-version = "1.0.0"
+version = "1.0.1"
 source = { editable = "." }
 dependencies = [
     { name = "psycopg", extra = ["binary"] },

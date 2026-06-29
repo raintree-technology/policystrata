@@ -4,6 +4,14 @@
 
 No changes yet.
 
+## [1.0.1] - 2026-06-29
+
+- Harden the Node trace recorder redaction path against secret leakage and regex denial-of-service
+  findings.
+- Pin GitHub Actions to immutable commit SHAs and keep PyPI distribution checksum verification in
+  the publish workflow.
+- Avoid the Socket-flagged `pycparser` 3.0 artifact in the locked release tooling environment.
+
 ## [1.0.0] - 2026-06-27
 
 - Promote the polished public paper-backed release line to `1.0.0`.

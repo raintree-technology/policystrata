@@ -302,7 +302,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: raintree-technology/policystrata@v1.0.0
+      - uses: raintree-technology/policystrata@v1.0.1
         with:
           config: policystrata.yaml
           out: runs/policystrata
