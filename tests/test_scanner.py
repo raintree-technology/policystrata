@@ -6,6 +6,7 @@ import psycopg
 import pytest
 
 from policystrata.database import assert_read_only_sql
+from policystrata.doctor import run_config_doctor
 from policystrata.domain import load_policy
 from policystrata.integrations.dbt_semantic import inspect_dbt_semantic_model
 from policystrata.models import SemanticQuery
@@ -60,6 +61,39 @@ def test_scan_failing_fixture_writes_gate_outputs(tmp_path) -> None:
     assert "Configured readiness:" in report
     assert "Score:" not in report
     assert "## Remediation" in report
+
+
+def test_secute_security_cases_fixture_exercises_security_failures(tmp_path) -> None:
+    result = run_scan(Path("examples/secute_security_cases/policystrata.yaml"), tmp_path / "secute")
+
+    finding_ids = {item.id for item in result.findings}
+    assert result.gate.outcome == GateOutcome.FAIL
+    assert result.summary.high_confidence_failures >= 5
+    assert any(item.startswith("unsafe_release_") for item in finding_ids)
+    assert any(item.startswith("unauthorized_trace_reached_sql_") for item in finding_ids)
+    assert any(item.startswith("tenant_scope_missing_") for item in finding_ids)
+    assert "unsafe_release_unauthorized_metric_exposure_reached_sql" in finding_ids
+    assert "tenant_scope_missing_stale_tenant_key_lowering" in finding_ids
+    assert "unsafe_release_release_leak_after_database_containment" in finding_ids
+
+
+def test_secute_security_cases_doctor_reports_governance_wiring() -> None:
+    report = run_config_doctor(Path("examples/secute_security_cases/policystrata.yaml"))
+
+    stack = {item["id"]: item for item in report["stack"]}
+    assert stack["policy_docs_ingestion"]["status"] == "wired"
+    assert stack["prompt_manifest_checks"]["status"] == "partial"
+    assert stack["source_mapping"]["status"] == "wired"
+    assert stack["export_coverage"]["status"] == "wired"
+
+    coverage = report["coverage_accounting"]
+    assert coverage["policy_doc_files"] == 4
+    assert coverage["export_records"] == 1
+    assert coverage["unsafe_release_records"] == 2
+    assert "privacy_policy" in coverage["policy_doc_types"]
+    assert "terms_of_service" in coverage["policy_doc_types"]
+    assert "data_processing_agreement" in coverage["policy_doc_types"]
+    assert "raw_customer_export" in coverage["prompt_manifest_unauthorized_metrics"]
 
 
 def test_scan_clean_fixture_passes(tmp_path) -> None:
