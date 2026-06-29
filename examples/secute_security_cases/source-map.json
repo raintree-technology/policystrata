@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "mappings": [
+    {
+      "source": "agent.tools.revenue.query:RevenueTool.run",
+      "owner": "validator",
+      "file": "app/agent/tools/revenue.py",
+      "expected_tests": ["tests/policy/test_revenue_tool.py"]
+    },
+    {
+      "source": "agent.compiler.sql:TicketCountQuery.lower",
+      "owner": "compiler",
+      "file": "app/agent/compiler/sql.py",
+      "expected_tests": ["tests/policy/test_tenant_lowering.py"]
+    },
+    {
+      "source": "agent.release.export:CsvExport.release",
+      "owner": "release",
+      "file": "app/agent/release/export.py",
+      "expected_tests": ["tests/policy/test_release_gate.py"]
+    }
+  ]
+}
