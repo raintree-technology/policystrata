@@ -256,10 +256,7 @@ const DEFAULT_ID_FIELDS = [
 ];
 const SENSITIVE_FIELD_PATTERN =
   /(email|phone|ssn|social|token|secret|password|passwd|pwd|auth|authorization|cookie|credential|session|csrf|xsrf|dob|birth|address|account_number|routing_number|card|pan|pii)/i;
-const EMAIL_VALUE_PATTERN = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i;
 const LONG_NUMERIC_KEY_PATTERN = /\b\d{6,}\b/;
-const TOKEN_LIKE_KEY_PATTERN = /\b(?:sk|pk|tok|key|secret|token)[_-]?[A-Za-z0-9._~+/=-]{8,}\b/i;
-const JWT_VALUE_PATTERN = /\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/i;
 const SQL_AGGREGATE_PATTERN = /\b(count|sum|avg|min|max)\s*\(/i;
 const SECRET_ASSIGNMENT_PATTERN =
   /\b(api[_-]?key|authorization|password|passwd|pwd|secret|token)\s*[:=]\s*([^\s,;]+)/gi;
@@ -925,12 +922,28 @@ function normalizeSqlForTrace(sql: string, redaction: Required<PolicyStrataRedac
     return sanitizeSecretTokens(compact);
   }
   return sanitizeSecretTokens(
-    compact
-      .replace(/\$([A-Za-z_][A-Za-z0-9_]*)?\$[\s\S]*?\$\1\$/g, "?")
+    redactSqlDollarQuotedLiterals(compact)
       .replace(/'(?:''|[^'])*'/g, "?")
       .replace(/\b(true|false)\b/gi, "?")
       .replace(/(?<![$A-Za-z0-9_])\d+(?:\.\d+)?\b/g, "?"),
   );
+}
+
+function redactSqlDollarQuotedLiterals(sql: string): string {
+  let output = "";
+  let i = 0;
+  while (i < sql.length) {
+    const tag = readDollarQuoteTag(sql, i);
+    if (!tag) {
+      output += sql[i];
+      i += 1;
+      continue;
+    }
+    const end = sql.indexOf(tag, i + tag.length);
+    output += "?";
+    i = end === -1 ? sql.length : end + tag.length;
+  }
+  return output;
 }
 
 function stripSqlComments(sql: string): string {
@@ -1013,7 +1026,7 @@ function stripSqlComments(sql: string): string {
     }
 
     if (char === "$") {
-      const tag = /^\$[A-Za-z_][A-Za-z0-9_]*\$|^\$\$/.exec(sql.slice(i))?.[0];
+      const tag = readDollarQuoteTag(sql, i);
       if (tag) {
         dollarQuoteTag = tag;
         output += tag;
@@ -1293,10 +1306,8 @@ function isIdLikeTraceKey(key: string, redaction: Required<PolicyStrataRedaction
 function isSensitiveTraceKey(key: string): boolean {
   return (
     SENSITIVE_FIELD_PATTERN.test(key) ||
-    EMAIL_VALUE_PATTERN.test(key) ||
     LONG_NUMERIC_KEY_PATTERN.test(key) ||
-    TOKEN_LIKE_KEY_PATTERN.test(key) ||
-    JWT_VALUE_PATTERN.test(key)
+    containsEmailLikeValue(key)
   );
 }
 
@@ -1380,14 +1391,133 @@ function sanitizeTraceString(
 }
 
 function sanitizeSecretTokens(message: string): string {
-  return message
+  return redactEmailLikeValues(message)
     .replace(URL_CREDENTIAL_PATTERN, "$1[redacted]@")
     .replace(BEARER_TOKEN_PATTERN, "Bearer [redacted]")
     .replace(SECRET_ASSIGNMENT_PATTERN, "$1=[redacted]")
-    .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, "[redacted_email]")
     .replace(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g, "[redacted_token]")
     .replace(/\b(?:sk|pk|tok|key|secret|token)[_-]?[A-Za-z0-9._~+/=-]{8,}\b/gi, "[redacted_token]")
     .replace(/\b\d{8,}\b/g, "[redacted_number]");
+}
+
+function redactEmailLikeValues(message: string): string {
+  let output = "";
+  let last = 0;
+  let i = 0;
+  while (i < message.length) {
+    if (message[i] !== "@") {
+      i += 1;
+      continue;
+    }
+
+    const start = emailLocalStart(message, i - 1);
+    const end = emailDomainEnd(message, i + 1);
+    if (start < i && end > i + 1 && emailDomainHasDotWithTld(message, i + 1, end)) {
+      output += `${message.slice(last, start)}[redacted_email]`;
+      last = end;
+      i = end;
+      continue;
+    }
+
+    i += 1;
+  }
+  return output + message.slice(last);
+}
+
+function containsEmailLikeValue(message: string): boolean {
+  let i = 0;
+  while (i < message.length) {
+    if (message[i] !== "@") {
+      i += 1;
+      continue;
+    }
+    const start = emailLocalStart(message, i - 1);
+    const end = emailDomainEnd(message, i + 1);
+    if (start < i && end > i + 1 && emailDomainHasDotWithTld(message, i + 1, end)) {
+      return true;
+    }
+    i += 1;
+  }
+  return false;
+}
+
+function emailLocalStart(message: string, index: number): number {
+  let i = index;
+  while (i >= 0 && isEmailLocalChar(message.charCodeAt(i))) {
+    i -= 1;
+  }
+  return i + 1;
+}
+
+function emailDomainEnd(message: string, index: number): number {
+  let i = index;
+  while (i < message.length && isEmailDomainChar(message.charCodeAt(i))) {
+    i += 1;
+  }
+  return i;
+}
+
+function emailDomainHasDotWithTld(message: string, start: number, end: number): boolean {
+  const lastDot = message.lastIndexOf(".", end - 1);
+  if (lastDot <= start || end - lastDot - 1 < 2) {
+    return false;
+  }
+  for (let i = lastDot + 1; i < end; i += 1) {
+    if (!isAsciiLetter(message.charCodeAt(i))) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function readDollarQuoteTag(sql: string, start: number): string | undefined {
+  if (sql[start] !== "$") {
+    return undefined;
+  }
+  let i = start + 1;
+  if (sql[i] === "$") {
+    return "$$";
+  }
+  if (!isSqlIdentifierStart(sql.charCodeAt(i))) {
+    return undefined;
+  }
+  i += 1;
+  while (i < sql.length && isSqlIdentifierPart(sql.charCodeAt(i))) {
+    i += 1;
+  }
+  return sql[i] === "$" ? sql.slice(start, i + 1) : undefined;
+}
+
+function isSqlIdentifierStart(code: number): boolean {
+  return code === 95 || isAsciiLetter(code);
+}
+
+function isSqlIdentifierPart(code: number): boolean {
+  return isSqlIdentifierStart(code) || isAsciiDigit(code);
+}
+
+function isEmailLocalChar(code: number): boolean {
+  return (
+    isAsciiLetter(code) ||
+    isAsciiDigit(code) ||
+    code === 37 ||
+    code === 43 ||
+    code === 45 ||
+    code === 46 ||
+    code === 95
+  );
+}
+
+function isEmailDomainChar(code: number): boolean {
+  return isAsciiLetter(code) || isAsciiDigit(code) || code === 45 || code === 46;
+}
+
+function isAsciiLetter(code: number): boolean {
+  return (code >= 65 && code <= 90) || (code >= 97 && code <= 122);
+}
+
+function isAsciiDigit(code: number): boolean {
+  return code >= 48 && code <= 57;
 }
 
 function pruneUndefined<T>(value: T): T {
