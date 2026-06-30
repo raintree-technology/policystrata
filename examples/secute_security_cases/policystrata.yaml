@@ -1,0 +1,32 @@
+version: 1
+domain: support_saas
+output: scan-out
+dbt:
+  files:
+    - semantic_models.yml
+sql_traces:
+  required: true
+  files:
+    - traces.jsonl
+policy_docs:
+  files:
+    - docs/privacy.md
+    - docs/terms.md
+    - docs/data-processing.md
+    - docs/internal-access.md
+prompt_manifests:
+  files:
+    - prompt_manifest.json
+source_maps:
+  files:
+    - source-map.json
+tenancy:
+  canonical_predicates:
+    - "accounts.tenant_id in (:principal.tenant_ids)"
+  tenant_columns:
+    - accounts.tenant_id
+fuzz:
+  enabled: false
+gate:
+  fail_on_high_confidence: true
+  required_inputs: [sql_traces]

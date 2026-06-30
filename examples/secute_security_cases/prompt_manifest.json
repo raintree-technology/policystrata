@@ -1,0 +1,26 @@
+{
+  "model_visible_tools": [
+    {
+      "name": "ask_revenue",
+      "description": "Answer tenant-scoped revenue questions.",
+      "metrics": ["net_revenue", "gross_revenue", "bookings"],
+      "dimensions": ["region", "plan"]
+    },
+    {
+      "name": "ticket_metrics",
+      "description": "Read aggregate ticket metrics.",
+      "metrics": ["ticket_count", "escalated_tickets"],
+      "dimensions": ["region", "severity"]
+    },
+    {
+      "name": "export_customer_rows",
+      "description": "Export customer-level support rows.",
+      "metrics": ["raw_customer_export"],
+      "dimensions": ["customer_email", "tenant_id"]
+    }
+  ],
+  "prompt_components": {
+    "metric_hints": ["tickets", "recognized_revenue", "bookings"],
+    "dimension_hints": ["region", "plan", "customer_email"]
+  }
+}
