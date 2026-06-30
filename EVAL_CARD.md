@@ -17,6 +17,8 @@ obligations survive translation across policy-bearing surfaces:
 - output-release checks.
 
 The core artifact uses deterministic semantic plans and traces. It does not require an LLM API key.
+The oracle and surface contracts form an executable specification boundary; scan results are
+counterexamples or regression evidence, not universal correctness proofs.
 
 ## Current Suites
 
