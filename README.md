@@ -16,6 +16,12 @@ PolicyStrata is not an authorization boundary, and it is not another generic tex
 It is a reproducible research artifact and regression gate for finding reachable disagreements
 between layers.
 
+Another way to read PolicyStrata is as executable-spec regression testing: the canonical policy
+oracle is the specification, each surface is a policy-preserving translation boundary, transition
+obligations are the invariants, and minimized witnesses are counterexamples. This borrows the
+discipline of formal verification without claiming full formal verification of the host application
+or agent stack.
+
 ## Paper And Artifact
 
 - Paper PDF: <https://raintree.technology/papers/PolicyStrata.pdf>
@@ -27,7 +33,7 @@ between layers.
 SHA256:
 
 ```text
-9a4da81d78c37fd81e9ab6b36f094756e61e6b88cfcd74dcab51cfdd8e5bbcd9  PolicyStrata.pdf
+b5c26856980e01f2d234d7663276fe306ae5d63f5bbcf6225da8a59a52202c43  PolicyStrata.pdf
 961778c1e8affc04f76e27ce7958572d904e69d7701494e0047e4f7bffbc466d  policystrata-submission-kit-2026-06-26.zip
 ```
 

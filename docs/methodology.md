@@ -20,6 +20,19 @@ PolicyStrata should be described as:
 
 Do not describe the result as detecting all policy drift.
 
+## Formal-Verification Boundary
+
+PolicyStrata uses a formal-verification-style separation between specification and implementation.
+The canonical policy oracle is the executable specification, each stack surface is a
+policy-preserving translation boundary, and transition obligations are the invariants that should
+survive across those boundaries.
+
+PolicyStrata does not discharge proof obligations with a proof assistant, SMT solver, or verified
+compiler. Its evidence is falsification-oriented: deterministic fixtures, generated mutants,
+imported traces, optional database checks, and minimized witnesses. A witness is a reproducible
+counterexample for the exercised trace and configured policy, not a universal proof about every
+possible program, query, database state, or release path.
+
 ## What Counts As A Mutant
 
 A mutant is a deterministic injected cross-layer drift case. Each mutant is described by a

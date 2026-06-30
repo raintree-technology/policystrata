@@ -8,7 +8,7 @@ The most important question is not whether every layer made the same allow/deny 
 layers have different jobs. PolicyStrata asks whether each layer preserved the canonical policy
 obligations it accepted from the previous layer.
 
-| `WitnessClass` | Concrete failures covered | Typical surfaces | What the witness proves |
+| `WitnessClass` | Concrete failures covered | Typical surfaces | What the witness establishes |
 | --- | --- | --- | --- |
 | `clean` | No observed policy drift | Any | The declared surface responsibilities and transition obligations were preserved for this case. |
 | `over_permissive` | Manifest overclaim, grammar exposure of forbidden intent, validator bypass, database policy gap, cost-budget bypass | `manifest`, `grammar`, `validator`, `database`, `compiler` | A layer accepted, exposed, or failed to contain behavior that the canonical policy or its declared responsibilities reject. |
