@@ -7,15 +7,20 @@ include SECURITY.md
 include CITATION.cff
 include LICENSE
 include docker-compose.yml
+include package.json
+include package-lock.json
+include bun.lock
 include uv.lock
 recursive-include docs *.md
 recursive-include examples *.jsonl *.yaml *.yml
 include packages/node/README.md
+include packages/node/LICENSE
 include packages/node/package.json
-include packages/node/package-lock.json
 include packages/node/tsconfig.json
+recursive-include packages/node/schema *.json
 recursive-include packages/node/src *.ts
 recursive-include packages/node/test *.ts
+recursive-include packages/node/test/fixtures *.json
 recursive-include scripts *.py *.sh
 recursive-include tests *.py
 recursive-include src/policystrata/domains *.sql *.yaml

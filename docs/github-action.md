@@ -6,7 +6,7 @@ action exits non-zero and blocks the workflow.
 
 The action installs PolicyStrata from the action checkout by default, so it can be used from a
 repository tag before the package is published to PyPI. After the PyPI package is published, callers
-can optionally set `package` to a normal pip install spec such as `policystrata==1.0.1`.
+can optionally set `package` to a normal pip install spec such as `policystrata==1.0.2`.
 
 For CI, run two gates:
 
@@ -28,11 +28,11 @@ on:
 
 jobs:
   scan:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
-      - uses: raintree-technology/policystrata@v1.0.1
+      - uses: raintree-technology/policystrata@v1.0.2
         with:
           config: policystrata.yaml
           out: runs/policystrata
@@ -45,7 +45,7 @@ jobs:
 ## Upload Scan Artifacts
 
 ```yaml
-      - uses: raintree-technology/policystrata@v1.0.1
+      - uses: raintree-technology/policystrata@v1.0.2
         with:
           config: policystrata.yaml
           out: runs/policystrata

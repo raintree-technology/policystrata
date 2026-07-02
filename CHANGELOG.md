@@ -4,6 +4,20 @@
 
 No changes yet.
 
+## [1.0.2] - 2026-07-02
+
+- Add the stable Node runtime authorization surface with generic
+  `authorize({ subject, action, resource, context, mode })`, compatibility `authorizeTool()`, and
+  result-release authorization helpers.
+- Add a runtime manifest JSON Schema plus shared conformance fixtures for allow/deny, unknown
+  action/resource, role aliases, write/export approvals, semantic constraints, release boundaries,
+  and deny-by-default behavior.
+- Add Python runtime parity for the shared conformance fixtures.
+- Document the scanner/doctor versus runtime authorization boundary and record the JavaScript
+  distribution decision for publishing the Node runtime through npm.
+- Publish the initial npm package and configure npm trusted publishing for future Node runtime
+  releases while keeping PyPI publishing on trusted publishing.
+
 ## [1.0.1] - 2026-06-29
 
 - Harden the Node trace recorder redaction path against secret leakage and regex denial-of-service

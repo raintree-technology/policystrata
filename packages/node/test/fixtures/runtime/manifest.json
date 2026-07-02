@@ -1,0 +1,89 @@
+{
+  "schemaVersion": "policystrata.runtime_manifest.v1",
+  "version": "conformance.1",
+  "defaultDecision": "deny",
+  "roleAliases": {
+    "owner": "household_owner",
+    "admin": "household_admin",
+    "viewer": "household_viewer"
+  },
+  "resources": [
+    {
+      "name": "searchTransactions",
+      "type": "tool",
+      "actions": [
+        {
+          "name": "read",
+          "kind": "read",
+          "allowedRoles": ["household_owner", "household_admin", "household_viewer"],
+          "semanticConstraints": {
+            "metrics": ["transaction_spend"],
+            "dimensions": ["merchant_name"]
+          }
+        },
+        {
+          "name": "release",
+          "kind": "release",
+          "allowedRoles": ["household_owner", "household_admin", "household_viewer"],
+          "releaseConstraints": {
+            "boundaries": ["user"],
+            "resultKinds": ["aggregate"],
+            "lineageSources": ["transactions"],
+            "maxRows": 100,
+            "requireLineage": true,
+            "allowSensitive": false,
+            "allowRawRows": false
+          }
+        }
+      ]
+    },
+    {
+      "name": "generateTransactionExport",
+      "type": "tool",
+      "actions": [
+        {
+          "name": "export",
+          "kind": "export",
+          "approvalRequired": true,
+          "allowedRoles": ["household_owner", "household_admin"],
+          "semanticConstraints": {
+            "metrics": ["export_row_count"],
+            "dimensions": ["export_kind"]
+          }
+        },
+        {
+          "name": "release",
+          "kind": "release",
+          "approvalRequired": true,
+          "allowedRoles": ["household_owner", "household_admin"],
+          "releaseConstraints": {
+            "boundaries": ["user"],
+            "resultKinds": ["file_export"],
+            "lineageSources": ["transactions"],
+            "maxRows": 10000,
+            "requireLineage": true,
+            "allowSensitive": false,
+            "allowRawRows": false
+          }
+        }
+      ]
+    },
+    {
+      "name": "categorizeTransaction",
+      "type": "tool",
+      "actions": [
+        {
+          "name": "write",
+          "kind": "write",
+          "approvalRequired": true,
+          "requiresWriteGrant": true,
+          "allowedRoles": ["household_owner", "household_admin"],
+          "semanticConstraints": {
+            "metrics": ["transaction_spend"],
+            "dimensions": ["category"]
+          }
+        }
+      ]
+    }
+  ]
+}
