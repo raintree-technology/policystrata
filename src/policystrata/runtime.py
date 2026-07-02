@@ -5,6 +5,9 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 RuntimeMode = Literal["shadow", "enforce"]
+RuntimeDecisionPoint = Literal["pre_model", "execution"]
+RuntimeApprovalState = Literal["not_required", "pending", "satisfied"]
+RuntimeWriteState = Literal["disabled", "enabled"]
 
 
 @dataclass(frozen=True)
@@ -33,11 +36,23 @@ class RuntimeDecision:
 class RuntimeToolDecision(RuntimeDecision):
     tool_name: str
     normalized_role: str | None
+    tool_kind: str | None
+    user_id: str | None
+    household_id: str | None
+    write_state: RuntimeWriteState
+    approval_state: RuntimeApprovalState
+    decision_point: RuntimeDecisionPoint
 
     def to_dict(self) -> dict[str, Any]:
         result = super().to_dict()
         result["toolName"] = self.tool_name
         result["normalizedRole"] = self.normalized_role
+        result["toolKind"] = self.tool_kind
+        result["userId"] = self.user_id
+        result["householdId"] = self.household_id
+        result["writeState"] = self.write_state
+        result["approvalState"] = self.approval_state
+        result["decisionPoint"] = self.decision_point
         return result
 
 
@@ -135,14 +150,28 @@ class PolicyStrataAuthorizer:
             self._resources_by_name,
             tool_name,
         )
+        runtime_resource = self._resources_by_name.get(tool_name)
+        runtime_action = runtime_resource.actions.get(action_name) if runtime_resource is not None else None
+        decision_point = _decision_point(request.get("decisionPoint") or request.get("decision_point"))
+        write_state = _write_state(
+            request.get("writeState") or request.get("write_state"),
+            request.get("allowWriteTools") or request.get("allow_write_tools"),
+        )
+        approval_state = _approval_state(
+            request.get("approvalState") or request.get("approval_state"),
+            request.get("approvalRequiredSatisfied") or request.get("approval_required_satisfied"),
+            runtime_action,
+        )
         decision = self.authorize(
             {
                 "subject": {"role": request.get("role")},
                 "action": action_name,
                 "resource": tool_name,
                 "context": {
-                    "allowWriteTools": request.get("allowWriteTools"),
-                    "approvalRequiredSatisfied": request.get("approvalRequiredSatisfied"),
+                    "allowWriteTools": write_state == "enabled",
+                    "approvalRequiredSatisfied": (
+                        approval_state == "satisfied" if decision_point == "execution" else True
+                    ),
                     "semanticIr": request.get("semanticIr"),
                 },
                 "mode": request.get("mode"),
@@ -152,6 +181,19 @@ class PolicyStrataAuthorizer:
             f"unknown tool: {tool_name}" if reason == f"unknown resource: {tool_name}" else reason
             for reason in decision.reasons
         ]
+        requested_tool_kind = _string_value(request.get("toolKind")) or _string_value(
+            request.get("tool_kind")
+        )
+        if (
+            runtime_action is not None
+            and runtime_action.kind
+            and requested_tool_kind
+            and requested_tool_kind != runtime_action.kind
+        ):
+            reasons.append(
+                f"tool kind context {requested_tool_kind} does not match manifest kind "
+                f"{runtime_action.kind} for {tool_name}"
+            )
         return RuntimeToolDecision(
             allowed=not reasons,
             reasons=reasons,
@@ -162,6 +204,13 @@ class PolicyStrataAuthorizer:
             enforcement_mode=decision.enforcement_mode,
             tool_name=tool_name,
             normalized_role=decision.normalized_roles[0] if decision.normalized_roles else None,
+            tool_kind=runtime_action.kind if runtime_action is not None else None,
+            user_id=_string_value(request.get("userId")) or _string_value(request.get("user_id")),
+            household_id=_string_value(request.get("householdId"))
+            or _string_value(request.get("household_id")),
+            write_state=write_state,
+            approval_state=approval_state,
+            decision_point=decision_point,
         )
 
     def authorize_release(self, request: Mapping[str, Any]) -> RuntimeReleaseDecision:
@@ -202,6 +251,10 @@ def create_policystrata_authorizer(manifest: Mapping[str, Any]) -> PolicyStrataA
 
 def authorize(manifest: Mapping[str, Any], request: Mapping[str, Any]) -> RuntimeDecision:
     return create_policystrata_authorizer(manifest).authorize(request)
+
+
+def authorize_tool(manifest: Mapping[str, Any], request: Mapping[str, Any]) -> RuntimeToolDecision:
+    return create_policystrata_authorizer(manifest).authorize_tool(request)
 
 
 def authorize_release(manifest: Mapping[str, Any], request: Mapping[str, Any]) -> RuntimeReleaseDecision:
@@ -462,6 +515,36 @@ def _mode(value: object) -> RuntimeMode:
     if value == "enforce":
         return "enforce"
     return "shadow"
+
+
+def _decision_point(value: object) -> RuntimeDecisionPoint:
+    if value == "pre_model":
+        return "pre_model"
+    return "execution"
+
+
+def _write_state(value: object, allow_write_tools: object) -> RuntimeWriteState:
+    if value == "enabled":
+        return "enabled"
+    if value == "disabled":
+        return "disabled"
+    return "enabled" if allow_write_tools is True else "disabled"
+
+
+def _approval_state(
+    value: object,
+    approval_required_satisfied: object,
+    runtime_action: _RuntimeAction | None,
+) -> RuntimeApprovalState:
+    if value == "not_required":
+        return "not_required"
+    if value == "pending":
+        return "pending"
+    if value == "satisfied":
+        return "satisfied"
+    if approval_required_satisfied is True:
+        return "satisfied"
+    return "pending" if runtime_action is not None and runtime_action.approval_required else "not_required"
 
 
 def _mapping_sequence(value: object) -> list[Mapping[str, Any]]:

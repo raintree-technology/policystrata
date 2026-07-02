@@ -226,4 +226,4 @@ jobs:
 
       - name: Publish Node package to npm
         working-directory: packages/node
-        run: npm publish
+        run: npm publish --provenance

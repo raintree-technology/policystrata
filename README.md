@@ -302,7 +302,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: raintree-technology/policystrata@v1.0.2
+      - uses: raintree-technology/policystrata@v1.0.3
         with:
           config: policystrata.yaml
           out: runs/policystrata
@@ -369,6 +369,14 @@ The Node package also includes `policystrata/runtime`, a deterministic in-proces
 applications that want live tool/action and result-release boundaries generated from a PolicyStrata
 runtime manifest. Use it inside the app's own request path; keep `policystrata scan` and
 `policystrata doctor` as CI/release evidence and readiness gates over exported traces and wiring.
+Runtime `allowed` is always the deterministic policy decision. `mode: "shadow"` does not turn a deny
+into an allow; it is rollout metadata for applications that want to observe denied decisions before
+blocking the same decision under `mode: "enforce"`.
+Tool decisions also include operational metadata for logs and metrics: `toolKind`,
+`decisionPoint`, `writeState`, `approvalState`, `userId`, and `householdId`. Approval-required tools
+can be exposed before model invocation with `decisionPoint: "pre_model"` and
+`approvalState: "pending"`; approval is enforced when the same tool is checked at
+`decisionPoint: "execution"`.
 Node applications should install the Node package from npm; the PyPI package installs the Python
 CLI/scanner and does not make `policystrata/runtime` importable to Node.
 

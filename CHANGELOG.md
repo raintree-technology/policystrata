@@ -4,6 +4,19 @@
 
 No changes yet.
 
+## [1.0.3] - 2026-07-02
+
+- Stage the next Node package as `policystrata@0.1.1` and make the npm trusted-publisher workflow
+  publish with explicit provenance.
+- Add top-level `authorizeTool()`/`authorize_tool()` helpers for Node and Python runtime parity,
+  including decision metadata for `toolKind`, `decisionPoint`, `writeState`, `approvalState`,
+  `userId`, and `householdId`.
+- Validate runtime conformance fixtures against the packaged JSON Schema and compare built
+  Node/Python runtime decisions when the Node package has been built locally.
+- Clarify that runtime `mode: "shadow"` is rollout metadata and does not change the deterministic
+  `allowed` decision.
+- Add local integration-test, Infisical, and Socket configuration files intentionally.
+
 ## [1.0.2] - 2026-07-02
 
 - Add the stable Node runtime authorization surface with generic
