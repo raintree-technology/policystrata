@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "policystrata"
-version = "1.0.1"
+version = "1.0.2"
 description = "Cross-layer policy regression testing for LLM data-agent stacks"
 readme = "README.md"
 requires-python = ">=3.10"

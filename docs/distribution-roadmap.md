@@ -34,6 +34,20 @@ If SDK positioning becomes important, add an explicit `policystrata.sdk` module 
 and result types, compatibility tests, and documentation. Until that exists, treat internal modules
 as useful but not as a committed application-facing API.
 
+## 3a. TypeScript / Node SDK Artifact
+
+The repository also carries a TypeScript SDK source tree under `packages/node`, including the
+`policystrata/runtime` in-process authorizer. CI should build, test, and dry-run package this tree so
+the TypeScript surface remains usable.
+
+That is not the same as a public JavaScript distribution commitment. The current public scanner
+artifact remains PyPI. Before publishing a JavaScript package, add an explicit artifact decision that
+covers versioning, registry/provenance, release workflow, compatibility guarantees, and consumer
+pinning. The current decision is documented in
+[js-distribution-decision.md](js-distribution-decision.md): Node consumers should use the npm
+package, and future npm releases should publish through trusted publishing from the release
+workflow. Applications should not depend on sibling checkouts in production.
+
 ## 4. MCP Server
 
 An MCP server can be useful later for agent workflows that need to inspect scanner output, generate

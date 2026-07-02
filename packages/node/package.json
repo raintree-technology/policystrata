@@ -1,8 +1,31 @@
 {
   "name": "policystrata",
   "version": "0.1.0",
-  "description": "TypeScript/Node trace recorder for PolicyStrata agent and SQL traces",
+  "description": "TypeScript/Node trace recorder and runtime authorizer for PolicyStrata",
   "type": "module",
+  "main": "./dist/src/index.js",
+  "types": "./dist/src/index.d.ts",
+  "license": "MIT",
+  "sideEffects": false,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/raintree-technology/policystrata.git",
+    "directory": "packages/node"
+  },
+  "homepage": "https://github.com/raintree-technology/policystrata#readme",
+  "bugs": {
+    "url": "https://github.com/raintree-technology/policystrata/issues"
+  },
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org/"
+  },
+  "keywords": [
+    "llm",
+    "data-agents",
+    "authorization",
+    "policy-testing",
+    "runtime"
+  ],
   "exports": {
     ".": {
       "types": "./dist/src/index.d.ts",
@@ -11,16 +34,25 @@
     "./node": {
       "types": "./dist/src/node.d.ts",
       "default": "./dist/src/node.js"
+    },
+    "./runtime": {
+      "types": "./dist/src/runtime.d.ts",
+      "default": "./dist/src/runtime.js"
+    },
+    "./runtime-manifest.schema.json": {
+      "default": "./schema/runtime-manifest.schema.json"
     }
   },
   "files": [
     "dist/src",
+    "schema",
+    "LICENSE",
     "README.md"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "test": "bun run build && node --test dist/test/*.test.js",
-    "prepack": "bun run build"
+    "test": "npm run build && node --test dist/test/*.test.js",
+    "prepack": "npm run build"
   },
   "engines": {
     "node": ">=18"
