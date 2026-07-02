@@ -1,10 +1,12 @@
 import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
 import test from "node:test";
+import { Ajv2020 } from "ajv/dist/2020.js";
 
 import {
   authorize,
   authorizeRelease,
+  authorizeTool,
   createPolicyStrataAuthorizer,
   type PolicyStrataAuthorizeInput,
   type PolicyStrataRuntimeManifest,
@@ -27,6 +29,10 @@ const conformanceManifest = JSON.parse(
 const conformanceCases = JSON.parse(
   readFileSync(new URL("../../test/fixtures/runtime/cases.json", import.meta.url), "utf8"),
 ) as RuntimeFixtureCase[];
+
+const runtimeManifestSchema = JSON.parse(
+  readFileSync(new URL("../../schema/runtime-manifest.schema.json", import.meta.url), "utf8"),
+) as Record<string, unknown>;
 
 const toolManifest: PolicyStrataRuntimeManifest = {
   schemaVersion: "policystrata.runtime_manifest.v1",
@@ -65,16 +71,25 @@ const toolManifest: PolicyStrataRuntimeManifest = {
 };
 
 test("runtime manifest JSON Schema is packaged as a deny-by-default manifest schema", () => {
-  const schema = JSON.parse(
-    readFileSync(new URL("../../schema/runtime-manifest.schema.json", import.meta.url), "utf8"),
-  ) as Record<string, unknown>;
-
-  assert.equal(schema.title, "PolicyStrata Runtime Manifest");
-  assert.deepEqual(schema.properties && (schema.properties as Record<string, unknown>).defaultDecision, {
-    const: "deny",
-  });
-  const defs = schema.$defs as Record<string, unknown>;
+  assert.equal(runtimeManifestSchema.title, "PolicyStrata Runtime Manifest");
+  assert.deepEqual(
+    runtimeManifestSchema.properties &&
+      (runtimeManifestSchema.properties as Record<string, unknown>).defaultDecision,
+    {
+      const: "deny",
+    },
+  );
+  const defs = runtimeManifestSchema.$defs as Record<string, unknown>;
   assert.ok(defs.releaseConstraints);
+});
+
+test("runtime conformance manifest validates against the packaged JSON Schema", () => {
+  const ajv = new Ajv2020({ allErrors: true, strictTypes: false });
+  const validate = ajv.compile(runtimeManifestSchema);
+
+  assert.equal(validate(conformanceManifest), true, JSON.stringify(validate.errors, null, 2));
+  assert.equal(validate({ ...conformanceManifest, defaultDecision: "allow" }), false);
+  assert.match(JSON.stringify(validate.errors), /defaultDecision/);
 });
 
 test("generic authorize follows runtime conformance fixtures", () => {
@@ -96,6 +111,28 @@ test("top-level authorize helper delegates to the generic runtime API", () => {
 
   assert.equal(decision.allowed, true);
   assert.deepEqual(decision.normalizedRoles, ["household_viewer"]);
+});
+
+test("top-level authorizeTool helper delegates to the generic runtime API", () => {
+  const decision = authorizeTool(toolManifest, {
+    toolName: "searchTransactions",
+    userId: "user_1",
+    householdId: "household_1",
+    role: "viewer",
+    toolKind: "read",
+    semanticIr: { metric: "transaction_spend", dimensions: ["merchant_name"] },
+    decisionPoint: "execution",
+  });
+
+  assert.equal(decision.allowed, true);
+  assert.equal(decision.action, "read");
+  assert.equal(decision.normalizedRole, "household_viewer");
+  assert.equal(decision.toolKind, "read");
+  assert.equal(decision.userId, "user_1");
+  assert.equal(decision.householdId, "household_1");
+  assert.equal(decision.writeState, "disabled");
+  assert.equal(decision.approvalState, "not_required");
+  assert.equal(decision.decisionPoint, "execution");
 });
 
 test("authorizeRelease wraps release-boundary conformance checks", () => {
@@ -182,6 +219,40 @@ test("authorizeTool approval-required tools require approval", () => {
 
   assert.equal(decision.allowed, false);
   assert.match(decision.reasons.join("\n"), /requires approval/);
+});
+
+test("authorizeTool exposes approval-required tools at the pre-model decision point", () => {
+  const authorizer = createPolicyStrataAuthorizer(toolManifest);
+  const decision = authorizer.authorizeTool({
+    toolName: "generateTransactionExport",
+    role: "owner",
+    toolKind: "export",
+    decisionPoint: "pre_model",
+    approvalState: "pending",
+    userId: "user_1",
+    householdId: "household_1",
+  });
+
+  assert.equal(decision.allowed, true);
+  assert.equal(decision.toolKind, "export");
+  assert.equal(decision.decisionPoint, "pre_model");
+  assert.equal(decision.approvalState, "pending");
+  assert.equal(decision.writeState, "disabled");
+  assert.equal(decision.userId, "user_1");
+  assert.equal(decision.householdId, "household_1");
+});
+
+test("authorizeTool denies mismatched tool-kind context", () => {
+  const authorizer = createPolicyStrataAuthorizer(toolManifest);
+  const decision = authorizer.authorizeTool({
+    toolName: "searchTransactions",
+    role: "owner",
+    toolKind: "write",
+  });
+
+  assert.equal(decision.allowed, false);
+  assert.match(decision.reasons.join("\n"), /tool kind context write/);
+  assert.equal(decision.toolKind, "read");
 });
 
 test("authorizeTool write tools require the write-tool gate and approval", () => {

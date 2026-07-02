@@ -1,6 +1,9 @@
 export type PolicyStrataRuntimeMode = "shadow" | "enforce";
 export type PolicyStrataRuntimeDefaultDecision = "deny";
 export type PolicyStrataRuntimeToolKind = "read" | "write" | "export" | "memory" | "external";
+export type PolicyStrataRuntimeDecisionPoint = "pre_model" | "execution";
+export type PolicyStrataRuntimeApprovalState = "not_required" | "pending" | "satisfied";
+export type PolicyStrataRuntimeWriteState = "disabled" | "enabled";
 
 export interface PolicyStrataRuntimeSemanticIr {
   metric?: unknown;
@@ -129,9 +132,15 @@ export interface PolicyStrataAuthorizeDecision {
 export interface PolicyStrataAuthorizeToolInput {
   toolName: string;
   action?: string;
+  userId?: string | null;
+  householdId?: string | null;
   role?: string | null;
+  toolKind?: PolicyStrataRuntimeToolKind | string | null;
   allowWriteTools?: boolean;
+  writeState?: PolicyStrataRuntimeWriteState;
   approvalRequiredSatisfied?: boolean;
+  approvalState?: PolicyStrataRuntimeApprovalState;
+  decisionPoint?: PolicyStrataRuntimeDecisionPoint;
   semanticIr?: PolicyStrataRuntimeSemanticIr | null;
   mode?: PolicyStrataRuntimeMode;
 }
@@ -139,6 +148,12 @@ export interface PolicyStrataAuthorizeToolInput {
 export interface PolicyStrataAuthorizeToolDecision extends PolicyStrataAuthorizeDecision {
   toolName: string;
   normalizedRole?: string;
+  toolKind?: string;
+  userId?: string;
+  householdId?: string;
+  writeState: PolicyStrataRuntimeWriteState;
+  approvalState: PolicyStrataRuntimeApprovalState;
+  decisionPoint: PolicyStrataRuntimeDecisionPoint;
 }
 
 export interface PolicyStrataAuthorizeReleaseInput {
@@ -251,13 +266,25 @@ export function createPolicyStrataAuthorizer(
     authorize,
     authorizeTool(input) {
       const action = input.action ?? toolActionName(resourcesByName, input.toolName);
+      const runtimeResource = resourcesByName.get(input.toolName);
+      const runtimeAction = runtimeResource?.actions.get(action);
+      const decisionPoint = input.decisionPoint ?? "execution";
+      const writeState = input.writeState ?? (input.allowWriteTools === true ? "enabled" : "disabled");
+      const approvalState =
+        input.approvalState ??
+        (input.approvalRequiredSatisfied === true
+          ? "satisfied"
+          : runtimeAction?.approvalRequired === true
+            ? "pending"
+            : "not_required");
       const decision = authorize({
         subject: { role: input.role },
         action,
         resource: input.toolName,
         context: {
-          allowWriteTools: input.allowWriteTools,
-          approvalRequiredSatisfied: input.approvalRequiredSatisfied,
+          allowWriteTools: writeState === "enabled",
+          approvalRequiredSatisfied:
+            decisionPoint === "execution" ? approvalState === "satisfied" : true,
           semanticIr: input.semanticIr,
         },
         mode: input.mode,
@@ -265,6 +292,11 @@ export function createPolicyStrataAuthorizer(
       const reasons = decision.reasons.map((reason) =>
         reason === `unknown resource: ${input.toolName}` ? `unknown tool: ${input.toolName}` : reason,
       );
+      if (runtimeAction?.kind && input.toolKind && input.toolKind !== runtimeAction.kind) {
+        reasons.push(
+          `tool kind context ${input.toolKind} does not match manifest kind ${runtimeAction.kind} for ${input.toolName}`,
+        );
+      }
 
       return {
         ...decision,
@@ -272,6 +304,12 @@ export function createPolicyStrataAuthorizer(
         reasons,
         toolName: input.toolName,
         normalizedRole: decision.normalizedRoles[0],
+        toolKind: runtimeAction?.kind,
+        userId: optionalString(input.userId),
+        householdId: optionalString(input.householdId),
+        writeState,
+        approvalState,
+        decisionPoint,
       };
     },
     authorizeRelease(input) {
@@ -303,6 +341,13 @@ export function authorize(
   input: PolicyStrataAuthorizeInput,
 ): PolicyStrataAuthorizeDecision {
   return createPolicyStrataAuthorizer(manifest).authorize(input);
+}
+
+export function authorizeTool(
+  manifest: PolicyStrataRuntimeManifest,
+  input: PolicyStrataAuthorizeToolInput,
+): PolicyStrataAuthorizeToolDecision {
+  return createPolicyStrataAuthorizer(manifest).authorizeTool(input);
 }
 
 export function authorizeRelease(
@@ -466,6 +511,11 @@ function toolActionName(
   if (nonReleaseActions.length === 1) return nonReleaseActions[0];
   if (resource.actions.size !== 1) return "run";
   return [...resource.actions.keys()][0];
+}
+
+function optionalString(value: string | null | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
 }
 
 function semanticReasons(

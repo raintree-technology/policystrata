@@ -101,13 +101,24 @@ const decision = authorizer.authorize({
 ```ts
 const toolDecision = authorizer.authorizeTool({
   toolName: "searchTransactions",
+  userId: "user-1",
+  householdId: "household-1",
   role: "owner",
+  toolKind: "read",
   allowWriteTools: false,
+  writeState: "disabled",
   approvalRequiredSatisfied: true,
+  approvalState: "satisfied",
+  decisionPoint: "execution",
   semanticIr: { metric: "transaction_spend", dimensions: ["merchant_name"] },
   mode: "shadow",
 });
 ```
+
+`authorizeTool()` decisions include operational metadata for application logs and metrics:
+`toolKind`, `decisionPoint`, `writeState`, `approvalState`, `userId`, and `householdId`.
+Approval-required tools may be visible at `decisionPoint: "pre_model"` with
+`approvalState: "pending"`; the same pending approval is denied at `decisionPoint: "execution"`.
 
 `authorizeRelease()` wraps the same API for the paper's release-conformance boundary: a result and
 its lineage may leave only approved boundaries.
@@ -126,8 +137,15 @@ const releaseDecision = authorizer.authorizeRelease({
 Runtime manifests must default to deny. Unknown tools/resources/actions, unknown roles, missing
 approval, write tools without an application write-tool grant, undeclared semantic metrics or
 dimensions, and release attempts that violate result/lineage/boundary constraints are denied.
-`mode` is reported in the decision so an application can roll out in shadow mode before enforcing
-the same deterministic decision.
+`allowed` is always the deterministic policy decision. `mode` is reported as rollout metadata:
+applications usually log or sample denied shadow decisions, then block the same denied decision only
+after switching that call site to `mode: "enforce"`.
+
+```ts
+if (!decision.allowed && decision.enforcementMode === "enforce") {
+  throw new Error(decision.reasons.join("; "));
+}
+```
 
 The runtime manifest schema is available at `policystrata/runtime-manifest.schema.json` and in this
 source tree at `schema/runtime-manifest.schema.json`. The runtime authorizer is for in-process app

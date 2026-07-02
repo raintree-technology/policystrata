@@ -32,7 +32,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: raintree-technology/policystrata@v1.0.2
+      - uses: raintree-technology/policystrata@v1.0.3
         with:
           config: policystrata.yaml
           out: runs/policystrata
@@ -45,7 +45,7 @@ jobs:
 ## Upload Scan Artifacts
 
 ```yaml
-      - uses: raintree-technology/policystrata@v1.0.2
+      - uses: raintree-technology/policystrata@v1.0.3
         with:
           config: policystrata.yaml
           out: runs/policystrata

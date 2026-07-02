@@ -26,6 +26,8 @@ import { createPolicyStrataAuthorizer } from "policystrata/runtime";
 The initial npm package `policystrata@0.1.0` was published on 2026-07-02. The npm package has a
 GitHub Actions trusted publisher configured for this repository's `publish.yml` workflow and `npm`
 environment.
+The Node package version `policystrata@0.1.1` is intended to publish through the GitHub trusted
+publisher workflow from the `v1.0.3` tagged release commit.
 
 ## Release Policy
 
@@ -40,6 +42,8 @@ Before publishing a future npm package version:
 
 - confirm package ownership and maintainer access on npm;
 - use npm trusted publishing from GitHub Actions rather than a long-lived token or local publish;
+- keep `npm publish --provenance` in the workflow so provenance intent is explicit even though npm
+  trusted publishing also generates provenance attestations automatically;
 - verify the target package version is not already published;
 - keep the package export map limited to documented public entry points;
 - include TypeScript declarations, README, license, and the runtime manifest schema in the tarball;
@@ -64,8 +68,8 @@ The Python and npm artifacts may version independently because they serve differ
 ecosystems. If they are released together from one tag, the release notes should state both artifact
 versions explicitly, for example:
 
-- PyPI: `policystrata==1.0.2`
-- npm: `policystrata@0.1.0`
+- PyPI: `policystrata==1.0.3`
+- npm: `policystrata@0.1.1`
 
 If the Node runtime becomes a committed stable SDK at the same maturity level as the scanner, revisit
 whether the npm version should align with the Python package version.
