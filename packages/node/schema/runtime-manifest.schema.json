@@ -1,0 +1,229 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://policystrata.dev/schemas/runtime-manifest.schema.json",
+  "title": "PolicyStrata Runtime Manifest",
+  "type": "object",
+  "required": ["schemaVersion", "version", "defaultDecision"],
+  "additionalProperties": true,
+  "properties": {
+    "schemaVersion": {
+      "const": "policystrata.runtime_manifest.v1"
+    },
+    "version": {
+      "type": ["string", "number"]
+    },
+    "defaultDecision": {
+      "const": "deny"
+    },
+    "roleAliases": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "resources": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/resource"
+      }
+    },
+    "tools": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/tool"
+      }
+    }
+  },
+  "anyOf": [
+    {
+      "required": ["resources"]
+    },
+    {
+      "required": ["tools"]
+    }
+  ],
+  "$defs": {
+    "resource": {
+      "type": "object",
+      "required": ["name", "actions"],
+      "additionalProperties": true,
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source": {
+          "type": "string"
+        },
+        "actions": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/action"
+          }
+        }
+      }
+    },
+    "action": {
+      "type": "object",
+      "required": ["name", "allowedRoles"],
+      "additionalProperties": true,
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "type": "string",
+          "minLength": 1
+        },
+        "allowedRoles": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "approvalRequired": {
+          "type": "boolean"
+        },
+        "requiresWriteGrant": {
+          "type": "boolean"
+        },
+        "semanticConstraints": {
+          "$ref": "#/$defs/semanticConstraints"
+        },
+        "releaseConstraints": {
+          "$ref": "#/$defs/releaseConstraints"
+        },
+        "metrics": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "dimensions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "source": {
+          "type": "string"
+        }
+      }
+    },
+    "semanticConstraints": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "metrics": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "dimensions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "releaseConstraints": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "boundaries": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "resultKinds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "lineageSources": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "maxRows": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "requireLineage": {
+          "type": "boolean"
+        },
+        "allowSensitive": {
+          "type": "boolean"
+        },
+        "allowRawRows": {
+          "type": "boolean"
+        }
+      }
+    },
+    "tool": {
+      "type": "object",
+      "required": ["name", "kind", "allowedRoles"],
+      "additionalProperties": true,
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "enum": ["read", "write", "export", "memory", "external"]
+        },
+        "allowedRoles": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "approvalRequired": {
+          "type": "boolean"
+        },
+        "metrics": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "dimensions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "source": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

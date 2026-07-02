@@ -4,6 +4,13 @@
 benchmark runner and treats PolicyStrata as a scanner and release gate, not as an authorization
 boundary.
 
+The runtime authorizer is a separate SDK surface. Applications can call `policystrata/runtime`
+inside their own request path to decide whether a subject may perform an action on a resource, or
+whether a result/lineage pair may cross a release boundary. The scanner does not sit on that request
+path: it consumes exported traces, semantic fixtures, manifests, and optional database evidence to
+catch policy drift before release. `policystrata doctor` is also separate; it audits whether the
+scanner and stack wiring are present.
+
 ## Inputs
 
 The scanner reads a `policystrata.yaml` config with:

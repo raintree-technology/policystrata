@@ -1,0 +1,369 @@
+[
+  {
+    "name": "allow_read_with_role_alias",
+    "input": {
+      "subject": {
+        "id": "user-1",
+        "role": "viewer"
+      },
+      "action": "read",
+      "resource": "searchTransactions",
+      "context": {
+        "semanticIr": {
+          "metric": "transaction_spend",
+          "dimensions": ["merchant_name"]
+        }
+      },
+      "mode": "shadow"
+    },
+    "expected": {
+      "allowed": true,
+      "normalizedRoles": ["household_viewer"],
+      "reasonIncludes": []
+    }
+  },
+  {
+    "name": "deny_unknown_resource",
+    "input": {
+      "subject": {
+        "role": "owner"
+      },
+      "action": "read",
+      "resource": "unknownReport",
+      "context": {}
+    },
+    "expected": {
+      "allowed": false,
+      "normalizedRoles": ["household_owner"],
+      "reasonIncludes": ["unknown resource: unknownReport"]
+    }
+  },
+  {
+    "name": "deny_unknown_action",
+    "input": {
+      "subject": {
+        "role": "owner"
+      },
+      "action": "archive",
+      "resource": "searchTransactions",
+      "context": {}
+    },
+    "expected": {
+      "allowed": false,
+      "normalizedRoles": ["household_owner"],
+      "reasonIncludes": ["unknown action: archive for resource searchTransactions"]
+    }
+  },
+  {
+    "name": "deny_unknown_role",
+    "input": {
+      "subject": {
+        "role": "support"
+      },
+      "action": "read",
+      "resource": "searchTransactions",
+      "context": {}
+    },
+    "expected": {
+      "allowed": false,
+      "normalizedRoles": ["support"],
+      "reasonIncludes": ["unknown role: support"]
+    }
+  },
+  {
+    "name": "deny_by_default_role_mismatch",
+    "input": {
+      "subject": {
+        "role": "viewer"
+      },
+      "action": "export",
+      "resource": "generateTransactionExport",
+      "context": {
+        "approvalRequiredSatisfied": true
+      }
+    },
+    "expected": {
+      "allowed": false,
+      "normalizedRoles": ["household_viewer"],
+      "reasonIncludes": [
+        "roles household_viewer are not allowed to export generateTransactionExport"
+      ]
+    }
+  },
+  {
+    "name": "deny_export_without_approval",
+    "input": {
+      "subject": {
+        "role": "owner"
+      },
+      "action": "export",
+      "resource": "generateTransactionExport",
+      "context": {
+        "approvalRequiredSatisfied": false
+      }
+    },
+    "expected": {
+      "allowed": false,
+      "normalizedRoles": ["household_owner"],
+      "reasonIncludes": ["requires approval"]
+    }
+  },
+  {
+    "name": "deny_write_without_gate_or_approval",
+    "input": {
+      "subject": {
+        "role": "admin"
+      },
+      "action": "write",
+      "resource": "categorizeTransaction",
+      "context": {
+        "allowWriteTools": false,
+        "approvalRequiredSatisfied": false
+      }
+    },
+    "expected": {
+      "allowed": false,
+      "normalizedRoles": ["household_admin"],
+      "reasonIncludes": ["requires allowWriteTools", "requires approval"]
+    }
+  },
+  {
+    "name": "allow_write_with_gate_and_approval",
+    "input": {
+      "subject": {
+        "role": "admin"
+      },
+      "action": "write",
+      "resource": "categorizeTransaction",
+      "context": {
+        "allowWriteTools": true,
+        "approvalRequiredSatisfied": true,
+        "semanticIr": {
+          "metric": "transaction_spend",
+          "dimensions": ["category"]
+        }
+      },
+      "mode": "enforce"
+    },
+    "expected": {
+      "allowed": true,
+      "normalizedRoles": ["household_admin"],
+      "reasonIncludes": []
+    }
+  },
+  {
+    "name": "deny_semantic_constraint_mismatch",
+    "input": {
+      "subject": {
+        "role": "owner"
+      },
+      "action": "read",
+      "resource": "searchTransactions",
+      "context": {
+        "semanticIr": {
+          "metric": "account_balance",
+          "dimensions": ["account_mask"]
+        }
+      }
+    },
+    "expected": {
+      "allowed": false,
+      "normalizedRoles": ["household_owner"],
+      "reasonIncludes": ["metric account_balance", "dimension account_mask"]
+    }
+  },
+  {
+    "name": "allow_release_aggregate_to_user",
+    "input": {
+      "subject": {
+        "role": "viewer"
+      },
+      "action": "release",
+      "resource": "searchTransactions",
+      "context": {
+        "release": {
+          "boundary": "user",
+          "result": {
+            "kind": "aggregate",
+            "rowCount": 12,
+            "containsSensitiveValues": false
+          },
+          "lineage": {
+            "sources": ["transactions"],
+            "containsRawRows": false
+          }
+        }
+      }
+    },
+    "expected": {
+      "allowed": true,
+      "normalizedRoles": ["household_viewer"],
+      "reasonIncludes": []
+    }
+  },
+  {
+    "name": "deny_release_to_llm_context",
+    "input": {
+      "subject": {
+        "role": "viewer"
+      },
+      "action": "release",
+      "resource": "searchTransactions",
+      "context": {
+        "release": {
+          "boundary": "llm_context",
+          "result": {
+            "kind": "aggregate",
+            "rowCount": 12
+          },
+          "lineage": {
+            "sources": ["transactions"]
+          }
+        }
+      }
+    },
+    "expected": {
+      "allowed": false,
+      "normalizedRoles": ["household_viewer"],
+      "reasonIncludes": ["release boundary llm_context"]
+    }
+  },
+  {
+    "name": "deny_raw_row_release",
+    "input": {
+      "subject": {
+        "role": "owner"
+      },
+      "action": "release",
+      "resource": "searchTransactions",
+      "context": {
+        "release": {
+          "boundary": "user",
+          "result": {
+            "kind": "aggregate",
+            "rowCount": 12
+          },
+          "lineage": {
+            "sources": ["transactions"],
+            "containsRawRows": true
+          }
+        }
+      }
+    },
+    "expected": {
+      "allowed": false,
+      "normalizedRoles": ["household_owner"],
+      "reasonIncludes": ["release lineage contains raw rows"]
+    }
+  },
+  {
+    "name": "deny_sensitive_release",
+    "input": {
+      "subject": {
+        "role": "owner"
+      },
+      "action": "release",
+      "resource": "searchTransactions",
+      "context": {
+        "release": {
+          "boundary": "user",
+          "result": {
+            "kind": "aggregate",
+            "rowCount": 12,
+            "containsSensitiveValues": true
+          },
+          "lineage": {
+            "sources": ["transactions"]
+          }
+        }
+      }
+    },
+    "expected": {
+      "allowed": false,
+      "normalizedRoles": ["household_owner"],
+      "reasonIncludes": ["release result contains sensitive values"]
+    }
+  },
+  {
+    "name": "deny_missing_lineage",
+    "input": {
+      "subject": {
+        "role": "owner"
+      },
+      "action": "release",
+      "resource": "searchTransactions",
+      "context": {
+        "release": {
+          "boundary": "user",
+          "result": {
+            "kind": "aggregate",
+            "rowCount": 12
+          }
+        }
+      }
+    },
+    "expected": {
+      "allowed": false,
+      "normalizedRoles": ["household_owner"],
+      "reasonIncludes": ["release lineage is required"]
+    }
+  },
+  {
+    "name": "deny_export_release_without_approval",
+    "input": {
+      "subject": {
+        "role": "owner"
+      },
+      "action": "release",
+      "resource": "generateTransactionExport",
+      "context": {
+        "approvalRequiredSatisfied": false,
+        "release": {
+          "boundary": "user",
+          "result": {
+            "kind": "file_export",
+            "rowCount": 500
+          },
+          "lineage": {
+            "sources": ["transactions"]
+          }
+        }
+      }
+    },
+    "expected": {
+      "allowed": false,
+      "normalizedRoles": ["household_owner"],
+      "reasonIncludes": ["requires approval"]
+    }
+  },
+  {
+    "name": "allow_export_release_with_approval",
+    "input": {
+      "subject": {
+        "role": "owner"
+      },
+      "action": "release",
+      "resource": "generateTransactionExport",
+      "context": {
+        "approvalRequiredSatisfied": true,
+        "release": {
+          "boundary": "user",
+          "result": {
+            "kind": "file_export",
+            "rowCount": 500
+          },
+          "lineage": {
+            "sources": ["transactions"],
+            "containsRawRows": false
+          }
+        }
+      },
+      "mode": "enforce"
+    },
+    "expected": {
+      "allowed": true,
+      "normalizedRoles": ["household_owner"],
+      "reasonIncludes": []
+    }
+  }
+]

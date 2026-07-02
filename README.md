@@ -12,7 +12,7 @@ chat systems, or governed enterprise LLM tools and need to know whether prompts,
 semantic plans, validators, SQL compilers, database controls, and output filters still agree about
 policy.
 
-PolicyStrata is not an authorization boundary, and it is not another generic text-to-SQL benchmark.
+PolicyStrata's scanner is not an authorization boundary, and it is not another generic text-to-SQL benchmark.
 It is a reproducible research artifact and regression gate for finding reachable disagreements
 between layers.
 
@@ -298,11 +298,11 @@ on:
 
 jobs:
   scan:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
-      - uses: raintree-technology/policystrata@v1.0.1
+      - uses: raintree-technology/policystrata@v1.0.2
         with:
           config: policystrata.yaml
           out: runs/policystrata
@@ -365,6 +365,13 @@ Structured trace payloads such as semantic filters and expected-policy notes are
 recursively by default; `semantic_ir.filters.tenant_id` is HMACed unless trusted fixtures set
 `redaction.hashIds: false`.
 
+The Node package also includes `policystrata/runtime`, a deterministic in-process authorizer for
+applications that want live tool/action and result-release boundaries generated from a PolicyStrata
+runtime manifest. Use it inside the app's own request path; keep `policystrata scan` and
+`policystrata doctor` as CI/release evidence and readiness gates over exported traces and wiring.
+Node applications should install the Node package from npm; the PyPI package installs the Python
+CLI/scanner and does not make `policystrata/runtime` importable to Node.
+
 ## Reference Docs
 
 - [docs/benchmark-reference.md](docs/benchmark-reference.md): domains, generated mutants,
@@ -374,6 +381,8 @@ recursively by default; `semantic_ir.filters.tenant_id` is HMACed unless trusted
 - [docs/github-action.md](docs/github-action.md): CI wrapper for `policystrata scan`.
 - [docs/distribution-roadmap.md](docs/distribution-roadmap.md): CLI, GitHub Action, SDK, MCP, and
   GitHub CLI extension sequence.
+- [docs/js-distribution-decision.md](docs/js-distribution-decision.md): JavaScript package
+  dry-run/publishing decision.
 - [docs/evidence.md](docs/evidence.md): current evidence snapshot and reproduction commands.
 - [docs/methodology.md](docs/methodology.md): claims, limitations, mutant definitions, and witness
   minimization.
