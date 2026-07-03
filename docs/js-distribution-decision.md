@@ -26,8 +26,8 @@ import { createPolicyStrataAuthorizer } from "policystrata/runtime";
 The initial npm package `policystrata@0.1.0` was published on 2026-07-02. The npm package has a
 GitHub Actions trusted publisher configured for this repository's `publish.yml` workflow and `npm`
 environment.
-The Node package version `policystrata@0.1.1` is intended to publish through the GitHub trusted
-publisher workflow from the `v1.0.3` tagged release commit.
+The Node package version `policystrata@0.1.1` was published through the GitHub trusted publisher
+workflow from the `v1.0.3` tagged release commit.
 
 ## Release Policy
 
