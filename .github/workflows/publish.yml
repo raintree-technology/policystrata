@@ -277,6 +277,7 @@ jobs:
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
         with:
           node-version: "24"
+          registry-url: https://registry.npmjs.org
           package-manager-cache: false
 
       - name: Set up Bun
@@ -299,14 +300,14 @@ jobs:
         run: |
           package_name="$(node -p "require('./packages/node/package.json').name")"
           package_version="$(node -p "require('./packages/node/package.json').version")"
-          if bun pm view "${package_name}@${package_version}" version >/dev/null 2>&1; then
+          if npm view "${package_name}@${package_version}" version >/dev/null 2>&1; then
             echo "${package_name}@${package_version} already exists on npm" >&2
             exit 1
           fi
 
       - name: Publish Node package to npm
         working-directory: packages/node
-        run: bun publish --provenance
+        run: npm publish --provenance
 
       - name: Post-publish Node package smoke
         run: node scripts/release-smoke.mjs --published-npm-runtime
@@ -333,6 +334,7 @@ jobs:
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
         with:
           node-version: "24"
+          registry-url: https://registry.npmjs.org
           package-manager-cache: false
 
       - name: Set up Bun
@@ -355,14 +357,14 @@ jobs:
         run: |
           package_name="$(node -p "require('./packages/gateway/package.json').name")"
           package_version="$(node -p "require('./packages/gateway/package.json').version")"
-          if bun pm view "${package_name}@${package_version}" version >/dev/null 2>&1; then
+          if npm view "${package_name}@${package_version}" version >/dev/null 2>&1; then
             echo "${package_name}@${package_version} already exists on npm" >&2
             exit 1
           fi
 
       - name: Publish Gateway package to npm
         working-directory: packages/gateway
-        run: bun publish --provenance --access public
+        run: npm publish --provenance --access public
 
       - name: Post-publish Gateway package smoke
         run: node scripts/release-smoke.mjs --published-gateway
