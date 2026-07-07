@@ -4,12 +4,21 @@ from pathlib import Path
 
 import psycopg
 import pytest
+from pydantic import ValidationError
 
 from policystrata.database import assert_read_only_sql
 from policystrata.domain import load_policy
 from policystrata.integrations.dbt_semantic import inspect_dbt_semantic_model
 from policystrata.models import SemanticQuery
-from policystrata.scan_models import GateOutcome, ImportedTrace, MutantStatus, RegressionCase
+from policystrata.scan_models import (
+    GateOutcome,
+    ImportedTrace,
+    MutantStatus,
+    RegressionCase,
+    RlsCheckConfig,
+    ScanConfig,
+    StateAssertionConfig,
+)
 from policystrata.scanner import (
     exercised_evidence_levels,
     load_scan_config,
@@ -31,8 +40,54 @@ def test_scan_config_loads_stable_sections() -> None:
     assert config.version == 1
     assert config.domain == "support_saas"
     assert config.sql_traces.required
+    assert config.runtime_manifests.files == []
+    assert config.runtime_events.files == []
     assert config.database.mode == "postgres"
     assert config.gate.fail_on_high_confidence
+
+
+def test_scan_config_accepts_optional_runtime_sections() -> None:
+    config = ScanConfig.model_validate(
+        {
+            "version": 1,
+            "runtime_manifests": {"files": ["runtime-manifest.json"], "required": True},
+            "runtime_events": {"files": ["runtime-events.jsonl"]},
+        }
+    )
+
+    assert config.runtime_manifests.files == ["runtime-manifest.json"]
+    assert config.runtime_manifests.required is True
+    assert config.runtime_events.files == ["runtime-events.jsonl"]
+
+
+def test_scan_config_rejects_unknown_keys(tmp_path) -> None:
+    config_path = tmp_path / "policystrata.yaml"
+    config_path.write_text(
+        """
+version: 1
+domain: support_saas
+unexpected_section: true
+""".lstrip(),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="[Ee]xtra inputs"):
+        load_scan_config(config_path)
+
+
+def test_scan_config_rejects_unsupported_version() -> None:
+    with pytest.raises(ValidationError):
+        ScanConfig.model_validate({"version": 2})
+
+
+def test_rls_check_requires_expected_scope() -> None:
+    with pytest.raises(ValidationError, match="expected_rows or expected_tenant_ids"):
+        RlsCheckConfig(id="accounts_rls", sql="select tenant_id from accounts")
+
+
+def test_state_assertion_requires_condition() -> None:
+    with pytest.raises(ValidationError, match="at least one expected state condition"):
+        StateAssertionConfig(id="no_op_state", sql="select tenant_id from accounts")
 
 
 def test_scan_failing_fixture_writes_gate_outputs(tmp_path) -> None:
@@ -324,6 +379,36 @@ def test_imported_trace_rejects_non_read_only_sql(tmp_path) -> None:
 
     with pytest.raises(ValueError, match="only read-only"):
         load_imported_traces([trace_path])
+
+
+def test_imported_trace_ignores_extra_adapter_fields(tmp_path) -> None:
+    trace_path = tmp_path / "traces.jsonl"
+    trace_path.write_text(
+        json.dumps(
+            {
+                "id": "trace_with_adapter_metadata",
+                "principal": "acme_analyst",
+                "tenant_ids": ["acme"],
+                "sql": "select accounts.tenant_id from accounts where accounts.tenant_id in ('acme')",
+                "semantic_ir": {
+                    "metric": "ticket_count",
+                    "limit": 100,
+                    "adapter_model": "metadata-only",
+                },
+                "span_id": "span-1",
+                "service": "analytics-agent",
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    trace = load_imported_traces([trace_path])[0]
+
+    assert trace.id == "trace_with_adapter_metadata"
+    assert trace.semantic_ir is not None
+    assert trace.semantic_ir.metric == "ticket_count"
+    assert not hasattr(trace, "span_id")
 
 
 def test_imported_trace_paths_must_stay_under_config_dir(tmp_path) -> None:

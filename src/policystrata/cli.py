@@ -4,6 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
+import yaml
 from pydantic import ValidationError
 
 from policystrata.artifact_report import artifact_report_json, render_artifact_report
@@ -24,8 +25,14 @@ from policystrata.init_scan import SCANNER_EXAMPLES, init_scan_project
 from policystrata.integrations.dbt_semantic import compare_dbt_semantic_model, dbt_semantic_has_warnings
 from policystrata.minimize import minimize_witness_file
 from policystrata.runner import run_suite
+from policystrata.runtime import (
+    RuntimeEventEvaluation,
+    evaluate_runtime_events,
+    expected_runtime_decision_mismatches,
+)
 from policystrata.scan_models import GateOutcome
 from policystrata.scanner import run_scan
+from policystrata.schemas import SCHEMA_KINDS, public_schema
 from policystrata.summary import summarize_run
 
 
@@ -150,6 +157,18 @@ def build_parser() -> argparse.ArgumentParser:
     evidence_parser.add_argument("runs", nargs="+", help="Run directories, optionally named as suite=path.")
     evidence_parser.add_argument("--out", type=Path, default=None)
 
+    schema_parser = subparsers.add_parser(
+        "schema",
+        help="Render JSON Schema for a public PolicyStrata contract.",
+    )
+    schema_parser.add_argument(
+        "--kind",
+        choices=SCHEMA_KINDS,
+        required=True,
+        help="Contract schema to render.",
+    )
+    schema_parser.add_argument("--out", type=Path, default=None, help="Optional output file.")
+
     artifact_parser = subparsers.add_parser(
         "artifact-report",
         help="Render reviewer-facing reproducibility and usability metrics for a run.",
@@ -187,7 +206,8 @@ def build_parser() -> argparse.ArgumentParser:
             "    --out runs/scan-clean\n\n"
             "Accepted config sections:\n"
             "  version, domain, domain_path, output, sarif, dbt, sql_traces,\n"
-            "  policy_docs, prompt_manifests, source_maps, tenancy, database, fuzz, gate"
+            "  policy_docs, prompt_manifests, source_maps, runtime_manifests,\n"
+            "  runtime_events, tenancy, database, fuzz, gate"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -198,6 +218,30 @@ def build_parser() -> argparse.ArgumentParser:
         help="Scan config YAML.",
     )
     scan_parser.add_argument("--out", type=Path, default=None, help="Output directory for scan artifacts.")
+
+    runtime_parser = subparsers.add_parser(
+        "runtime-evaluate",
+        help="Evaluate redacted runtime gateway events against a PolicyStrata runtime manifest.",
+        description=(
+            "Evaluate one runtime event or an {events:[...]} batch.\n\n"
+            "Examples:\n"
+            "  policystrata runtime-evaluate --manifest runtime-manifest.json --event runtime-event.json\n"
+            "  policystrata runtime-evaluate --manifest runtime-manifest.yaml --event events.json "
+            "--out decisions.json"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    runtime_parser.add_argument("--manifest", type=Path, required=True)
+    runtime_parser.add_argument("--event", type=Path, required=True)
+    runtime_parser.add_argument("--out", type=Path, default=None)
+    runtime_parser.add_argument(
+        "--assert-expected",
+        action="store_true",
+        help=(
+            "Assert each fixture expectedDecision against the evaluated decision. "
+            "When set, exit status reflects assertion mismatches instead of blocked events."
+        ),
+    )
 
     doctor_parser = subparsers.add_parser(
         "doctor",
@@ -317,7 +361,6 @@ def run_command(args: argparse.Namespace) -> int:
 
     if args.command == "ablations":
         return write_json_result(evaluate_ablation_runs(args.run_dirs), args.out)
-        return 0
 
     if args.command == "export":
         print(json.dumps(export_run(args.run_dir, args.format, args.out), sort_keys=True))
@@ -331,6 +374,9 @@ def run_command(args: argparse.Namespace) -> int:
         else:
             print(markdown, end="")
         return 0
+
+    if args.command == "schema":
+        return write_schema(args.kind, args.out)
 
     if args.command == "artifact-report":
         output = (
@@ -370,6 +416,40 @@ def run_command(args: argparse.Namespace) -> int:
         )
         return 1 if scan_result.gate.outcome == GateOutcome.FAIL else 0
 
+    if args.command == "runtime-evaluate":
+        runtime_manifest = read_json_or_yaml(args.manifest)
+        event_payload = read_json_or_yaml(args.event)
+        if not isinstance(runtime_manifest, dict):
+            raise ValueError("runtime manifest must be an object")
+        events = runtime_event_list(event_payload)
+        evaluations = evaluate_runtime_events(runtime_manifest, events)
+        expected_mismatches = runtime_expected_mismatches(
+            events,
+            evaluations,
+            require_expected=args.assert_expected,
+        )
+        runtime_output = {
+            "ok": all(evaluation.allowed for evaluation in evaluations),
+            "expectedMatched": not expected_mismatches,
+            "expectedMismatches": expected_mismatches,
+            "events": [
+                evaluation.to_event(event)
+                for evaluation, event in zip(evaluations, events, strict=True)
+            ],
+            "decisions": [evaluation.to_dict() for evaluation in evaluations],
+        }
+        payload = json.dumps(runtime_output, indent=2, sort_keys=True) + "\n"
+        exit_code = 0 if not expected_mismatches else 1
+        if not args.assert_expected:
+            exit_code = 0 if runtime_output["ok"] else 1
+        if args.out is not None:
+            args.out.parent.mkdir(parents=True, exist_ok=True)
+            args.out.write_text(payload, encoding="utf-8")
+            print(json.dumps({"out": str(args.out)}, sort_keys=True))
+        else:
+            print(payload, end="")
+        return exit_code
+
     if args.command == "doctor":
         if args.config is None:
             doctor = run_doctor()
@@ -400,6 +480,56 @@ def run_command(args: argparse.Namespace) -> int:
 
 def write_json_result(result: object, out_path: Path | None) -> int:
     payload = json.dumps(result, indent=2, sort_keys=True) + "\n"
+    return write_text_result(payload, out_path)
+
+
+def read_json_or_yaml(path: Path) -> object:
+    text = path.read_text(encoding="utf-8")
+    if path.suffix.lower() == ".json":
+        return json.loads(text)
+    return yaml.safe_load(text)
+
+
+def runtime_event_list(payload: object) -> list[dict[str, object]]:
+    if isinstance(payload, dict) and isinstance(payload.get("events"), list):
+        items = payload["events"]
+    else:
+        items = [payload]
+    events = [item for item in items if isinstance(item, dict)]
+    if len(events) != len(items):
+        raise ValueError("runtime event payload must be an event object or {events:[...]}")
+    return events
+
+
+def runtime_expected_mismatches(
+    events: list[dict[str, object]],
+    evaluations: list[RuntimeEventEvaluation],
+    *,
+    require_expected: bool,
+) -> list[dict[str, object]]:
+    mismatches: list[dict[str, object]] = []
+    for event, evaluation in zip(events, evaluations, strict=True):
+        expected = event.get("expectedDecision") or event.get("expected_decision")
+        reasons: list[str] = []
+        if require_expected and not isinstance(expected, dict):
+            reasons.append("missing expectedDecision")
+        reasons.extend(expected_runtime_decision_mismatches(event, evaluation))
+        if reasons:
+            mismatches.append(
+                {
+                    "eventId": event.get("eventId") or event.get("event_id"),
+                    "mismatches": reasons,
+                }
+            )
+    return mismatches
+
+
+def write_schema(kind: str, out_path: Path | None) -> int:
+    payload = json.dumps(public_schema(kind), indent=2, sort_keys=True) + "\n"
+    return write_text_result(payload, out_path)
+
+
+def write_text_result(payload: str, out_path: Path | None) -> int:
     if out_path is not None:
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text(payload, encoding="utf-8")

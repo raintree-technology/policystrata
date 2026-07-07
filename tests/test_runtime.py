@@ -11,6 +11,9 @@ from policystrata.runtime import (
     authorize_release,
     authorize_tool,
     create_policystrata_authorizer,
+    evaluate_runtime_event,
+    evaluate_runtime_events,
+    expected_runtime_decision_mismatches,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -220,6 +223,219 @@ def test_runtime_authorize_tool_wraps_generic_authorizer_for_resource_manifests(
     assert decision.action == "write"
     assert decision.normalized_role == "household_admin"
     assert decision.enforcement_mode == "enforce"
+
+
+def governed_runtime_manifest() -> dict[str, object]:
+    return {
+        "schemaVersion": "policystrata.runtime_manifest.v1",
+        "version": "runtime.v2.test",
+        "defaultDecision": "deny",
+        "resources": [
+            {
+                "name": "support_tickets",
+                "type": "table",
+                "actions": [{"name": "read", "allowedRoles": ["support_manager"]}],
+            }
+        ],
+        "controls": {
+            "authContext": {
+                "requiredFields": ["userId", "tenantId", "role", "purpose"],
+            },
+            "retrieval": {"enabled": True},
+            "tools": {
+                "allowlist": ["workspace.search_tickets"],
+                "approvalRequired": ["workspace.export_csv"],
+            },
+            "sql": {"tenantColumn": "tenant_id"},
+            "schemaBinding": {"currentVersions": {"customer_health_score": "v2"}},
+            "memory": {"enabled": True},
+            "egress": {
+                "allowedDestinations": ["https://approved.example/webhook"],
+                "approvalRequired": True,
+            },
+            "data": {
+                "redactClasses": ["pii"],
+                "secretClasses": ["credential"],
+            },
+            "dataResidency": {
+                "enabled": True,
+                "allowedRegions": ["us"],
+            },
+            "taint": {
+                "blockPromptInjection": True,
+                "blockTaintedToolResults": True,
+            },
+        },
+    }
+
+
+def runtime_event(**overrides: object) -> dict[str, object]:
+    event: dict[str, object] = {
+        "schemaVersion": "0.2.0",
+        "eventId": "evt_test",
+        "project": "support-bi",
+        "observedAt": "2026-07-06T15:58:52Z",
+        "agent": {"key": "support-bi-copilot"},
+        "layer": "sql",
+        "operation": "read",
+        "summary": "runtime event",
+        "actor": {
+            "userId": "user_1",
+            "tenantId": "tenant_a",
+            "role": "support_manager",
+            "purpose": "support",
+            "region": "us",
+        },
+        "resource": {"kind": "table", "name": "support_tickets"},
+        "dataClasses": [],
+        "payload": {"sql": "select * from support_tickets where tenant_id = 'tenant_a'"},
+    }
+    event.update(overrides)
+    return event
+
+
+def test_evaluate_runtime_event_allows_clean_sql_metadata() -> None:
+    decision = evaluate_runtime_event(governed_runtime_manifest(), runtime_event())
+
+    assert decision.allowed is True
+    assert decision.action == "allow"
+    assert decision.reason == "runtime policy allowed action"
+
+
+def test_expected_runtime_decision_metadata_is_asserted_outside_evaluation() -> None:
+    event = runtime_event(expectedDecision={"allowed": True, "action": "allow"})
+    decision = evaluate_runtime_event(governed_runtime_manifest(), event)
+
+    assert decision.allowed is True
+    assert expected_runtime_decision_mismatches(event, decision) == []
+
+    mismatch_event = runtime_event(expectedDecision={"allowed": True, "action": "allow"})
+    mismatch = evaluate_runtime_event(
+        governed_runtime_manifest(),
+        {**mismatch_event, "payload": {"sql": "select * from support_tickets"}},
+    )
+
+    assert expected_runtime_decision_mismatches(mismatch_event, mismatch) == [
+        "expected allowed=True, got allowed=False",
+        "expected action=allow, got action=deny",
+    ]
+
+
+def test_evaluate_runtime_event_denies_missing_auth_context() -> None:
+    decision = evaluate_runtime_event(
+        governed_runtime_manifest(),
+        runtime_event(actor={"userId": "user_1", "role": "support_manager"}),
+    )
+
+    assert decision.allowed is False
+    assert decision.action == "deny"
+    assert "missing auth context fields" in decision.reason
+
+
+def test_evaluate_runtime_event_denies_cross_tenant_retrieval() -> None:
+    decision = evaluate_runtime_event(
+        governed_runtime_manifest(),
+        runtime_event(
+            layer="retrieval",
+            operation="retrieve",
+            resource={
+                "kind": "chunk",
+                "name": "refund_policy_enterprise",
+                "tenantId": "tenant_b",
+                "requiredEntitlements": ["refund_policy:enterprise"],
+            },
+        ),
+    )
+
+    assert decision.allowed is False
+    assert decision.action == "deny"
+    assert "retrieval resource tenant" in "\n".join(decision.reasons)
+    assert "missing retrieval entitlements" in "\n".join(decision.reasons)
+
+
+def test_evaluate_runtime_event_requires_approval_for_unapproved_tool() -> None:
+    decision = evaluate_runtime_event(
+        governed_runtime_manifest(),
+        runtime_event(
+            layer="tool_call",
+            operation="call_tool",
+            resource={"kind": "mcp_tool", "name": "workspace.export_csv"},
+        ),
+    )
+
+    assert decision.allowed is False
+    assert decision.action == "require_approval"
+    assert "not in the runtime allowlist" in decision.reason
+
+
+def test_evaluate_runtime_event_denies_sql_without_tenant_predicate() -> None:
+    decision = evaluate_runtime_event(
+        governed_runtime_manifest(),
+        runtime_event(payload={"sql": "select * from support_tickets where status = 'open'"}),
+    )
+
+    assert decision.allowed is False
+    assert decision.action == "deny"
+    assert "missing tenant predicate tenant_id" in decision.reason
+
+
+def test_evaluate_runtime_event_logs_stale_schema_binding() -> None:
+    decision = evaluate_runtime_event(
+        governed_runtime_manifest(),
+        runtime_event(
+            layer="schema_binding",
+            operation="bind_metric",
+            resource={"kind": "metric", "name": "customer_health_score", "version": "v1"},
+        ),
+    )
+
+    assert decision.allowed is True
+    assert decision.action == "log_only"
+    assert "expected v2" in decision.reason
+
+
+def test_evaluate_runtime_event_denies_unapproved_egress() -> None:
+    decision = evaluate_runtime_event(
+        governed_runtime_manifest(),
+        runtime_event(
+            layer="egress",
+            operation="export",
+            resource={"kind": "webhook", "name": "external", "uri": "https://bad.example/webhook"},
+            approvalRequiredSatisfied=False,
+        ),
+    )
+
+    assert decision.allowed is False
+    assert decision.action == "deny"
+    assert "egress destination" in decision.reason
+
+
+def test_evaluate_runtime_event_quarantines_cross_tenant_memory() -> None:
+    decision = evaluate_runtime_event(
+        governed_runtime_manifest(),
+        runtime_event(
+            layer="memory",
+            operation="read_memory",
+            resource={"kind": "memory", "name": "prior_summary", "tenantId": "tenant_b"},
+        ),
+    )
+
+    assert decision.allowed is False
+    assert decision.action == "quarantine"
+    assert "memory item tenant" in decision.reason
+
+
+def test_evaluate_runtime_events_supports_batches_and_event_output() -> None:
+    decisions = evaluate_runtime_events(
+        governed_runtime_manifest(),
+        [
+            runtime_event(eventId="evt_allowed"),
+            runtime_event(eventId="evt_denied", payload={"sql": "select * from support_tickets"}),
+        ],
+    )
+
+    assert [decision.event_id for decision in decisions] == ["evt_allowed", "evt_denied"]
+    assert decisions[1].to_event(runtime_event(eventId="evt_denied"))["decision"]["action"] == "deny"
 
 
 def test_runtime_manifests_must_default_to_deny() -> None:

@@ -75,6 +75,12 @@ relies on database RLS rather than literal tenant predicates, add trusted `datab
 
 ## Validation
 
+Render the imported trace schema when building or testing an exporter:
+
+```bash
+uv run policystrata schema --kind imported-trace --out schemas/imported-trace.schema.json
+```
+
 Run a local scan against imported traces:
 
 ```bash

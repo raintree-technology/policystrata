@@ -8,7 +8,11 @@ import {
   authorizeRelease,
   authorizeTool,
   createPolicyStrataAuthorizer,
+  evaluateRuntimeEvent,
+  evaluateRuntimeEvents,
+  expectedRuntimeDecisionMismatches,
   type PolicyStrataAuthorizeInput,
+  type PolicyStrataRuntimeEventInput,
   type PolicyStrataRuntimeManifest,
 } from "../src/runtime.js";
 
@@ -69,6 +73,72 @@ const toolManifest: PolicyStrataRuntimeManifest = {
     },
   ],
 };
+
+const governedRuntimeManifest: PolicyStrataRuntimeManifest = {
+  schemaVersion: "policystrata.runtime_manifest.v1",
+  version: "runtime.v2.test",
+  defaultDecision: "deny",
+  resources: [
+    {
+      name: "support_tickets",
+      type: "table",
+      actions: [{ name: "read", allowedRoles: ["support_manager"] }],
+    },
+  ],
+  controls: {
+    authContext: {
+      requiredFields: ["userId", "tenantId", "role", "purpose"],
+    },
+    retrieval: { enabled: true },
+    tools: {
+      allowlist: ["workspace.search_tickets"],
+      approvalRequired: ["workspace.export_csv"],
+    },
+    sql: { tenantColumn: "tenant_id" },
+    schemaBinding: { currentVersions: { customer_health_score: "v2" } },
+    memory: { enabled: true },
+    egress: {
+      allowedDestinations: ["https://approved.example/webhook"],
+      approvalRequired: true,
+    },
+    data: {
+      redactClasses: ["pii"],
+      secretClasses: ["credential"],
+    },
+    dataResidency: {
+      enabled: true,
+      allowedRegions: ["us"],
+    },
+    taint: {
+      blockPromptInjection: true,
+      blockTaintedToolResults: true,
+    },
+  },
+};
+
+function runtimeEvent(overrides: Partial<PolicyStrataRuntimeEventInput> = {}): PolicyStrataRuntimeEventInput {
+  return {
+    schemaVersion: "0.2.0",
+    eventId: "evt_test",
+    project: "support-bi",
+    observedAt: "2026-07-06T15:58:52Z",
+    agent: { key: "support-bi-copilot" },
+    layer: "sql",
+    operation: "read",
+    summary: "runtime event",
+    actor: {
+      userId: "user_1",
+      tenantId: "tenant_a",
+      role: "support_manager",
+      purpose: "support",
+      region: "us",
+    },
+    resource: { kind: "table", name: "support_tickets" },
+    dataClasses: [],
+    payload: { sql: "select * from support_tickets where tenant_id = 'tenant_a'" },
+    ...overrides,
+  };
+}
 
 test("runtime manifest JSON Schema is packaged as a deny-by-default manifest schema", () => {
   assert.equal(runtimeManifestSchema.title, "PolicyStrata Runtime Manifest");
@@ -299,4 +369,147 @@ test("runtime manifests must default to deny", () => {
       }),
     /default to deny/,
   );
+});
+
+test("evaluateRuntimeEvent allows clean governed SQL metadata", () => {
+  const event = runtimeEvent({ expectedDecision: { allowed: true, action: "allow" } });
+  const decision = evaluateRuntimeEvent(governedRuntimeManifest, event);
+
+  assert.equal(decision.allowed, true);
+  assert.equal(decision.action, "allow");
+  assert.equal(decision.decision.action, "allow");
+  assert.equal(decision.event.decision.action, "allow");
+  assert.deepEqual(expectedRuntimeDecisionMismatches(event, decision), []);
+});
+
+test("expectedRuntimeDecisionMismatches reports fixture assertion drift", () => {
+  const event = runtimeEvent({ expectedDecision: { allowed: true, action: "allow" } });
+  const decision = evaluateRuntimeEvent(
+    governedRuntimeManifest,
+    runtimeEvent({ payload: { sql: "select * from support_tickets" } }),
+  );
+
+  assert.deepEqual(expectedRuntimeDecisionMismatches(event, decision), [
+    "expected allowed=true, got allowed=false",
+    "expected action=allow, got action=deny",
+  ]);
+});
+
+test("evaluateRuntimeEvent denies missing auth context", () => {
+  const decision = evaluateRuntimeEvent(
+    governedRuntimeManifest,
+    runtimeEvent({ actor: { userId: "user_1", role: "support_manager" } }),
+  );
+
+  assert.equal(decision.allowed, false);
+  assert.equal(decision.action, "deny");
+  assert.match(decision.reason, /missing auth context fields/);
+});
+
+test("evaluateRuntimeEvent denies cross-tenant retrieval without entitlement", () => {
+  const decision = evaluateRuntimeEvent(
+    governedRuntimeManifest,
+    runtimeEvent({
+      layer: "retrieval",
+      operation: "retrieve",
+      resource: {
+        kind: "chunk",
+        name: "refund_policy_enterprise",
+        tenantId: "tenant_b",
+        requiredEntitlements: ["refund_policy:enterprise"],
+      },
+    }),
+  );
+
+  assert.equal(decision.allowed, false);
+  assert.equal(decision.action, "deny");
+  assert.match(decision.reasons.join("\n"), /retrieval resource tenant/);
+  assert.match(decision.reasons.join("\n"), /missing retrieval entitlements/);
+});
+
+test("evaluateRuntimeEvent requires approval for unapproved tools", () => {
+  const decision = evaluateRuntimeEvent(
+    governedRuntimeManifest,
+    runtimeEvent({
+      layer: "tool_call",
+      operation: "call_tool",
+      resource: { kind: "mcp_tool", name: "workspace.export_csv" },
+    }),
+  );
+
+  assert.equal(decision.allowed, false);
+  assert.equal(decision.action, "require_approval");
+  assert.match(decision.reason, /not in the runtime allowlist/);
+});
+
+test("evaluateRuntimeEvent blocks SQL without tenant scope", () => {
+  const decision = evaluateRuntimeEvent(
+    governedRuntimeManifest,
+    runtimeEvent({ payload: { sql: "select * from support_tickets where status = 'open'" } }),
+  );
+
+  assert.equal(decision.allowed, false);
+  assert.equal(decision.action, "deny");
+  assert.match(decision.reason, /missing tenant predicate tenant_id/);
+});
+
+test("evaluateRuntimeEvent logs stale schema bindings", () => {
+  const decision = evaluateRuntimeEvent(
+    governedRuntimeManifest,
+    runtimeEvent({
+      layer: "schema_binding",
+      operation: "bind_metric",
+      resource: { kind: "metric", name: "customer_health_score", version: "v1" },
+    }),
+  );
+
+  assert.equal(decision.allowed, true);
+  assert.equal(decision.action, "log_only");
+  assert.match(decision.reason, /expected v2/);
+});
+
+test("evaluateRuntimeEvent denies unapproved egress", () => {
+  const decision = evaluateRuntimeEvent(
+    governedRuntimeManifest,
+    runtimeEvent({
+      layer: "egress",
+      operation: "export",
+      resource: { kind: "webhook", name: "external", uri: "https://bad.example/webhook" },
+      approvalRequiredSatisfied: false,
+    }),
+  );
+
+  assert.equal(decision.allowed, false);
+  assert.equal(decision.action, "deny");
+  assert.match(decision.reason, /egress destination/);
+});
+
+test("evaluateRuntimeEvent quarantines cross-tenant memory", () => {
+  const decision = evaluateRuntimeEvent(
+    governedRuntimeManifest,
+    runtimeEvent({
+      layer: "memory",
+      operation: "read_memory",
+      resource: { kind: "memory", name: "prior_summary", tenantId: "tenant_b" },
+    }),
+  );
+
+  assert.equal(decision.allowed, false);
+  assert.equal(decision.action, "quarantine");
+  assert.match(decision.reason, /memory item tenant/);
+});
+
+test("evaluateRuntimeEvents returns decisions and redacted events for batches", () => {
+  const decisions = evaluateRuntimeEvents(governedRuntimeManifest, [
+    runtimeEvent({ eventId: "evt_allowed" }),
+    runtimeEvent({ eventId: "evt_redact", dataClasses: ["pii"] }),
+  ]);
+
+  assert.deepEqual(
+    decisions.map((decision) => decision.eventId),
+    ["evt_allowed", "evt_redact"],
+  );
+  assert.equal(decisions[1].action, "redact");
+  assert.deepEqual(decisions[1].redactions, ["pii"]);
+  assert.deepEqual(decisions[1].event.decision.redactions, ["pii"]);
 });

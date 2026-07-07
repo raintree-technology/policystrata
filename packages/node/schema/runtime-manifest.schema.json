@@ -35,6 +35,9 @@
       "items": {
         "$ref": "#/$defs/tool"
       }
+    },
+    "controls": {
+      "$ref": "#/$defs/runtimeControls"
     }
   },
   "anyOf": [
@@ -222,6 +225,171 @@
         },
         "source": {
           "type": "string"
+        }
+      }
+    },
+    "stringList": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "enabledControl": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            }
+          }
+        }
+      ]
+    },
+    "runtimeControls": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "runtime": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "logAllowed": {
+              "type": "boolean"
+            }
+          }
+        },
+        "authContext": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "requiredFields": {
+                  "$ref": "#/$defs/stringList"
+                }
+              }
+            }
+          ]
+        },
+        "retrieval": {
+          "$ref": "#/$defs/enabledControl"
+        },
+        "tools": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "allowlist": {
+              "$ref": "#/$defs/stringList"
+            },
+            "approvalRequired": {
+              "$ref": "#/$defs/stringList"
+            }
+          }
+        },
+        "sql": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "tenantColumn": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "schemaBinding": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "currentVersion": {
+              "type": "string",
+              "minLength": 1
+            },
+            "currentVersions": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        "memory": {
+          "$ref": "#/$defs/enabledControl"
+        },
+        "egress": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "allowedDestinations": {
+              "$ref": "#/$defs/stringList"
+            },
+            "approvalRequired": {
+              "type": "boolean"
+            }
+          }
+        },
+        "data": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "deniedClasses": {
+              "$ref": "#/$defs/stringList"
+            },
+            "redactClasses": {
+              "$ref": "#/$defs/stringList"
+            },
+            "secretClasses": {
+              "$ref": "#/$defs/stringList"
+            }
+          }
+        },
+        "dataResidency": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "allowedRegions": {
+              "$ref": "#/$defs/stringList"
+            }
+          }
+        },
+        "taint": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "blockPromptInjection": {
+              "type": "boolean"
+            },
+            "blockTaintedToolResults": {
+              "type": "boolean"
+            }
+          }
         }
       }
     }

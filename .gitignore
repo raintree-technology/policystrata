@@ -16,3 +16,18 @@ build/
 runs/
 tmp/
 .env
+output/
+
+# Generated public-site artifacts
+feed.xml
+llms.txt
+page.md
+robots.txt
+sitemap.xml
+
+# mise local overrides
+mise.local.toml
+mise.*.local.toml
+mise.local.lock
+mise.*.local.lock
+.mise/

@@ -41,6 +41,155 @@ def test_cli_run_and_summarize(tmp_path, capsys) -> None:
     assert summary_output["mutant_kill_rate"] == 1.0
 
 
+def test_cli_schema_writes_contract_to_stdout(capsys) -> None:
+    assert main(["schema", "--kind", "imported-trace"]) == 0
+
+    schema = json.loads(capsys.readouterr().out)
+    assert schema["$schema"] == "https://json-schema.org/draft/2020-12/schema"
+    assert schema["$id"] == "https://policystrata.dev/schemas/imported-trace.schema.json"
+    assert set(schema["required"]) >= {"id", "principal", "sql"}
+
+
+def test_cli_schema_writes_contract_to_file(tmp_path, capsys) -> None:
+    out_path = tmp_path / "schemas" / "scan-result.json"
+
+    assert main(["schema", "--kind", "scan-result", "--out", str(out_path)]) == 0
+
+    assert json.loads(capsys.readouterr().out) == {"out": str(out_path)}
+    schema = json.loads(out_path.read_text(encoding="utf-8"))
+    assert schema["$id"] == "https://policystrata.dev/schemas/scan-result.schema.json"
+    assert set(schema["required"]) >= {"domain", "gate", "summary", "findings"}
+
+
+def test_cli_runtime_evaluate_writes_decision_batch(tmp_path, capsys) -> None:
+    manifest_path = tmp_path / "runtime-manifest.json"
+    event_path = tmp_path / "runtime-event.json"
+    out_path = tmp_path / "runtime-decisions.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "schemaVersion": "policystrata.runtime_manifest.v1",
+                "version": "runtime.cli.test",
+                "defaultDecision": "deny",
+                "resources": [
+                    {
+                        "name": "support_tickets",
+                        "actions": [{"name": "read", "allowedRoles": ["support_manager"]}],
+                    }
+                ],
+                "controls": {
+                    "authContext": {"requiredFields": ["userId", "tenantId", "role", "purpose"]},
+                    "sql": {"tenantColumn": "tenant_id"},
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    event_path.write_text(
+        json.dumps(
+            {
+                "events": [
+                    {
+                        "schemaVersion": "0.2.0",
+                        "eventId": "evt_cli",
+                        "project": "support-bi",
+                        "observedAt": "2026-07-06T15:58:52Z",
+                        "agent": {"key": "support-bi-copilot"},
+                        "layer": "sql",
+                        "operation": "read",
+                        "summary": "SQL read",
+                        "actor": {"userId": "user_1", "role": "support_manager"},
+                        "resource": {"kind": "table", "name": "support_tickets"},
+                        "payload": {"sql": "select * from support_tickets"},
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    assert (
+        main(
+            [
+                "runtime-evaluate",
+                "--manifest",
+                str(manifest_path),
+                "--event",
+                str(event_path),
+                "--out",
+                str(out_path),
+            ]
+        )
+        == 1
+    )
+
+    assert json.loads(capsys.readouterr().out) == {"out": str(out_path)}
+    result = json.loads(out_path.read_text(encoding="utf-8"))
+    assert result["ok"] is False
+    assert result["decisions"][0]["action"] == "deny"
+    assert result["events"][0]["decision"]["control"]["id"] == "auth_context_required"
+
+
+def test_cli_runtime_evaluate_asserts_expected_decisions(tmp_path, capsys) -> None:
+    manifest_path = tmp_path / "runtime-manifest.json"
+    event_path = tmp_path / "runtime-event.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "schemaVersion": "policystrata.runtime_manifest.v1",
+                "version": "runtime.cli.test",
+                "defaultDecision": "deny",
+                "resources": [
+                    {
+                        "name": "support_tickets",
+                        "actions": [{"name": "read", "allowedRoles": ["support_manager"]}],
+                    }
+                ],
+                "controls": {"sql": {"tenantColumn": "tenant_id"}},
+            }
+        ),
+        encoding="utf-8",
+    )
+    event_path.write_text(
+        json.dumps(
+            {
+                "schemaVersion": "0.2.0",
+                "eventId": "evt_expected_deny",
+                "project": "support-bi",
+                "observedAt": "2026-07-06T15:58:52Z",
+                "agent": {"key": "support-bi-copilot"},
+                "layer": "sql",
+                "operation": "read",
+                "summary": "SQL read",
+                "actor": {"userId": "user_1", "tenantId": "tenant_a", "role": "support_manager"},
+                "resource": {"kind": "table", "name": "support_tickets"},
+                "payload": {"sql": "select * from support_tickets"},
+                "expectedDecision": {"allowed": False, "action": "deny"},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    assert (
+        main(
+            [
+                "runtime-evaluate",
+                "--manifest",
+                str(manifest_path),
+                "--event",
+                str(event_path),
+                "--assert-expected",
+            ]
+        )
+        == 0
+    )
+
+    result = json.loads(capsys.readouterr().out)
+    assert result["ok"] is False
+    assert result["expectedMatched"] is True
+    assert result["expectedMismatches"] == []
+
+
 def test_cli_minimize(tmp_path, capsys) -> None:
     out_dir = tmp_path / "run"
     main(["run", "--domain", "support_saas", "--suite", "seeded", "--out", str(out_dir)])
@@ -373,6 +522,7 @@ def test_cli_scan_help_documents_examples_and_config_sections(capsys) -> None:
     assert "policystrata init-scan postgres_dbt --out policystrata-example" in output
     assert "Accepted config sections" in output
     assert "dbt, sql_traces" in output
+    assert "runtime_manifests" in output
 
 
 def test_cli_scan_uses_gate_exit_codes(tmp_path, capsys) -> None:
@@ -407,8 +557,93 @@ def test_cli_doctor_config_reports_wired_and_missing_stack(capsys) -> None:
     assert stack["app_sql_traces"]["status"] == "wired"
     assert stack["database_fixture"]["status"] == "missing"
     assert stack["release_layer_tests"]["status"] == "wired"
+    assert "runtime_manifests" not in stack
+    assert "runtime_event_fixtures" not in stack
     assert doctor["coverage_accounting"]["sql_trace_records"] >= 1
     assert any(todo["id"] == "fix_database_fixture" for todo in doctor["remediation"])
+
+
+def test_cli_doctor_reports_configured_runtime_gateway_readiness(tmp_path, capsys) -> None:
+    manifest_path = tmp_path / "runtime-manifest.json"
+    events_path = tmp_path / "runtime-events.json"
+    config_path = tmp_path / "policystrata.yaml"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "schemaVersion": "policystrata.runtime_manifest.v1",
+                "version": "runtime.doctor.test",
+                "defaultDecision": "deny",
+                "resources": [
+                    {
+                        "name": "support_tickets",
+                        "actions": [{"name": "read", "allowedRoles": ["support_manager"]}],
+                    }
+                ],
+                "controls": {
+                    "authContext": {"requiredFields": ["userId", "tenantId", "role", "purpose"]},
+                    "sql": {"tenantColumn": "tenant_id"},
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    events_path.write_text(
+        json.dumps(
+            {
+                "events": [
+                    {
+                        "schemaVersion": "0.2.0",
+                        "eventId": "evt_doctor",
+                        "project": "support-bi",
+                        "observedAt": "2026-07-06T15:58:52Z",
+                        "agent": {"key": "support-bi-copilot"},
+                        "layer": "sql",
+                        "operation": "read",
+                        "summary": "Tenant-scoped support ticket query",
+                        "actor": {
+                            "userId": "user_1",
+                            "tenantId": "tenant_a",
+                            "role": "support_manager",
+                            "purpose": "support",
+                        },
+                        "resource": {"kind": "table", "name": "support_tickets"},
+                        "payload": {"sql": "select * from support_tickets where tenant_id = 'tenant_a'"},
+                        "expectedDecision": {"allowed": True, "action": "allow"},
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    config_path.write_text(
+        """
+version: 1
+domain: support_saas
+runtime_manifests:
+  files:
+    - runtime-manifest.json
+runtime_events:
+  files:
+    - runtime-events.json
+fuzz:
+  enabled: false
+""".lstrip(),
+        encoding="utf-8",
+    )
+
+    assert main(["doctor", "--config", str(config_path)]) == 0
+    doctor = json.loads(capsys.readouterr().out)
+    stack = {item["id"]: item for item in doctor["stack"]}
+    coverage = doctor["coverage_accounting"]
+
+    assert stack["runtime_manifests"]["status"] == "wired"
+    assert stack["runtime_event_fixtures"]["status"] == "wired"
+    assert coverage["runtime_manifest_valid"] == 1
+    assert coverage["runtime_events_evaluated"] == 1
+    assert coverage["runtime_events_allowed"] == 1
+    assert coverage["runtime_event_expected_decisions"] == 1
+    assert coverage["runtime_event_expectation_mismatches"] == 0
+    assert not any(todo["id"].startswith("fix_runtime") for todo in doctor["remediation"])
 
 
 def test_cli_doctor_environment_markdown_without_config(capsys) -> None:

@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 SurfaceName = Literal["manifest", "grammar", "validator", "compiler", "database", "release"]
 EvidenceLevelName = Literal[
@@ -38,6 +38,18 @@ SurfaceMode = Literal[
 ]
 SAFE_IDENTIFIER_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9_.-]*$"
 MAX_SAFE_IDENTIFIER_LENGTH = 128
+SafeIdentifier = Annotated[
+    str,
+    Field(pattern=SAFE_IDENTIFIER_PATTERN, max_length=MAX_SAFE_IDENTIFIER_LENGTH),
+]
+
+
+class CompatModel(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+
+class InputModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
 
 
 class WitnessClass(str, Enum):
@@ -49,12 +61,12 @@ class WitnessClass(str, Enum):
     UNSAFE_RELEASE = "unsafe_release"
 
 
-class Decision(BaseModel):
+class Decision(CompatModel):
     allowed: bool
     reasons: list[str] = Field(default_factory=list)
 
 
-class RolePolicy(BaseModel):
+class RolePolicy(InputModel):
     allowed_metrics: list[str]
     allowed_dimensions: list[str]
     allowed_time_ranges: list[str]
@@ -63,13 +75,13 @@ class RolePolicy(BaseModel):
     aggregate_only: bool = True
 
 
-class Principal(BaseModel):
+class Principal(InputModel):
     id: str
     role: str
     tenant_ids: list[str]
 
 
-class MetricPolicy(BaseModel):
+class MetricPolicy(InputModel):
     expression: str
     table: str
     columns: list[str]
@@ -79,14 +91,14 @@ class MetricPolicy(BaseModel):
     cost: int = 10
 
 
-class DimensionPolicy(BaseModel):
+class DimensionPolicy(InputModel):
     column: str
     allowed_roles: list[str]
     sensitive: bool = False
     cost: int = 1
 
 
-class Policy(BaseModel):
+class Policy(InputModel):
     version: str
     principals: dict[str, Principal]
     roles: dict[str, RolePolicy]
@@ -94,7 +106,7 @@ class Policy(BaseModel):
     dimensions: dict[str, DimensionPolicy]
 
 
-class SurfaceVersions(BaseModel):
+class SurfaceVersions(InputModel):
     manifest: str
     grammar: str
     validator: str
@@ -106,14 +118,14 @@ class SurfaceVersions(BaseModel):
         return self.model_dump()
 
 
-class SurfaceContract(BaseModel):
+class SurfaceContract(InputModel):
     mode: SurfaceMode
     responsibilities: list[str]
     accepts_obligations: list[str] = Field(default_factory=list)
     emits_obligations: list[str] = Field(default_factory=list)
 
 
-class SurfaceConfig(BaseModel):
+class SurfaceConfig(InputModel):
     versions: SurfaceVersions
     contracts: dict[str, SurfaceContract]
     transition_obligations: list[str] = Field(default_factory=list)
@@ -128,7 +140,7 @@ class SurfaceConfig(BaseModel):
         return {name: contract.responsibilities for name, contract in self.contracts.items()}
 
 
-class SemanticQuery(BaseModel):
+class SemanticQuery(CompatModel):
     metric: str
     dimensions: list[str] = Field(default_factory=list)
     filters: dict[str, str | int | float | bool] = Field(default_factory=dict)
@@ -147,8 +159,8 @@ class SemanticQuery(BaseModel):
         }
 
 
-class MutationSpec(BaseModel):
-    id: str
+class MutationSpec(InputModel):
+    id: SafeIdentifier
     family: str
     affected_surface: SurfaceName
     witness_class: WitnessClass
@@ -157,8 +169,8 @@ class MutationSpec(BaseModel):
     requires_db_containment: bool = False
 
 
-class Task(BaseModel):
-    id: str = Field(pattern=SAFE_IDENTIFIER_PATTERN, max_length=MAX_SAFE_IDENTIFIER_LENGTH)
+class Task(InputModel):
+    id: SafeIdentifier
     domain: str = "support_saas"
     principal: str
     request: str
@@ -171,7 +183,7 @@ class Task(BaseModel):
     expected_containment_layer: SurfaceName | None = None
 
 
-class SuiteMetadata(BaseModel):
+class SuiteMetadata(InputModel):
     provenance: SuiteProvenance = "hand_authored"
     evidence_level: EvidenceLevelName = "deterministic_fixture"
     detector_frozen: bool = False
@@ -180,7 +192,7 @@ class SuiteMetadata(BaseModel):
     notes: list[str] = Field(default_factory=list)
 
 
-class CompileResult(BaseModel):
+class CompileResult(CompatModel):
     sql: str
     estimated_cost: int
     includes_tenant_predicate: bool
@@ -189,7 +201,7 @@ class CompileResult(BaseModel):
     time_semantics: str
 
 
-class Trace(BaseModel):
+class Trace(CompatModel):
     task_id: str
     domain: str
     request: str
@@ -221,7 +233,7 @@ class Trace(BaseModel):
     reasons: list[str] = Field(default_factory=list)
 
 
-class Summary(BaseModel):
+class Summary(CompatModel):
     total: int
     killed: int = 0
     survived: int = 0

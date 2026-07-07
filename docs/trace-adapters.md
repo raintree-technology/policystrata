@@ -166,3 +166,26 @@ Recommended span attributes:
 | semantic intent attribute | `semantic_ir` |
 | `db.statement` | `sql` |
 | output/release attribute | `release_allowed` |
+
+## Logfire
+
+Logfire can be treated as another OpenTelemetry span source. PolicyStrata does not require the
+`logfire` package or a Logfire API key; export sanitized span records from Logfire or from the
+underlying OpenTelemetry pipeline, then write PolicyStrata JSONL:
+
+```json
+{
+  "id": "logfire-span-7f0a",
+  "principal": "acme_analyst",
+  "tenant_ids": ["acme"],
+  "semantic_ir": {"metric": "ticket_count", "dimensions": ["region"], "limit": 100},
+  "sql": "<db.statement>",
+  "release_allowed": true,
+  "source": "logfire"
+}
+```
+
+Recommended Logfire attributes mirror the OpenTelemetry mapping above: principal, tenant or
+organization id, structured semantic intent, sanitized SQL statement, and release decision. Do not
+export raw prompts, raw result rows, raw tenant identifiers, or unsanitized SQL literals unless the
+trace file is a trusted fixture intended for local real-database comparison.

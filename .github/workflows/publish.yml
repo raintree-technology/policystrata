@@ -13,6 +13,11 @@ on:
         required: true
         default: false
         type: boolean
+      publish_gateway_npm:
+        description: "Publish the Agent Trust Gateway package to npm"
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -24,6 +29,7 @@ concurrency:
 jobs:
   build-python:
     name: Build Python distribution
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_pypi }}
     runs-on: ubuntu-24.04
 
     steps:
@@ -32,16 +38,16 @@ jobs:
         with:
           persist-credentials: false
 
+      - uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db
+        with:
+          version: 2026.7.1
+          install: true
+          cache: true
       - name: Install uv
         uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
         with:
           enable-cache: true
           cache-suffix: publish-py-3.12
-
-      - name: Set up Python
-        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
-        with:
-          python-version: "3.12"
 
       - name: Install dependencies
         run: uv sync --extra dev --frozen
@@ -56,7 +62,6 @@ jobs:
         run: uv run mypy src
 
       - name: Check publishing uses a version tag
-        if: ${{ github.event_name == 'workflow_dispatch' && (inputs.publish_pypi || inputs.publish_npm) }}
         run: |
           case "$GITHUB_REF" in
             refs/tags/v*) ;;
@@ -76,11 +81,8 @@ jobs:
             exit 1
           fi
 
-      - name: Build source distribution and wheel
-        run: uv build
-
-      - name: Check distribution metadata
-        run: uv run --frozen twine check --strict dist/*
+      - name: Clean-install Python distribution
+        run: node scripts/release-smoke.mjs --python-artifact
 
       - name: Record distribution checksums
         run: |
@@ -103,6 +105,7 @@ jobs:
 
   build-node:
     name: Build Node distribution
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_npm }}
     runs-on: ubuntu-24.04
 
     steps:
@@ -111,31 +114,75 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Check npm publish uses a version tag
+      - uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db
+        with:
+          version: 2026.7.1
+          install: true
+          cache: true
+      - name: Check mise x -- npm publish uses a version tag
         run: |
           case "$GITHUB_REF" in
             refs/tags/v*) ;;
             *)
-              echo "npm publishing must be manually dispatched from a v* tag, got $GITHUB_REF" >&2
+              echo "mise x -- npm publishing must be manually dispatched from a v* tag, got $GITHUB_REF" >&2
               exit 1
               ;;
           esac
 
-      - name: Set up Node.js
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
-        with:
-          node-version: "24"
-          package-manager-cache: false
-
       - name: Install package dependencies
-        run: npm ci --workspace packages/node
+        run: mise run setup
 
       - name: Run Node SDK tests
-        run: npm test --workspace packages/node
+        working-directory: packages/node
+        run: mise run test
 
       - name: Verify Node SDK package contents
         working-directory: packages/node
-        run: npm pack --dry-run
+        run: bun pm pack --dry-run
+
+      - name: Clean-install Node SDK package artifact
+        run: node scripts/release-smoke.mjs --npm-runtime-artifact
+
+  build-gateway:
+    name: Build Gateway distribution
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_gateway_npm }}
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+
+      - uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db
+        with:
+          version: 2026.7.1
+          install: true
+          cache: true
+
+      - name: Check gateway npm publish uses a version tag
+        run: |
+          case "$GITHUB_REF" in
+            refs/tags/v*) ;;
+            *)
+              echo "Gateway npm publishing must be manually dispatched from a v* tag, got $GITHUB_REF" >&2
+              exit 1
+              ;;
+          esac
+
+      - name: Install package dependencies
+        run: mise run setup
+
+      - name: Run Gateway tests
+        working-directory: packages/gateway
+        run: mise run test
+
+      - name: Verify Gateway package contents
+        working-directory: packages/gateway
+        run: bun pm pack --dry-run
+
+      - name: Clean-install Gateway package artifact
+        run: node scripts/release-smoke.mjs --gateway-artifact
 
   publish-pypi:
     name: Publish to PyPI
@@ -150,6 +197,11 @@ jobs:
       id-token: write
 
     steps:
+      - name: Check out repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+
       - name: Install uv
         uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
         with:
@@ -177,6 +229,9 @@ jobs:
       - name: Publish distribution to PyPI
         run: uv publish dist/*
 
+      - name: Post-publish PyPI smoke
+        run: node scripts/release-smoke.mjs --published-pypi
+
   publish-npm:
     name: Publish to npm
     needs: build-node
@@ -195,32 +250,85 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Set up Node.js
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+      - uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db
         with:
-          node-version: "24"
-          registry-url: https://registry.npmjs.org
-          package-manager-cache: false
-
+          version: 2026.7.1
+          install: true
+          cache: true
       - name: Install package dependencies
-        run: npm ci --workspace packages/node
+        run: mise run setup
 
       - name: Run Node SDK tests
-        run: npm test --workspace packages/node
+        working-directory: packages/node
+        run: mise run test
 
       - name: Verify Node SDK package contents
         working-directory: packages/node
-        run: npm pack --dry-run
+        run: bun pm pack --dry-run
 
       - name: Check Node package version is unpublished
         run: |
           package_name="$(node -p "require('./packages/node/package.json').name")"
           package_version="$(node -p "require('./packages/node/package.json').version")"
-          if npm view "${package_name}@${package_version}" version >/dev/null 2>&1; then
+          if bun pm view "${package_name}@${package_version}" version >/dev/null 2>&1; then
             echo "${package_name}@${package_version} already exists on npm" >&2
             exit 1
           fi
 
       - name: Publish Node package to npm
         working-directory: packages/node
-        run: npm publish --provenance
+        run: bun publish --provenance
+
+      - name: Post-publish Node package smoke
+        run: node scripts/release-smoke.mjs --published-npm-runtime
+
+  publish-gateway-npm:
+    name: Publish Gateway to npm
+    needs: build-gateway
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_gateway_npm }}
+    runs-on: ubuntu-24.04
+    environment:
+      name: npm
+      url: https://www.npmjs.com/package/@policystrata/agent-trust-gateway
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+
+      - uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db
+        with:
+          version: 2026.7.1
+          install: true
+          cache: true
+
+      - name: Install package dependencies
+        run: mise run setup
+
+      - name: Run Gateway tests
+        working-directory: packages/gateway
+        run: mise run test
+
+      - name: Verify Gateway package contents
+        working-directory: packages/gateway
+        run: bun pm pack --dry-run
+
+      - name: Check Gateway package version is unpublished
+        run: |
+          package_name="$(node -p "require('./packages/gateway/package.json').name")"
+          package_version="$(node -p "require('./packages/gateway/package.json').version")"
+          if bun pm view "${package_name}@${package_version}" version >/dev/null 2>&1; then
+            echo "${package_name}@${package_version} already exists on npm" >&2
+            exit 1
+          fi
+
+      - name: Publish Gateway package to npm
+        working-directory: packages/gateway
+        run: bun publish --provenance --access public
+
+      - name: Post-publish Gateway package smoke
+        run: node scripts/release-smoke.mjs --published-gateway

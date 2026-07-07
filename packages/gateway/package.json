@@ -1,0 +1,55 @@
+{
+  "name": "@policystrata/agent-trust-gateway",
+  "version": "0.1.0",
+  "description": "Customer-hosted runtime gateway for PolicyStrata governed-data agents",
+  "type": "module",
+  "main": "./dist/src/index.js",
+  "types": "./dist/src/index.d.ts",
+  "bin": {
+    "agent-trust-gateway": "./dist/src/cli.js"
+  },
+  "license": "MIT",
+  "sideEffects": false,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/raintree-technology/policystrata.git",
+    "directory": "packages/gateway"
+  },
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org/",
+    "access": "public"
+  },
+  "keywords": [
+    "llm",
+    "data-agents",
+    "runtime-security",
+    "agent-governance",
+    "policystrata"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "default": "./dist/src/index.js"
+    }
+  },
+  "files": [
+    "dist/src",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "bun run --cwd ../node build && tsc -p tsconfig.json",
+    "test": "bun run build && node --test dist/test/*.test.js",
+    "prepack": "bun run build"
+  },
+  "engines": {
+    "node": "24.x"
+  },
+  "dependencies": {
+    "policystrata": "^0.1.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.0.0"
+  }
+}
