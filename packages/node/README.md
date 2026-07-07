@@ -147,6 +147,33 @@ if (!decision.allowed && decision.enforcementMode === "enforce") {
 }
 ```
 
+The same runtime module evaluates v0.2 gateway events across auth context, retrieval, memory,
+tool, browser/code, SQL, schema binding, output, egress, and trace layers:
+
+```ts
+import { evaluateRuntimeEvent } from "policystrata/runtime";
+
+const runtimeDecision = evaluateRuntimeEvent(runtimeManifest, {
+  schemaVersion: "0.2.0",
+  eventId: "evt_1",
+  project: "support-bi",
+  observedAt: new Date().toISOString(),
+  agent: { key: "support-bi-copilot" },
+  layer: "sql",
+  operation: "read",
+  summary: "Tenant-scoped support ticket query",
+  actor: { userId: "user-1", tenantId: "tenant-a", role: "support", purpose: "support" },
+  resource: { kind: "table", name: "support_tickets" },
+  payload: { sql: "select count(*) from support_tickets where tenant_id = $1" },
+});
+```
+
+For a customer-hosted sidecar, install `@policystrata/agent-trust-gateway`; it wraps this evaluator
+in an HTTP gateway and strips runtime-event `payload` and fixture-only `expectedDecision` metadata
+before control-plane upload by default. The gateway is an application-side enforcement and telemetry
+helper; it does not replace
+`policystrata scan`, `policystrata doctor`, application authorization, or database controls.
+
 The runtime manifest schema is available at `policystrata/runtime-manifest.schema.json` and in this
 source tree at `schema/runtime-manifest.schema.json`. The runtime authorizer is for in-process app
 checks on tool and release boundaries in the request path. `policystrata scan` remains the

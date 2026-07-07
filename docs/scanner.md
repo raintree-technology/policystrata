@@ -98,6 +98,19 @@ gate because it found drift.
 - `db-ready`: PostgreSQL fixture, RLS checks, state assertions, or real-db comparisons ran.
 - `ci-gate-ready`: scan inputs are configured for CI gate exit codes.
 
+Public JSON Schemas for scanner inputs and artifacts can be rendered without extra dependencies:
+
+```bash
+uv run policystrata schema --kind scan-config
+uv run policystrata schema --kind imported-trace --out schemas/imported-trace.schema.json
+uv run policystrata schema --kind trace
+uv run policystrata schema --kind scan-result
+```
+
+These schemas describe the Pydantic contracts used by the scanner. Authored scanner configs reject
+unknown keys; imported traces and output artifacts remain forward-compatible so future optional
+fields can be added without breaking older readers.
+
 ## Doctor / Audit Mode
 
 `policystrata doctor` without arguments keeps the lightweight reproducibility check:
@@ -157,7 +170,21 @@ prompt_manifests:
 source_maps:
   files:
     - policystrata/source-map.json
+runtime_manifests:
+  files:
+    - policystrata/runtime-manifest.json
+runtime_events:
+  files:
+    - policystrata/runtime-events.json
 ```
+
+`runtime_manifests` should contain deny-by-default PolicyStrata runtime manifests for the Node
+runtime or Agent Trust Gateway. `runtime_events` should contain redacted gateway event fixtures,
+either as one JSON/YAML event, an `{events: [...]}` batch, or JSONL. Doctor evaluates runtime event
+fixtures only when at least one configured runtime manifest is valid. When a fixture includes
+`expectedDecision`, doctor asserts the expected `allowed`, `action`, `controlId`, reason snippets,
+redactions, and policy refs against the actual runtime decision. Runtime readiness rows and
+remediation todos appear only when these sections are configured or marked `required`.
 
 ## Gate Behavior
 

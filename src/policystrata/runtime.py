@@ -8,6 +8,57 @@ RuntimeMode = Literal["shadow", "enforce"]
 RuntimeDecisionPoint = Literal["pre_model", "execution"]
 RuntimeApprovalState = Literal["not_required", "pending", "satisfied"]
 RuntimeWriteState = Literal["disabled", "enabled"]
+RuntimeEventAction = Literal[
+    "allow",
+    "deny",
+    "redact",
+    "require_approval",
+    "quarantine",
+    "log_only",
+]
+RuntimePolicyLayer = Literal[
+    "auth_context",
+    "prompt",
+    "plan",
+    "retrieval",
+    "memory",
+    "tool_call",
+    "browser_action",
+    "code_execution",
+    "sql",
+    "database_rule",
+    "schema_binding",
+    "transformation",
+    "output_filter",
+    "egress",
+    "trace",
+]
+
+RUNTIME_EVENT_ACTIONS: tuple[RuntimeEventAction, ...] = (
+    "allow",
+    "deny",
+    "redact",
+    "require_approval",
+    "quarantine",
+    "log_only",
+)
+RUNTIME_POLICY_LAYERS: tuple[RuntimePolicyLayer, ...] = (
+    "auth_context",
+    "prompt",
+    "plan",
+    "retrieval",
+    "memory",
+    "tool_call",
+    "browser_action",
+    "code_execution",
+    "sql",
+    "database_rule",
+    "schema_binding",
+    "transformation",
+    "output_filter",
+    "egress",
+    "trace",
+)
 
 
 @dataclass(frozen=True)
@@ -64,6 +115,55 @@ class RuntimeReleaseDecision(RuntimeDecision):
         result = super().to_dict()
         result["boundary"] = self.boundary
         return result
+
+
+@dataclass(frozen=True)
+class RuntimeEventEvaluation:
+    event_id: str
+    action: RuntimeEventAction
+    reason: str
+    allowed: bool
+    reasons: list[str]
+    layer: str
+    operation: str
+    control_id: str | None = None
+    policy_refs: list[str] | None = None
+    redactions: list[str] | None = None
+
+    def to_decision(self) -> dict[str, Any]:
+        decision: dict[str, Any] = {
+            "action": self.action,
+            "reason": self.reason,
+        }
+        if self.control_id:
+            decision["control"] = {
+                "id": self.control_id,
+                "mode": "runtime_enforcement",
+            }
+        if self.policy_refs:
+            decision["policyRefs"] = self.policy_refs
+        if self.redactions:
+            decision["redactions"] = self.redactions
+        return decision
+
+    def to_event(self, event: Mapping[str, Any]) -> dict[str, Any]:
+        result = dict(event)
+        result["decision"] = self.to_decision()
+        return result
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "eventId": self.event_id,
+            "allowed": self.allowed,
+            "action": self.action,
+            "reason": self.reason,
+            "reasons": self.reasons,
+            "layer": self.layer,
+            "operation": self.operation,
+            "controlId": self.control_id,
+            "policyRefs": self.policy_refs or [],
+            "redactions": self.redactions or [],
+        }
 
 
 @dataclass(frozen=True)
@@ -259,6 +359,235 @@ def authorize_tool(manifest: Mapping[str, Any], request: Mapping[str, Any]) -> R
 
 def authorize_release(manifest: Mapping[str, Any], request: Mapping[str, Any]) -> RuntimeReleaseDecision:
     return create_policystrata_authorizer(manifest).authorize_release(request)
+
+
+def evaluate_runtime_event(manifest: Mapping[str, Any], event: Mapping[str, Any]) -> RuntimeEventEvaluation:
+    """Evaluate a v0.2 governed-data runtime event for gateway enforcement.
+
+    This is intentionally metadata-first: callers pass redacted event metadata and
+    optional summaries/hashes, not raw prompts, rows, documents, or tool payloads.
+    """
+
+    layer = _required_string(event.get("layer"), "runtime event is missing layer")
+    if layer not in RUNTIME_POLICY_LAYERS:
+        raise ValueError(f"unknown runtime layer: {layer}")
+    operation = _required_string(event.get("operation"), "runtime event is missing operation")
+    event_id = _required_string(event.get("eventId") or event.get("event_id"), "runtime event is missing id")
+    controls = manifest.get("controls")
+    control_config = controls if isinstance(controls, Mapping) else {}
+    actor = _mapping_value(event.get("actor"))
+    resource = _mapping_value(event.get("resource"))
+    data_classes = _string_sequence(event.get("dataClasses") or event.get("data_classes"))
+    reasons: list[str] = []
+    action: RuntimeEventAction = "allow"
+    control_id: str | None = None
+    redactions: list[str] = []
+
+    def apply(next_action: RuntimeEventAction, reason: str, next_control_id: str) -> None:
+        nonlocal action, control_id
+        reasons.append(reason)
+        if _event_action_rank(next_action) > _event_action_rank(action):
+            action = next_action
+            control_id = next_control_id
+
+    if _control_enabled(control_config, "authContext", default=True):
+        missing = _missing_auth_fields(actor, control_config)
+        if missing:
+            apply(
+                "deny",
+                f"missing auth context fields: {', '.join(missing)}",
+                "auth_context_required",
+            )
+
+    if layer == "retrieval" and _control_enabled(control_config, "retrieval", default=True):
+        if _tenant_mismatch(actor, resource):
+            apply(
+                "deny",
+                "retrieval resource tenant does not match actor tenant",
+                "retrieval_entitlement_required",
+            )
+        missing_entitlements = _missing_entitlements(actor, resource)
+        if missing_entitlements:
+            apply(
+                "deny",
+                f"actor is missing retrieval entitlements: {', '.join(missing_entitlements)}",
+                "retrieval_entitlement_required",
+            )
+
+    if layer == "tool_call" and _control_enabled(control_config, "tools", default=True):
+        tool_name = _resource_name(resource)
+        allowed_tools = _control_string_set(control_config, "tools", "allowlist")
+        approval_tools = _control_string_set(control_config, "tools", "approvalRequired")
+        if allowed_tools and tool_name and tool_name not in allowed_tools:
+            apply(
+                "require_approval",
+                f"tool {tool_name} is not in the runtime allowlist",
+                "mcp_tool_allowlist_required",
+            )
+        if approval_tools and tool_name and tool_name in approval_tools:
+            approval_satisfied = _event_approval_satisfied(event)
+            if not approval_satisfied:
+                apply(
+                    "require_approval",
+                    f"tool {tool_name} requires approval",
+                    "mcp_tool_allowlist_required",
+                )
+
+    if layer == "sql" and _control_enabled(control_config, "sql", default=True):
+        sql_text = _event_text(event, "sql", "query", "statement", "observed")
+        tenant_column = _control_string(control_config, "sql", "tenantColumn") or "tenant_id"
+        if sql_text and tenant_column not in sql_text.lower():
+            apply(
+                "deny",
+                f"SQL statement is missing tenant predicate {tenant_column}",
+                "tenant_scope_required",
+            )
+        if _tenant_mismatch(actor, resource):
+            apply("deny", "SQL resource tenant does not match actor tenant", "tenant_scope_required")
+
+    if layer == "schema_binding" and _control_enabled(control_config, "schemaBinding", default=True):
+        expected_version = _control_expected_version(control_config, resource)
+        actual_version = _resource_version(resource)
+        if expected_version and actual_version and actual_version != expected_version:
+            apply(
+                "log_only",
+                f"schema binding {resource.get('name')} uses {actual_version}, expected {expected_version}",
+                "schema_binding_current",
+            )
+
+    if (
+        layer == "memory"
+        and _control_enabled(control_config, "memory", default=True)
+        and _tenant_mismatch(actor, resource)
+    ):
+        apply("quarantine", "memory item tenant does not match actor tenant", "memory_tenant_isolation")
+
+    if layer == "egress" and _control_enabled(control_config, "egress", default=True):
+        destination = _resource_uri_or_name(resource)
+        allowed_destinations = _control_string_set(control_config, "egress", "allowedDestinations")
+        if allowed_destinations and destination and destination not in allowed_destinations:
+            apply("deny", f"egress destination {destination} is not approved", "egress_approval_required")
+        if (
+            _control_bool(control_config, "egress", "approvalRequired")
+            and not _event_approval_satisfied(event)
+        ):
+            apply("require_approval", "egress requires approval", "egress_approval_required")
+
+    data_config = _mapping_value(control_config.get("data"))
+    denied_classes = set(_string_sequence(data_config.get("deniedClasses")))
+    redact_classes = set(_string_sequence(data_config.get("redactClasses")))
+    secret_classes = set(_string_sequence(data_config.get("secretClasses")))
+    denied_seen = sorted(set(data_classes).intersection(denied_classes))
+    secret_seen = sorted(set(data_classes).intersection(secret_classes))
+    redact_seen = sorted(set(data_classes).intersection(redact_classes))
+    if denied_seen:
+        apply("deny", f"blocked data classes present: {', '.join(denied_seen)}", "data_class_policy")
+    if secret_seen or redact_seen:
+        redactions.extend(secret_seen + redact_seen)
+        apply(
+            "redact",
+            f"redaction required for data classes: {', '.join(redactions)}",
+            "pii_secret_minimization",
+        )
+
+    if _control_enabled(control_config, "dataResidency", default=False):
+        allowed_regions = _control_string_set(control_config, "dataResidency", "allowedRegions")
+        region = _string_value(actor.get("region")) or _string_value(resource.get("region"))
+        if allowed_regions and region and region not in allowed_regions:
+            apply("deny", f"region {region} is outside allowed residency set", "data_residency")
+
+    taint_config = _mapping_value(control_config.get("taint"))
+    if taint_config.get("blockPromptInjection") is True and _event_bool(
+        event,
+        "promptInjection",
+        "prompt_injection",
+    ):
+        apply("quarantine", "prompt injection signal is present", "prompt_injection_taint")
+    if taint_config.get("blockTaintedToolResults") is True and _event_bool(
+        event,
+        "tainted",
+        "toolResultTainted",
+    ):
+        apply("quarantine", "tainted tool result signal is present", "tool_result_taint")
+
+    policy_refs = _string_sequence(event.get("policyRefs") or event.get("policy_refs"))
+    if action == "allow" and _control_bool(control_config, "runtime", "logAllowed"):
+        action = "log_only"
+        reasons.append("allowed action logged by runtime policy")
+        control_id = "runtime_log_allowed"
+
+    allowed = action in {"allow", "log_only"}
+    reason = reasons[0] if reasons else "runtime policy allowed action"
+    return RuntimeEventEvaluation(
+        event_id=event_id,
+        action=action,
+        reason=reason,
+        allowed=allowed,
+        reasons=reasons,
+        layer=layer,
+        operation=operation,
+        control_id=control_id,
+        policy_refs=policy_refs,
+        redactions=redactions or None,
+    )
+
+
+def evaluate_runtime_events(
+    manifest: Mapping[str, Any],
+    events: Sequence[Mapping[str, Any]],
+) -> list[RuntimeEventEvaluation]:
+    return [evaluate_runtime_event(manifest, event) for event in events]
+
+
+def expected_runtime_decision_mismatches(
+    event: Mapping[str, Any],
+    evaluation: RuntimeEventEvaluation,
+) -> list[str]:
+    expected = event.get("expectedDecision")
+    if not isinstance(expected, Mapping):
+        expected = event.get("expected_decision")
+    if not isinstance(expected, Mapping):
+        return []
+
+    mismatches: list[str] = []
+    expected_allowed = expected.get("allowed")
+    if "allowed" in expected and not isinstance(expected_allowed, bool):
+        mismatches.append("expectedDecision.allowed must be a boolean")
+    elif isinstance(expected_allowed, bool) and expected_allowed is not evaluation.allowed:
+        mismatches.append(
+            f"expected allowed={expected_allowed}, got allowed={evaluation.allowed}",
+        )
+
+    expected_action = _string_value(expected.get("action"))
+    if expected_action is not None and expected_action != evaluation.action:
+        mismatches.append(f"expected action={expected_action}, got action={evaluation.action}")
+
+    expected_control_id = _string_value(expected.get("controlId")) or _string_value(
+        expected.get("control_id")
+    )
+    if expected_control_id is not None and expected_control_id != evaluation.control_id:
+        mismatches.append(
+            f"expected controlId={expected_control_id}, got controlId={evaluation.control_id or 'none'}"
+        )
+
+    expected_reason = _string_value(expected.get("reason"))
+    if expected_reason is not None and expected_reason != evaluation.reason:
+        mismatches.append(f"expected reason={expected_reason!r}, got reason={evaluation.reason!r}")
+
+    reason_text = "\n".join([evaluation.reason, *evaluation.reasons])
+    for expected_snippet in _string_sequence(expected.get("reasonIncludes")):
+        if expected_snippet not in reason_text:
+            mismatches.append(f"expected reason to include {expected_snippet!r}")
+
+    for expected_redaction in _string_sequence(expected.get("redactions")):
+        if expected_redaction not in (evaluation.redactions or []):
+            mismatches.append(f"expected redaction {expected_redaction!r}")
+
+    for expected_policy_ref in _string_sequence(expected.get("policyRefs")):
+        if expected_policy_ref not in (evaluation.policy_refs or []):
+            mismatches.append(f"expected policyRef {expected_policy_ref!r}")
+
+    return mismatches
 
 
 def _validate_manifest(manifest: Mapping[str, Any]) -> None:
@@ -574,3 +903,149 @@ def _bool_value(primary: object, fallback: object) -> bool | None:
     if isinstance(primary, bool):
         return primary
     return fallback if isinstance(fallback, bool) else None
+
+
+def _mapping_value(value: object) -> Mapping[str, Any]:
+    return value if isinstance(value, Mapping) else {}
+
+
+def _event_action_rank(action: RuntimeEventAction) -> int:
+    return {
+        "allow": 0,
+        "log_only": 1,
+        "redact": 2,
+        "require_approval": 3,
+        "quarantine": 4,
+        "deny": 5,
+    }[action]
+
+
+def _control_enabled(
+    controls: Mapping[str, Any],
+    name: str,
+    *,
+    default: bool,
+) -> bool:
+    raw = controls.get(name)
+    if raw is None:
+        return default
+    if isinstance(raw, bool):
+        return raw
+    if isinstance(raw, Mapping):
+        enabled = raw.get("enabled")
+        if isinstance(enabled, bool):
+            return enabled
+    return default
+
+
+def _control_mapping(controls: Mapping[str, Any], name: str) -> Mapping[str, Any]:
+    raw = controls.get(name)
+    return raw if isinstance(raw, Mapping) else {}
+
+
+def _control_string(controls: Mapping[str, Any], control: str, key: str) -> str | None:
+    return _string_value(_control_mapping(controls, control).get(key))
+
+
+def _control_bool(controls: Mapping[str, Any], control: str, key: str) -> bool:
+    return _control_mapping(controls, control).get(key) is True
+
+
+def _control_string_set(controls: Mapping[str, Any], control: str, key: str) -> set[str]:
+    return set(_string_sequence(_control_mapping(controls, control).get(key)))
+
+
+def _missing_auth_fields(actor: Mapping[str, Any], controls: Mapping[str, Any]) -> list[str]:
+    auth = _control_mapping(controls, "authContext")
+    required = _string_sequence(auth.get("requiredFields")) or ["userId", "tenantId", "role"]
+    missing = []
+    for field in required:
+        snake_field = _camel_to_snake(field)
+        if _string_value(actor.get(field)) is None and _string_value(actor.get(snake_field)) is None:
+            missing.append(field)
+    return missing
+
+
+def _tenant_mismatch(actor: Mapping[str, Any], resource: Mapping[str, Any]) -> bool:
+    actor_tenant = _string_value(actor.get("tenantId")) or _string_value(actor.get("tenant_id"))
+    resource_tenant = _string_value(resource.get("tenantId")) or _string_value(resource.get("tenant_id"))
+    return bool(actor_tenant and resource_tenant and actor_tenant != resource_tenant)
+
+
+def _missing_entitlements(actor: Mapping[str, Any], resource: Mapping[str, Any]) -> list[str]:
+    actor_entitlements = set(_string_sequence(actor.get("entitlements")))
+    required = _string_sequence(resource.get("requiredEntitlements")) or _string_sequence(
+        resource.get("required_entitlements")
+    )
+    if not required:
+        entitlement = _string_value(resource.get("entitlement"))
+        required = [entitlement] if entitlement else []
+    return [entitlement for entitlement in required if entitlement not in actor_entitlements]
+
+
+def _resource_name(resource: Mapping[str, Any]) -> str | None:
+    return _string_value(resource.get("name")) or _string_value(resource.get("id"))
+
+
+def _resource_uri_or_name(resource: Mapping[str, Any]) -> str | None:
+    return _string_value(resource.get("uri")) or _resource_name(resource)
+
+
+def _event_approval_satisfied(event: Mapping[str, Any]) -> bool:
+    if _event_bool(event, "approvalRequiredSatisfied", "approval_required_satisfied"):
+        return True
+    decision = event.get("decision")
+    if isinstance(decision, Mapping) and _string_value(decision.get("approvalRef")):
+        return True
+    return _string_value(event.get("approvalRef")) is not None
+
+
+def _event_bool(event: Mapping[str, Any], *keys: str) -> bool:
+    for key in keys:
+        value = event.get(key)
+        if isinstance(value, bool):
+            return value
+        payload = _mapping_value(event.get("payload"))
+        value = payload.get(key)
+        if isinstance(value, bool):
+            return value
+    return False
+
+
+def _event_text(event: Mapping[str, Any], *keys: str) -> str | None:
+    for key in keys:
+        value = _string_value(event.get(key))
+        if value:
+            return value
+        payload = _mapping_value(event.get("payload"))
+        value = _string_value(payload.get(key))
+        if value:
+            return value
+    return None
+
+
+def _control_expected_version(controls: Mapping[str, Any], resource: Mapping[str, Any]) -> str | None:
+    name = _resource_name(resource)
+    versions = _control_mapping(controls, "schemaBinding").get("currentVersions")
+    if isinstance(versions, Mapping) and name:
+        return _string_value(versions.get(name))
+    return _string_value(_control_mapping(controls, "schemaBinding").get("currentVersion"))
+
+
+def _resource_version(resource: Mapping[str, Any]) -> str | None:
+    return (
+        _string_value(resource.get("version"))
+        or _string_value(resource.get("schemaVersion"))
+        or _string_value(resource.get("schema_version"))
+    )
+
+
+def _camel_to_snake(value: str) -> str:
+    result = []
+    for char in value:
+        if char.isupper():
+            result.append("_")
+            result.append(char.lower())
+        else:
+            result.append(char)
+    return "".join(result).lstrip("_")

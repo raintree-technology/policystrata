@@ -1,6 +1,6 @@
 {
   "name": "policystrata",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "TypeScript/Node trace recorder and runtime authorizer for PolicyStrata",
   "type": "module",
   "main": "./dist/src/index.js",
@@ -51,11 +51,11 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "test": "npm run build && node --test dist/test/*.test.js",
-    "prepack": "npm run build"
+    "test": "bun run build && node --test dist/test/*.test.js",
+    "prepack": "bun run build"
   },
   "engines": {
-    "node": ">=18"
+    "node": "24.x"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

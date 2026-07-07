@@ -15,6 +15,11 @@ from policystrata.domain import load_policy, load_surface_config
 from policystrata.evidence import markdown_table
 from policystrata.models import Policy, SurfaceConfig
 from policystrata.policy import PolicyOracle
+from policystrata.runtime import (
+    create_policystrata_authorizer,
+    evaluate_runtime_events,
+    expected_runtime_decision_mismatches,
+)
 from policystrata.scan_models import FileInputConfig, ImportedTrace, ScanConfig
 from policystrata.scanner import load_scan_config, tenant_columns_for_scope_check
 from policystrata.trace_import import (
@@ -178,8 +183,17 @@ def run_config_doctor(config_path: Path) -> dict[str, Any]:
     policy_docs = inspect_policy_documents(config_dir, config.policy_docs, policy)
     prompt_manifests = inspect_prompt_manifests(config_dir, config.prompt_manifests, policy)
     source_maps = inspect_file_config(config_dir, config.source_maps, "source map", confined=False)
+    runtime_manifests = inspect_runtime_manifests(config_dir, config.runtime_manifests)
+    runtime_events = inspect_runtime_events(config_dir, config.runtime_events, runtime_manifests)
     schema = inspect_schema(config, config_dir, policy)
-    coverage = build_coverage_accounting(config, sql_traces, policy_docs, prompt_manifests)
+    coverage = build_coverage_accounting(
+        config,
+        sql_traces,
+        policy_docs,
+        prompt_manifests,
+        runtime_manifests,
+        runtime_events,
+    )
     stack = build_stack_checks(
         config,
         config_path,
@@ -192,6 +206,8 @@ def run_config_doctor(config_path: Path) -> dict[str, Any]:
         policy_docs,
         prompt_manifests,
         source_maps,
+        runtime_manifests,
+        runtime_events,
         schema,
         coverage,
     )
@@ -204,6 +220,8 @@ def run_config_doctor(config_path: Path) -> dict[str, Any]:
         "domain_path": str(domain_path) if domain_path is not None else f"builtin:{config.domain}",
         "policy": policy_inventory(config, domain_path, policy, policy_error),
         "policy_documents": policy_docs,
+        "runtime_manifests": runtime_manifests,
+        "runtime_events": runtime_events,
         "surfaces": surface_inventory(config, domain_path, surfaces, surfaces_error),
         "stack": stack,
         "coverage_accounting": coverage,
@@ -547,6 +565,186 @@ def prompt_manifest_detail(prompt_manifests: dict[str, Any]) -> str:
     )
 
 
+def inspect_runtime_manifests(config_dir: Path, config: FileInputConfig) -> dict[str, Any]:
+    files = inspect_file_config(config_dir, config, "runtime manifest", confined=False)
+    files["manifests"] = []
+    files["valid_manifests"] = []
+    files["manifest_versions"] = []
+    if files["status"] not in {"wired", "invalid"} or not files["existing_files"]:
+        return files
+
+    for raw_path in files["existing_files"]:
+        path = Path(str(raw_path))
+        try:
+            payload = load_structured_payload(path)
+        except (OSError, ValueError, yaml.YAMLError) as exc:
+            files["errors"].append(f"runtime manifest could not be parsed: {path}: {exc}")
+            continue
+        if not isinstance(payload, dict):
+            files["errors"].append(f"runtime manifest must be an object: {path}")
+            continue
+        try:
+            create_policystrata_authorizer(payload)
+        except ValueError as exc:
+            files["errors"].append(f"runtime manifest is invalid: {path}: {exc}")
+            continue
+        record = {
+            "path": str(path),
+            "version": str(payload.get("version", "")),
+            "resources": (
+                len(payload.get("resources", [])) if isinstance(payload.get("resources"), list) else 0
+            ),
+            "tools": len(payload.get("tools", [])) if isinstance(payload.get("tools"), list) else 0,
+            "payload": payload,
+        }
+        files["manifests"].append({key: value for key, value in record.items() if key != "payload"})
+        files["valid_manifests"].append(record)
+        files["manifest_versions"].append(record["version"])
+
+    files["status"] = "invalid" if files["errors"] else "wired"
+    return files
+
+
+def inspect_runtime_events(
+    config_dir: Path,
+    config: FileInputConfig,
+    runtime_manifests: dict[str, Any],
+) -> dict[str, Any]:
+    files = inspect_file_config(config_dir, config, "runtime event fixture", confined=False)
+    files["events"] = 0
+    files["evaluated_events"] = 0
+    files["allowed_events"] = 0
+    files["blocked_events"] = 0
+    files["expected_events"] = 0
+    files["expectation_mismatches"] = []
+    files["actions"] = {}
+    if files["status"] not in {"wired", "invalid"} or not files["existing_files"]:
+        return files
+
+    valid_manifests = runtime_manifests.get("valid_manifests", [])
+    if not valid_manifests:
+        files["status"] = "partial"
+        return files
+
+    events: list[dict[str, Any]] = []
+    for raw_path in files["existing_files"]:
+        path = Path(str(raw_path))
+        try:
+            events.extend(load_runtime_events(path))
+        except (OSError, ValueError, yaml.YAMLError) as exc:
+            files["errors"].append(f"runtime event fixture could not be parsed: {path}: {exc}")
+
+    if not events:
+        files["status"] = "invalid" if files["errors"] else "partial"
+        return files
+
+    manifest_payload = valid_manifests[0].get("payload")
+    if not isinstance(manifest_payload, dict):
+        files["status"] = "partial"
+        return files
+
+    try:
+        evaluations = evaluate_runtime_events(manifest_payload, events)
+    except ValueError as exc:
+        files["errors"].append(f"runtime events could not be evaluated: {exc}")
+        files["status"] = "invalid"
+        return files
+
+    actions = Counter(evaluation.action for evaluation in evaluations)
+    for event, evaluation in zip(events, evaluations, strict=True):
+        expected = event.get("expectedDecision") or event.get("expected_decision")
+        if not isinstance(expected, dict):
+            continue
+        files["expected_events"] += 1
+        mismatches = expected_runtime_decision_mismatches(event, evaluation)
+        if mismatches:
+            mismatch = {
+                "eventId": event.get("eventId") or event.get("event_id"),
+                "mismatches": mismatches,
+            }
+            files["expectation_mismatches"].append(mismatch)
+            files["errors"].append(
+                "runtime event expectedDecision mismatch: "
+                f"{mismatch['eventId']}: {'; '.join(mismatches)}"
+            )
+    files["events"] = len(events)
+    files["evaluated_events"] = len(evaluations)
+    files["allowed_events"] = sum(1 for evaluation in evaluations if evaluation.allowed)
+    files["blocked_events"] = sum(1 for evaluation in evaluations if not evaluation.allowed)
+    files["actions"] = dict(sorted(actions.items()))
+    files["status"] = "invalid" if files["errors"] else "wired"
+    return files
+
+
+def load_structured_payload(path: Path) -> object:
+    text = path.read_text(encoding="utf-8")
+    if path.suffix.lower() == ".json":
+        return json.loads(text)
+    return yaml.safe_load(text)
+
+
+def load_runtime_events(path: Path) -> list[dict[str, Any]]:
+    if path.suffix.lower() == ".jsonl":
+        events: list[dict[str, Any]] = []
+        with path.open("r", encoding="utf-8") as handle:
+            for line_number, line in enumerate(handle, start=1):
+                if not line.strip():
+                    continue
+                payload = json.loads(line)
+                if not isinstance(payload, dict):
+                    raise ValueError(f"{path}:{line_number}: runtime event must be an object")
+                events.append(payload)
+        return events
+    return runtime_event_list(load_structured_payload(path))
+
+
+def runtime_event_list(payload: object) -> list[dict[str, Any]]:
+    if isinstance(payload, dict) and isinstance(payload.get("events"), list):
+        items = payload["events"]
+    else:
+        items = [payload]
+    events = [item for item in items if isinstance(item, dict)]
+    if len(events) != len(items):
+        raise ValueError("runtime event payload must be an event object or {events:[...]}")
+    return events
+
+
+def runtime_manifests_configured(config: ScanConfig) -> bool:
+    return bool(
+        config.runtime_manifests.files
+        or config.runtime_manifests.required
+        or config.runtime_events.files
+        or config.runtime_events.required
+    )
+
+
+def runtime_events_configured(config: ScanConfig) -> bool:
+    return bool(config.runtime_events.files or config.runtime_events.required)
+
+
+def runtime_manifest_detail(runtime_manifests: dict[str, Any]) -> str:
+    versions = ", ".join(
+        str(version) for version in runtime_manifests.get("manifest_versions", []) if version
+    )
+    return (
+        f"{len(runtime_manifests['existing_files'])} files; "
+        f"valid={len(runtime_manifests.get('valid_manifests', []))}; "
+        f"versions={versions or 'none'}"
+    )
+
+
+def runtime_event_detail(runtime_events: dict[str, Any]) -> str:
+    return (
+        f"{len(runtime_events['existing_files'])} files; "
+        f"events={runtime_events.get('events', 0)}; "
+        f"evaluated={runtime_events.get('evaluated_events', 0)}; "
+        f"allowed={runtime_events.get('allowed_events', 0)}; "
+        f"blocked={runtime_events.get('blocked_events', 0)}; "
+        f"expected={runtime_events.get('expected_events', 0)}; "
+        f"mismatches={len(runtime_events.get('expectation_mismatches', []))}"
+    )
+
+
 def inspect_declared_files(
     config_dir: Path,
     values: list[str],
@@ -687,6 +885,8 @@ def build_coverage_accounting(
     sql_traces: dict[str, Any],
     policy_docs: dict[str, Any],
     prompt_manifests: dict[str, Any],
+    runtime_manifests: dict[str, Any],
+    runtime_events: dict[str, Any],
 ) -> dict[str, Any]:
     tenant_checks = bool(config.tenancy.canonical_predicates or config.tenancy.tenant_columns)
     database_checks = len(config.database.rls_checks) + len(config.database.state_assertions)
@@ -722,6 +922,16 @@ def build_coverage_accounting(
         ),
         "prompt_manifest_unauthorized_dimensions": list(
             prompt_manifests.get("unauthorized_dimensions", [])
+        ),
+        "runtime_manifest_files": len(config.runtime_manifests.files),
+        "runtime_manifest_valid": len(runtime_manifests.get("valid_manifests", [])),
+        "runtime_event_files": len(config.runtime_events.files),
+        "runtime_events_evaluated": int(runtime_events.get("evaluated_events", 0)),
+        "runtime_events_allowed": int(runtime_events.get("allowed_events", 0)),
+        "runtime_events_blocked": int(runtime_events.get("blocked_events", 0)),
+        "runtime_event_expected_decisions": int(runtime_events.get("expected_events", 0)),
+        "runtime_event_expectation_mismatches": len(
+            runtime_events.get("expectation_mismatches", [])
         ),
         "source_map_files": len(config.source_maps.files),
         "fuzz_enabled": config.fuzz.enabled,
@@ -1020,6 +1230,8 @@ def build_stack_checks(
     policy_docs: dict[str, Any],
     prompt_manifests: dict[str, Any],
     source_maps: dict[str, Any],
+    runtime_manifests: dict[str, Any],
+    runtime_events: dict[str, Any],
     schema: dict[str, Any],
     coverage: dict[str, Any],
 ) -> list[dict[str, Any]]:
@@ -1153,6 +1365,30 @@ def build_stack_checks(
             ),
         ),
     ]
+    if runtime_manifests_configured(config):
+        stack.append(
+            stack_item(
+                "runtime_manifests",
+                "Runtime manifests",
+                str(runtime_manifests["status"]),
+                "release",
+                [config_file, *runtime_manifests["files"]],
+                runtime_manifest_detail(runtime_manifests),
+                error=join_errors(runtime_manifests),
+            )
+        )
+    if runtime_events_configured(config):
+        stack.append(
+            stack_item(
+                "runtime_event_fixtures",
+                "Runtime event fixtures",
+                str(runtime_events["status"]),
+                "release",
+                [config_file, *runtime_events["files"]],
+                runtime_event_detail(runtime_events),
+                error=join_errors(runtime_events),
+            )
+        )
     return stack
 
 
@@ -1417,6 +1653,33 @@ def build_remediation(
         "release",
         [str(config_path), ".github/workflows/policystrata.yml"],
         ["uv run policystrata scan --config {config}"],
+        config_path,
+    )
+    add_todo_if_needed(
+        todos,
+        by_id,
+        "runtime_manifests",
+        "Add a deny-by-default runtime manifest for tool and release-boundary checks.",
+        "release",
+        [str(config_path), "runtime-manifest.json"],
+        [
+            "uv run policystrata schema --kind runtime-event",
+            "uv run policystrata doctor --config {config}",
+        ],
+        config_path,
+    )
+    add_todo_if_needed(
+        todos,
+        by_id,
+        "runtime_event_fixtures",
+        "Add redacted runtime event fixtures for gateway enforcement checks.",
+        "release",
+        [str(config_path), "runtime-events.json"],
+        [
+            "uv run policystrata runtime-evaluate "
+            "--manifest runtime-manifest.json --event runtime-events.json",
+            "uv run policystrata doctor --config {config}",
+        ],
         config_path,
     )
     if config.dbt.files == []:

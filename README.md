@@ -302,7 +302,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: raintree-technology/policystrata@v1.0.3
+      - uses: raintree-technology/policystrata@v1.0.4
         with:
           config: policystrata.yaml
           out: runs/policystrata
@@ -377,6 +377,17 @@ Tool decisions also include operational metadata for logs and metrics: `toolKind
 can be exposed before model invocation with `decisionPoint: "pre_model"` and
 `approvalState: "pending"`; approval is enforced when the same tool is checked at
 `decisionPoint: "execution"`.
+
+For governed-data agents that need a customer-hosted sidecar, install
+`@policystrata/agent-trust-gateway` from npm. The gateway evaluates v0.2 runtime events for model,
+retrieval, MCP/tool, SQL/data, memory, browser/code, and egress boundaries, returns `allow`,
+`deny`, `redact`, `require_approval`, `quarantine`, or `log_only`, and uploads sanitized decision
+envelopes to a PolicyStrata control plane. Event `payload` and fixture-only `expectedDecision`
+metadata are stripped before upload by default so prompts, rows, documents, tool payloads, and test
+expectations remain local unless a deployment opts in to payload upload.
+Like the in-process runtime, the gateway is an application-side enforcement and telemetry helper;
+it does not replace `policystrata scan`, `policystrata doctor`, application authorization, or
+database controls.
 Node applications should install the Node package from npm; the PyPI package installs the Python
 CLI/scanner and does not make `policystrata/runtime` importable to Node.
 

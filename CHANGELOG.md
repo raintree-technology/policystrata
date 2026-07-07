@@ -2,7 +2,18 @@
 
 ## [Unreleased]
 
-No changes yet.
+## [1.0.4] - 2026-07-07
+
+- Add public JSON Schema rendering for scanner, trace, scan-result, and runtime event contracts.
+- Add optional runtime manifest and runtime event fixture readiness checks to `policystrata doctor`.
+- Add the customer-hosted `@policystrata/agent-trust-gateway` package surface, CI checks, and npm
+  trusted-publishing workflow path.
+- Publish the registry-proof release tuple: PyPI `policystrata==1.0.4`, npm runtime
+  `policystrata@0.1.2`, and gateway `@policystrata/agent-trust-gateway@0.1.0`.
+- Add runtime fixture `expectedDecision` metadata, CLI assertion mode, doctor expectation checks,
+  and clean-install artifact/registry smoke commands.
+- Move local development tooling to Bun/mise, add dependency/security workflows, and ignore
+  generated site/output artifacts.
 
 ## [1.0.3] - 2026-07-02
 
