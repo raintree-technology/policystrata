@@ -302,6 +302,19 @@ def test_evaluate_runtime_event_allows_clean_sql_metadata() -> None:
     assert decision.reason == "runtime policy allowed action"
 
 
+def test_evaluate_runtime_event_denies_when_kill_switch_is_enabled() -> None:
+    manifest = governed_runtime_manifest()
+    controls = manifest["controls"]
+    assert isinstance(controls, dict)
+    controls["runtime"] = {"killSwitch": True}
+
+    decision = evaluate_runtime_event(manifest, runtime_event())
+
+    assert decision.allowed is False
+    assert decision.action == "deny"
+    assert decision.control_id == "runtime_kill_switch"
+
+
 def test_expected_runtime_decision_metadata_is_asserted_outside_evaluation() -> None:
     event = runtime_event(expectedDecision={"allowed": True, "action": "allow"})
     decision = evaluate_runtime_event(governed_runtime_manifest(), event)
@@ -379,6 +392,89 @@ def test_evaluate_runtime_event_denies_sql_without_tenant_predicate() -> None:
     assert "missing tenant predicate tenant_id" in decision.reason
 
 
+def test_evaluate_runtime_event_does_not_accept_tenant_column_substring() -> None:
+    decision = evaluate_runtime_event(
+        governed_runtime_manifest(),
+        runtime_event(payload={"sql": "select tenant_id from support_tickets where status = 'open'"}),
+    )
+
+    assert decision.allowed is False
+    assert "missing tenant predicate tenant_id" in decision.reason
+
+
+def test_evaluate_runtime_event_classifies_sql_query_risk_and_row_limit() -> None:
+    manifest = governed_runtime_manifest()
+    controls = manifest["controls"]
+    assert isinstance(controls, dict)
+    controls["sql"] = {
+        "tenantColumn": "tenant_id",
+        "allowedQueryRisks": ["read"],
+        "maxRows": 100,
+    }
+
+    export_decision = evaluate_runtime_event(
+        manifest,
+        runtime_event(payload={"sql": "copy support_tickets to stdout where tenant_id = 'tenant_a'"}),
+    )
+    row_decision = evaluate_runtime_event(
+        manifest,
+        runtime_event(
+            payload={
+                "sql": "select * from support_tickets where tenant_id = 'tenant_a'",
+                "limit": 500,
+            }
+        ),
+    )
+
+    assert export_decision.allowed is False
+    assert export_decision.query_risk == "export"
+    assert "SQL query risk export" in "\n".join(export_decision.reasons)
+    assert row_decision.allowed is False
+    assert row_decision.query_risk == "read"
+    assert "exceeds maxRows 100" in "\n".join(row_decision.reasons)
+
+
+def test_evaluate_runtime_event_denies_unparameterized_sql_when_required() -> None:
+    manifest = governed_runtime_manifest()
+    controls = manifest["controls"]
+    assert isinstance(controls, dict)
+    controls["sql"] = {
+        "tenantColumn": "tenant_id",
+        "requireParameterized": True,
+    }
+
+    decision = evaluate_runtime_event(
+        manifest,
+        runtime_event(payload={"sql": "select * from support_tickets where tenant_id = 'tenant_a'"}),
+    )
+
+    assert decision.allowed is False
+    assert decision.control_id == "sql_parameterization_required"
+    assert "string_literal" in decision.reason
+
+
+def test_evaluate_runtime_event_denies_rls_drift() -> None:
+    manifest = governed_runtime_manifest()
+    controls = manifest["controls"]
+    assert isinstance(controls, dict)
+    controls["databaseRule"] = {"requireRls": True}
+
+    decision = evaluate_runtime_event(
+        manifest,
+        runtime_event(
+            layer="database_rule",
+            operation="rls_drift",
+            resource={"kind": "table", "name": "support_tickets"},
+            rlsExpected=True,
+            rlsEnabled=False,
+        ),
+    )
+
+    assert decision.allowed is False
+    assert decision.action == "deny"
+    assert decision.control_id == "rls_drift"
+
+
 def test_evaluate_runtime_event_logs_stale_schema_binding() -> None:
     decision = evaluate_runtime_event(
         governed_runtime_manifest(),
@@ -408,6 +504,31 @@ def test_evaluate_runtime_event_denies_unapproved_egress() -> None:
     assert decision.allowed is False
     assert decision.action == "deny"
     assert "egress destination" in decision.reason
+
+
+def test_evaluate_runtime_event_denies_unapproved_egress_destination_class() -> None:
+    manifest = governed_runtime_manifest()
+    controls = manifest["controls"]
+    assert isinstance(controls, dict)
+    controls["egress"] = {"allowedDestinationClasses": ["approved_vendor"]}
+
+    decision = evaluate_runtime_event(
+        manifest,
+        runtime_event(
+            layer="egress",
+            operation="export",
+            resource={
+                "kind": "webhook",
+                "name": "external",
+                "uri": "https://analytics.example/webhook",
+                "destinationClass": "public_internet",
+            },
+        ),
+    )
+
+    assert decision.allowed is False
+    assert decision.action == "deny"
+    assert "destination class public_internet" in decision.reason
 
 
 def test_evaluate_runtime_event_quarantines_cross_tenant_memory() -> None:

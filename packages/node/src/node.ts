@@ -4,6 +4,7 @@ import { appendFileSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 
 export type PolicyStrataToolKind = "read" | "write" | "memory" | "external";
+export const POLICYSTRATA_NODE_SDK_VERSION = "0.1.3";
 
 export interface PolicyStrataRedactionConfig {
   hashIds?: boolean;
@@ -172,6 +173,7 @@ export interface PolicyStrataTraceRecord {
   id: string;
   record_type: "sql_trace" | "tool_execution" | "agent_session" | "mutation";
   version: "policystrata.node.trace.v1";
+  node_sdk_version: string;
   source: string;
   timestamp: string;
   service: string;
@@ -564,6 +566,7 @@ export class PolicyStrataRecorder {
       id: input.id,
       record_type: input.recordType,
       version: "policystrata.node.trace.v1",
+      node_sdk_version: POLICYSTRATA_NODE_SDK_VERSION,
       source: this.options.source ?? DEFAULT_SOURCE,
       timestamp: this.now().toISOString(),
       service: this.options.service,

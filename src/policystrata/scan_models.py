@@ -235,7 +235,7 @@ class ScanSummary(CompatModel):
 
 
 class ScanResult(CompatModel):
-    version: str = "scan.v1"
+    version: Literal["scan.v1"] = "scan.v1"
     domain: str
     config_path: str
     output_dir: str

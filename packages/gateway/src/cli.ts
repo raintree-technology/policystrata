@@ -43,6 +43,7 @@ async function main(argv: string[]): Promise<number> {
       port: numberFlag(flags, "port") ?? 8787,
       mode: modeFlag(flags),
       upload,
+      gatewayToken: optionalString(flags, "gateway-token") ?? process.env.POLICYSTRATA_GATEWAY_TOKEN,
       failOnUploadError: flags["fail-on-upload-error"] === true,
     });
     process.stderr.write(`PolicyStrata Agent Trust Gateway listening at ${gateway.url}\n`);
@@ -143,6 +144,7 @@ Options:
   --token                     Control-plane bearer token. Defaults to POLICYSTRATA_CONTROL_PLANE_TOKEN.
   --organization-id           Optional organization header for the control plane.
   --include-payload           Upload event payloads instead of stripping them. Off by default.
+  --gateway-token             Bearer token required by /v1/decide. Defaults to POLICYSTRATA_GATEWAY_TOKEN.
   --fail-on-upload-error      Return 502 when the control-plane upload fails.
 `);
 }

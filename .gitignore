@@ -1,22 +1,78 @@
+# OS/editor state
 .DS_Store
+Thumbs.db
+*.swp
+*.swo
+.cache/
+.idea/
+.vscode/
+
+# Local secrets and environment files
+.env
+.env.*
+!.env.example
+.envrc.local
+.direnv/
+
+# Python bytecode, environments, and tool caches
 __pycache__/
-node_modules/
 *.py[cod]
+*$py.class
+.python-version.local
+.venv/
+venv/
+env/
+ENV/
 *.egg-info/
+.eggs/
+pip-wheel-metadata/
+.tox/
+.nox/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
-.coverage
-coverage.xml
-htmlcov/
+.pyre/
 .hypothesis/
-.venv/
+.uv-cache/
+.ipynb_checkpoints/
+.dmypy.json
+dmypy.json
+
+# Coverage and test reports
+.coverage
+.coverage.*
+coverage.xml
+coverage/
+htmlcov/
+junit.xml
+test-results/
+.junit/
+.reports/
+
+# Python packaging/build artifacts
 dist/
 build/
+site/
+wheelhouse/
+*.egg
+
+# JavaScript/Bun workspace artifacts
+node_modules/
+.bun/
+.turbo/
+.vite/
+.nyc_output/
+*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+bun-debug.log*
+
+# Project-generated runtime artifacts
 runs/
 tmp/
-.env
 output/
+.clearance/
 
 # Generated public-site artifacts
 feed.xml

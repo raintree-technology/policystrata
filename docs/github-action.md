@@ -6,7 +6,7 @@ action exits non-zero and blocks the workflow.
 
 The action installs PolicyStrata from the action checkout by default, so it can be used from a
 repository tag before the package is published to PyPI. After the PyPI package is published, callers
-can optionally set `package` to a normal pip install spec such as `policystrata==1.0.4`.
+can optionally set `package` to a normal pip install spec such as `policystrata==1.0.5`.
 
 For CI, run two gates:
 
@@ -32,7 +32,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: raintree-technology/policystrata@v1.0.4
+      - uses: raintree-technology/policystrata@v1.0.5
         with:
           config: policystrata.yaml
           out: runs/policystrata
@@ -45,7 +45,7 @@ jobs:
 ## Upload Scan Artifacts
 
 ```yaml
-      - uses: raintree-technology/policystrata@v1.0.4
+      - uses: raintree-technology/policystrata@v1.0.5
         with:
           config: policystrata.yaml
           out: runs/policystrata
@@ -55,6 +55,84 @@ jobs:
         with:
           name: policystrata-scan
           path: runs/policystrata
+```
+
+## JUnit Output
+
+When your CI test reporter expects JUnit XML, run the scanner CLI directly:
+
+```yaml
+      - name: PolicyStrata scan with JUnit
+        run: |
+          policystrata scan \
+            --config policystrata.yaml \
+            --out runs/policystrata \
+            --junit test-results/policystrata.xml
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: policystrata-junit
+          path: test-results/policystrata.xml
+```
+
+## Generic JSON Evidence
+
+For CI systems that want a single redacted JSON handoff without Clearance, export the run after the
+scan or deterministic suite finishes:
+
+```yaml
+      - name: Export generic PolicyStrata evidence
+        if: always()
+        run: |
+          policystrata export runs/policystrata \
+            --format policystrata-json \
+            --out runs/policystrata/evidence.json
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: policystrata-evidence
+          path: runs/policystrata/evidence.json
+```
+
+This stays local to the workflow. The generic JSON export is an OSS artifact format; it does not
+call hosted Clearance APIs and does not require hosted auth.
+
+## Clearance Runner Contract
+
+For repositories that use the optional Clearance runner contract, generate local metadata-only
+artifacts and upload only the runner payload. The upload step requires a runner token and returns
+exit code `4` on upload/auth failure.
+
+```yaml
+      - name: PolicyStrata run
+        run: |
+          uv run policystrata run \
+            --domain support_saas \
+            --suite seeded \
+            --out runs/policystrata \
+            --clearance-config clearance.runner.yaml \
+            --commit-sha "$GITHUB_SHA" \
+            --environment ci
+
+      - name: Validate Clearance runner config
+        run: uv run policystrata clearance-runner validate --config clearance.runner.yaml
+
+      - name: Write Clearance evidence pack
+        run: |
+          uv run policystrata clearance-runner evidence-pack \
+            --run-dir runs/policystrata \
+            --config clearance.runner.yaml \
+            --out runs/policystrata/evidence-pack.json
+
+      - name: Upload Clearance metadata
+        env:
+          CLEARANCE_RUNNER_TOKEN: ${{ secrets.CLEARANCE_RUNNER_TOKEN }}
+        run: |
+          uv run policystrata clearance-runner upload \
+            --run-dir runs/policystrata \
+            --config clearance.runner.yaml
 ```
 
 ## Config-Scoped Doctor

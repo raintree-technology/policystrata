@@ -40,16 +40,12 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Set up Python
-        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+      - name: Set up mise
+        uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db
         with:
-          python-version: "3.12"
-
-      - name: Set up Node.js
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
-        with:
-          node-version: "24"
-          package-manager-cache: false
+          version: 2026.7.1
+          install: true
+          cache: true
 
       - name: Install uv
         uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
@@ -58,16 +54,16 @@ jobs:
           cache-suffix: publish-py-3.12
 
       - name: Install dependencies
-        run: uv sync --extra dev --frozen
+        run: mise x python@3.12.13 node@24.18.0 -- uv sync --extra dev --frozen
 
       - name: Run tests
-        run: uv run pytest
+        run: mise x python@3.12.13 node@24.18.0 -- uv run pytest
 
       - name: Run lint
-        run: uv run ruff check .
+        run: mise x python@3.12.13 node@24.18.0 -- uv run ruff check .
 
       - name: Run type checks
-        run: uv run mypy src
+        run: mise x python@3.12.13 node@24.18.0 -- uv run mypy src
 
       - name: Check publishing uses a version tag
         run: |
@@ -82,7 +78,7 @@ jobs:
       - name: Check release tag matches package version
         if: ${{ startsWith(github.ref, 'refs/tags/') && (github.event_name != 'workflow_dispatch' || inputs.publish_pypi) }}
         run: |
-          package_version="$(uv run python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")"
+          package_version="$(mise x python@3.12.13 node@24.18.0 -- uv run python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")"
           tag_version="${GITHUB_REF_NAME#v}"
           if [ "$tag_version" != "$package_version" ]; then
             echo "Tag $GITHUB_REF_NAME does not match package version $package_version" >&2
@@ -90,7 +86,7 @@ jobs:
           fi
 
       - name: Clean-install Python distribution
-        run: node scripts/release-smoke.mjs --python-artifact
+        run: mise x python@3.12.13 node@24.18.0 -- node scripts/release-smoke.mjs --python-artifact
 
       - name: Record distribution checksums
         run: |
@@ -121,16 +117,12 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Set up Node.js
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+      - name: Set up mise
+        uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db
         with:
-          node-version: "24"
-          package-manager-cache: false
-
-      - name: Set up Bun
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
-        with:
-          bun-version: "1.3.11"
+          version: 2026.7.1
+          install: true
+          cache: true
 
       - name: Check npm publish uses a version tag
         run: |
@@ -143,18 +135,18 @@ jobs:
           esac
 
       - name: Install package dependencies
-        run: bun install --frozen-lockfile
+        run: mise x node@24.18.0 bun@1.3.11 -- bun install --frozen-lockfile
 
       - name: Run Node SDK tests
         working-directory: packages/node
-        run: bun run test
+        run: mise x node@24.18.0 bun@1.3.11 -- bun run test
 
       - name: Verify Node SDK package contents
         working-directory: packages/node
-        run: bun pm pack --dry-run
+        run: mise x node@24.18.0 bun@1.3.11 -- bun pm pack --dry-run
 
       - name: Clean-install Node SDK package artifact
-        run: node scripts/release-smoke.mjs --npm-runtime-artifact
+        run: mise x node@24.18.0 bun@1.3.11 -- node scripts/release-smoke.mjs --npm-runtime-artifact
 
   build-gateway:
     name: Build Gateway distribution
@@ -166,16 +158,12 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Set up Node.js
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+      - name: Set up mise
+        uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db
         with:
-          node-version: "24"
-          package-manager-cache: false
-
-      - name: Set up Bun
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
-        with:
-          bun-version: "1.3.11"
+          version: 2026.7.1
+          install: true
+          cache: true
 
       - name: Check gateway npm publish uses a version tag
         run: |
@@ -188,18 +176,18 @@ jobs:
           esac
 
       - name: Install package dependencies
-        run: bun install --frozen-lockfile
+        run: mise x node@24.18.0 bun@1.3.11 -- bun install --frozen-lockfile
 
       - name: Run Gateway tests
         working-directory: packages/gateway
-        run: bun run test
+        run: mise x node@24.18.0 bun@1.3.11 -- bun run test
 
       - name: Verify Gateway package contents
         working-directory: packages/gateway
-        run: bun pm pack --dry-run
+        run: mise x node@24.18.0 bun@1.3.11 -- bun pm pack --dry-run
 
       - name: Clean-install Gateway package artifact
-        run: node scripts/release-smoke.mjs --gateway-artifact
+        run: mise x node@24.18.0 bun@1.3.11 -- node scripts/release-smoke.mjs --gateway-artifact
 
   publish-pypi:
     name: Publish to PyPI
@@ -225,11 +213,12 @@ jobs:
           enable-cache: false
           ignore-empty-workdir: true
 
-      - name: Set up Node.js
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+      - name: Set up mise
+        uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db
         with:
-          node-version: "24"
-          package-manager-cache: false
+          version: 2026.7.1
+          install: true
+          cache: true
 
       - name: Download distribution packages
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
@@ -253,7 +242,7 @@ jobs:
         run: uv publish dist/*
 
       - name: Post-publish PyPI smoke
-        run: node scripts/release-smoke.mjs --published-pypi
+        run: mise x node@24.18.0 -- node scripts/release-smoke.mjs --published-pypi
 
   publish-npm:
     name: Publish to npm
@@ -273,44 +262,39 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Set up Node.js
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+      - name: Set up mise
+        uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db
         with:
-          node-version: "24"
-          registry-url: https://registry.npmjs.org
-          package-manager-cache: false
-
-      - name: Set up Bun
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
-        with:
-          bun-version: "1.3.11"
+          version: 2026.7.1
+          install: true
+          cache: true
 
       - name: Install package dependencies
-        run: bun install --frozen-lockfile
+        run: mise x node@24.18.0 bun@1.3.11 -- bun install --frozen-lockfile
 
       - name: Run Node SDK tests
         working-directory: packages/node
-        run: bun run test
+        run: mise x node@24.18.0 bun@1.3.11 -- bun run test
 
       - name: Verify Node SDK package contents
         working-directory: packages/node
-        run: bun pm pack --dry-run
+        run: mise x node@24.18.0 bun@1.3.11 -- bun pm pack --dry-run
 
       - name: Check Node package version is unpublished
         run: |
-          package_name="$(node -p "require('./packages/node/package.json').name")"
-          package_version="$(node -p "require('./packages/node/package.json').version")"
-          if npm view "${package_name}@${package_version}" version >/dev/null 2>&1; then
+          package_name="$(mise x node@24.18.0 bun@1.3.11 -- node -p "require('./packages/node/package.json').name")"
+          package_version="$(mise x node@24.18.0 bun@1.3.11 -- node -p "require('./packages/node/package.json').version")"
+          if mise x node@24.18.0 bun@1.3.11 -- npm view "${package_name}@${package_version}" version >/dev/null 2>&1; then
             echo "${package_name}@${package_version} already exists on npm" >&2
             exit 1
           fi
 
       - name: Publish Node package to npm
         working-directory: packages/node
-        run: npm publish --provenance
+        run: mise x node@24.18.0 bun@1.3.11 -- npm publish --provenance
 
       - name: Post-publish Node package smoke
-        run: node scripts/release-smoke.mjs --published-npm-runtime
+        run: mise x node@24.18.0 bun@1.3.11 -- node scripts/release-smoke.mjs --published-npm-runtime
 
   publish-gateway-npm:
     name: Publish Gateway to npm
@@ -330,41 +314,36 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Set up Node.js
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+      - name: Set up mise
+        uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db
         with:
-          node-version: "24"
-          registry-url: https://registry.npmjs.org
-          package-manager-cache: false
-
-      - name: Set up Bun
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
-        with:
-          bun-version: "1.3.11"
+          version: 2026.7.1
+          install: true
+          cache: true
 
       - name: Install package dependencies
-        run: bun install --frozen-lockfile
+        run: mise x node@24.18.0 bun@1.3.11 -- bun install --frozen-lockfile
 
       - name: Run Gateway tests
         working-directory: packages/gateway
-        run: bun run test
+        run: mise x node@24.18.0 bun@1.3.11 -- bun run test
 
       - name: Verify Gateway package contents
         working-directory: packages/gateway
-        run: bun pm pack --dry-run
+        run: mise x node@24.18.0 bun@1.3.11 -- bun pm pack --dry-run
 
       - name: Check Gateway package version is unpublished
         run: |
-          package_name="$(node -p "require('./packages/gateway/package.json').name")"
-          package_version="$(node -p "require('./packages/gateway/package.json').version")"
-          if npm view "${package_name}@${package_version}" version >/dev/null 2>&1; then
+          package_name="$(mise x node@24.18.0 bun@1.3.11 -- node -p "require('./packages/gateway/package.json').name")"
+          package_version="$(mise x node@24.18.0 bun@1.3.11 -- node -p "require('./packages/gateway/package.json').version")"
+          if mise x node@24.18.0 bun@1.3.11 -- npm view "${package_name}@${package_version}" version >/dev/null 2>&1; then
             echo "${package_name}@${package_version} already exists on npm" >&2
             exit 1
           fi
 
       - name: Publish Gateway package to npm
         working-directory: packages/gateway
-        run: npm publish --provenance --access public
+        run: mise x node@24.18.0 bun@1.3.11 -- npm publish --provenance --access public
 
       - name: Post-publish Gateway package smoke
-        run: node scripts/release-smoke.mjs --published-gateway
+        run: mise x node@24.18.0 bun@1.3.11 -- node scripts/release-smoke.mjs --published-gateway

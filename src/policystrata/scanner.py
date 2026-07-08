@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import subprocess
@@ -8,6 +9,7 @@ from collections import Counter
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, cast
+from xml.sax.saxutils import escape, quoteattr
 
 import psycopg
 from pydantic import ValidationError
@@ -50,6 +52,8 @@ from policystrata.trace_import import (
 SCAN_OUTPUT_FILES = {
     "scan": "scan.json",
     "findings": "findings.jsonl",
+    "policystrata_findings": "policystrata/findings.json",
+    "witnesses_redacted": "witnesses.redacted.json",
     "summary": "summary.json",
     "report": "report.md",
 }
@@ -1362,9 +1366,48 @@ def assign_witness_paths(
         updated = item.model_copy(
             update={"id": unique_id, "witness_path": witness_path, "minimal_repro_trace": witness_path}
         )
-        path.write_text(updated.model_dump_json(indent=2) + "\n", encoding="utf-8")
+        path.write_text(
+            json.dumps(minimized_finding_witness(updated), indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
         assigned.append(updated)
     return assigned
+
+
+def minimized_finding_witness(item: ScanFinding) -> dict[str, Any]:
+    return {
+        "schemaVersion": "policystrata.finding_witness.v1",
+        "id": item.id,
+        "title": item.title,
+        "severity": item.severity.value,
+        "confidence": item.confidence.value,
+        "surface": item.surface,
+        "witnessClass": item.witness_class.value,
+        "evidenceLevel": item.evidence_level.value,
+        "regressionCase": None if item.regression_case is None else item.regression_case.value,
+        "principal": item.principal,
+        "semanticIr": item.semantic_ir,
+        "source": item.source,
+        "mutation": item.mutation,
+        "mutantStatus": None if item.mutant_status is None else item.mutant_status.value,
+        "sql": sql_witness_summary(item.sql),
+        "reasons": item.reasons,
+        "whatChanged": item.what_changed,
+        "owner": item.owner,
+        "probableFix": item.probable_fix,
+        "ciGateCommand": item.ci_gate_command,
+        "metadataKeys": sorted(item.metadata),
+    }
+
+
+def sql_witness_summary(sql: str | None) -> dict[str, Any] | None:
+    if sql is None:
+        return None
+    encoded = sql.encode("utf-8")
+    return {
+        "sha256": hashlib.sha256(encoded).hexdigest(),
+        "bytes": len(encoded),
+    }
 
 
 def write_scan_outputs(result: ScanResult, output_dir: Path, config: ScanConfig) -> None:
@@ -1379,12 +1422,45 @@ def write_scan_outputs(result: ScanResult, output_dir: Path, config: ScanConfig)
     with (output_dir / SCAN_OUTPUT_FILES["findings"]).open("w", encoding="utf-8") as handle:
         for item in result.findings:
             handle.write(item.model_dump_json() + "\n")
+    policystrata_dir = output_dir / "policystrata"
+    policystrata_dir.mkdir(parents=True, exist_ok=True)
+    (output_dir / SCAN_OUTPUT_FILES["policystrata_findings"]).write_text(
+        json.dumps([item.model_dump(mode="json") for item in result.findings], indent=2, sort_keys=True)
+        + "\n",
+        encoding="utf-8",
+    )
+    (output_dir / SCAN_OUTPUT_FILES["witnesses_redacted"]).write_text(
+        json.dumps(redacted_witness_aggregate(result.findings), indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
     (output_dir / SCAN_OUTPUT_FILES["report"]).write_text(render_report(result), encoding="utf-8")
     if config.sarif or config.database.sarif:
         (output_dir / "scan.sarif").write_text(
             json.dumps(render_sarif(result), indent=2) + "\n",
             encoding="utf-8",
         )
+
+
+def redacted_witness_aggregate(findings: Sequence[ScanFinding]) -> dict[str, Any]:
+    return {
+        "schemaVersion": "policystrata.witnesses_redacted.v1",
+        "witnesses": [
+            {
+                "id": item.id,
+                "title": item.title,
+                "severity": item.severity.value,
+                "confidence": item.confidence.value,
+                "surface": item.surface,
+                "witnessClass": item.witness_class.value,
+                "evidenceLevel": item.evidence_level.value,
+                "witnessPath": item.witness_path,
+                "findingId": item.id,
+                "owner": item.owner,
+                "probableFix": item.probable_fix,
+            }
+            for item in findings
+        ],
+    }
 
 
 def render_report(result: ScanResult) -> str:
@@ -1450,6 +1526,33 @@ def render_report(result: ScanResult) -> str:
         ),
     ]
     return "\n\n".join(sections) + "\n"
+
+
+def render_junit(result: ScanResult) -> str:
+    failures = sum(
+        1 for item in result.findings if item.severity in {FindingSeverity.HIGH, FindingSeverity.CRITICAL}
+    )
+    lines = [
+        '<?xml version="1.0" encoding="utf-8"?>',
+        (
+            f'<testsuite name="policystrata" tests="{len(result.findings) or 1}" '
+            f'failures="{failures}" errors="0" skipped="0">'
+        ),
+    ]
+    if not result.findings:
+        lines.append('  <testcase classname="policystrata.scan" name="no_findings" />')
+    for item in result.findings:
+        classname = f"policystrata.{item.surface}"
+        lines.append(f"  <testcase classname={quoteattr(classname)} name={quoteattr(item.id)}>")
+        if item.severity in {FindingSeverity.HIGH, FindingSeverity.CRITICAL}:
+            message = "; ".join(item.reasons) or item.title
+            lines.append(
+                f"    <failure message={quoteattr(message)} type={quoteattr(item.witness_class.value)}>"
+                f"{escape(item.probable_fix or item.title)}</failure>"
+            )
+        lines.append("  </testcase>")
+    lines.append("</testsuite>")
+    return "\n".join(lines) + "\n"
 
 
 def render_sarif(result: ScanResult) -> dict[str, Any]:

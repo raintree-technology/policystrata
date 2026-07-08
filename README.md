@@ -16,6 +16,31 @@ PolicyStrata's scanner is not an authorization boundary, and it is not another g
 It is a reproducible research artifact and regression gate for finding reachable disagreements
 between layers.
 
+## PolicyStrata OSS, Clearance, And Agent Trust Gateway
+
+PolicyStrata OSS is the open standard and local tooling layer: deterministic runner, scanner, SDK
+contracts, runtime evaluator, customer-hosted Agent Trust Gateway, schemas, tests, and evidence
+artifacts. It works without a hosted account and deterministic runs do not require an LLM API key.
+
+Clearance by PolicyStrata is the optional hosted control plane for organization state: auth, RBAC,
+review UI, waivers, approvals, audit logs, procurement workflows, billing, and trust-center
+reporting.
+The intended split is similar to Pydantic and Logfire: the library stays useful locally and the
+hosted product manages team operations around the evidence.
+PolicyStrata OSS produces evidence close to sensitive systems; Clearance records review state and
+release decisions. The PolicyStrata Agent Trust Gateway is the customer-hosted runtime sidecar that
+enforces and uploads sanitized decision envelopes. Keep that boundary intact:
+
+- Use local-only or metadata-only mode when producing artifacts from customer environments.
+- Do not put raw prompts, documents, rows, tool payloads, credentials, private schemas, or full
+  traces in uploaded metadata.
+- Treat constrained generation and scanner findings as reliability evidence, not authorization.
+- Keep customer authorization, database controls, and application-side enforcement in the customer
+  system.
+
+See [docs/clearance-runner.md](docs/clearance-runner.md) for local Clearance contracts, upload
+scaffolding, exit codes, artifact refs, and metadata-boundary checks.
+
 ## Paper And Artifact
 
 - Paper PDF: <https://raintree.technology/papers/PolicyStrata.pdf>
@@ -302,7 +327,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: raintree-technology/policystrata@v1.0.4
+      - uses: raintree-technology/policystrata@v1.0.5
         with:
           config: policystrata.yaml
           out: runs/policystrata
@@ -382,9 +407,17 @@ For governed-data agents that need a customer-hosted sidecar, install
 `@policystrata/agent-trust-gateway` from npm. The gateway evaluates v0.2 runtime events for model,
 retrieval, MCP/tool, SQL/data, memory, browser/code, and egress boundaries, returns `allow`,
 `deny`, `redact`, `require_approval`, `quarantine`, or `log_only`, and uploads sanitized decision
-envelopes to a PolicyStrata control plane. Event `payload` and fixture-only `expectedDecision`
+envelopes to Clearance by PolicyStrata. Event `payload` and fixture-only `expectedDecision`
 metadata are stripped before upload by default so prompts, rows, documents, tool payloads, and test
 expectations remain local unless a deployment opts in to payload upload.
+Gateway uploads also run a metadata-boundary scanner and fail closed before sending if summaries,
+references, or other envelope fields contain sensitive field names, bearer tokens, JWTs, email
+addresses, payment-card-like values, or secret assignments. Deployments can explicitly opt out only
+for local testing.
+Loopback sidecars can run without gateway auth; bindings beyond loopback require
+`POLICYSTRATA_GATEWAY_TOKEN` or `--gateway-token`, and callers must send a bearer token to
+`/v1/decide`. Control-plane uploads send `x-clearance-organization-id` and the legacy
+`x-assurance-organization-id` header during the product rename migration.
 Like the in-process runtime, the gateway is an application-side enforcement and telemetry helper;
 it does not replace `policystrata scan`, `policystrata doctor`, application authorization, or
 database controls.
@@ -397,7 +430,18 @@ CLI/scanner and does not make `policystrata/runtime` importable to Node.
   baselines, and witness shape.
 - [docs/scanner.md](docs/scanner.md): scanner inputs, gates, state assertions, and PostgreSQL
   fixture use.
+- [docs/clearance-runner.md](docs/clearance-runner.md): metadata-only Clearance runner contract,
+  evidence packs, payload audit, and pilot exit codes.
 - [docs/github-action.md](docs/github-action.md): CI wrapper for `policystrata scan`.
+- [docs/generic-exports.md](docs/generic-exports.md): generic Slack, Jira, and Datadog export
+  examples using redacted local evidence JSON.
+- [docs/gateway-deployment-examples.md](docs/gateway-deployment-examples.md): generic
+  customer-hosted gateway Docker, Terraform, and Helm sketches.
+- [docs/pilot-install-path.md](docs/pilot-install-path.md): recommended pilot install paths and
+  why Docker images/signed binaries are not current defaults.
+- [docs/oss-todo-policy.md](docs/oss-todo-policy.md): root TODO ownership and hosted-app boundary.
+- [docs/contract-milestones.md](docs/contract-milestones.md): issue/milestone labels for stable
+  public contracts.
 - [docs/distribution-roadmap.md](docs/distribution-roadmap.md): CLI, GitHub Action, SDK, MCP, and
   GitHub CLI extension sequence.
 - [docs/js-distribution-decision.md](docs/js-distribution-decision.md): JavaScript package

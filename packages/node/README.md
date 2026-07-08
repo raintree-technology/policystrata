@@ -151,21 +151,62 @@ The same runtime module evaluates v0.2 gateway events across auth context, retri
 tool, browser/code, SQL, schema binding, output, egress, and trace layers:
 
 ```ts
-import { evaluateRuntimeEvent } from "policystrata/runtime";
+import { evaluateRuntimeEvent, sqlRuntimeEvent } from "policystrata/runtime";
 
-const runtimeDecision = evaluateRuntimeEvent(runtimeManifest, {
-  schemaVersion: "0.2.0",
+const runtimeDecision = evaluateRuntimeEvent(runtimeManifest, sqlRuntimeEvent({
   eventId: "evt_1",
   project: "support-bi",
-  observedAt: new Date().toISOString(),
   agent: { key: "support-bi-copilot" },
-  layer: "sql",
-  operation: "read",
   summary: "Tenant-scoped support ticket query",
   actor: { userId: "user-1", tenantId: "tenant-a", role: "support", purpose: "support" },
   resource: { kind: "table", name: "support_tickets" },
-  payload: { sql: "select count(*) from support_tickets where tenant_id = $1" },
-});
+  sql: "select count(*) from support_tickets where tenant_id = $1",
+}));
+```
+
+Runtime event builders are available for common layers:
+
+- `buildRuntimeEvent()` for explicit low-level events.
+- `sqlRuntimeEvent()` for SQL statement metadata.
+- `toolRuntimeEvent()` for MCP/tool calls and schema refs.
+- `retrievalRuntimeEvent()` for vector/search retrieval evidence.
+- `egressRuntimeEvent()` for outbound webhook/API destinations.
+- `clearanceEvidencePackRuntimeEvent()` for referencing a local `.clearance/evidence-pack.json`
+  artifact in runtime evidence without calling hosted Clearance APIs.
+
+## Next.js Route Handler
+
+Use the runtime helpers in the application request path, not as a hosted dependency:
+
+```ts
+import { NextResponse } from "next/server";
+import { evaluateRuntimeEvent, sqlRuntimeEvent } from "policystrata/runtime";
+import runtimeManifest from "@/policystrata.runtime.json";
+
+export async function POST(request: Request) {
+  const body = await request.json();
+  const sql = compileTenantScopedSql(body);
+  const decision = evaluateRuntimeEvent(runtimeManifest, sqlRuntimeEvent({
+    eventId: crypto.randomUUID(),
+    project: "support-bi",
+    agent: { key: "support-bi-copilot" },
+    summary: "Support ticket query",
+    actor: {
+      userId: body.userId,
+      tenantId: body.tenantId,
+      role: body.role,
+      purpose: "support",
+    },
+    resource: { kind: "table", name: "support_tickets", tenantId: body.tenantId },
+    sql,
+  }));
+
+  if (!decision.allowed) {
+    return NextResponse.json({ error: decision.reason }, { status: 403 });
+  }
+
+  return NextResponse.json(await runQuery(sql));
+}
 ```
 
 For a customer-hosted sidecar, install `@policystrata/agent-trust-gateway`; it wraps this evaluator
