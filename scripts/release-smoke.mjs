@@ -174,7 +174,7 @@ function smokePublishedGateway() {
           "install",
           "--ignore-scripts",
           `policystrata@${runtimeVersion}`,
-          `@policystrata/agent-trust-gateway@${gatewayVersion}`,
+          `policystrata-agent-trust-gateway@${gatewayVersion}`,
         ],
         {
           cwd: temp,
@@ -214,7 +214,7 @@ function runGatewaySmoke(temp, fixtures) {
     script,
     `import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { decideRuntimeEvent } from "@policystrata/agent-trust-gateway";
+import { decideRuntimeEvent } from "policystrata-agent-trust-gateway";
 
 const manifest = JSON.parse(readFileSync(${JSON.stringify(fixtures.manifest)}, "utf8"));
 const event = JSON.parse(readFileSync(${JSON.stringify(fixtures.allowedEvent)}, "utf8"));

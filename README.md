@@ -402,7 +402,7 @@ can be exposed before model invocation with `decisionPoint: "pre_model"` and
 `decisionPoint: "execution"`.
 
 For governed-data agents that need a customer-hosted sidecar, install
-`@policystrata/agent-trust-gateway` from npm. The gateway evaluates v0.2 runtime events for model,
+`policystrata-agent-trust-gateway` from npm. The gateway evaluates v0.2 runtime events for model,
 retrieval, MCP/tool, SQL/data, memory, browser/code, and egress boundaries, returns `allow`,
 `deny`, `redact`, `require_approval`, `quarantine`, or `log_only`, and uploads sanitized decision
 envelopes to a PolicyStrata control plane. Event `payload` and fixture-only `expectedDecision`

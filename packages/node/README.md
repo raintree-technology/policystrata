@@ -209,7 +209,7 @@ export async function POST(request: Request) {
 }
 ```
 
-For a customer-hosted sidecar, install `@policystrata/agent-trust-gateway`; it wraps this evaluator
+For a customer-hosted sidecar, install `policystrata-agent-trust-gateway`; it wraps this evaluator
 in an HTTP gateway and strips runtime-event `payload` and fixture-only `expectedDecision` metadata
 before control-plane upload by default. The gateway is an application-side enforcement and telemetry
 helper; it does not replace

@@ -12,7 +12,7 @@ PolicyStrata should use dual distribution:
 - npm is the correct distribution for Node applications that import `policystrata/node` or
   `policystrata/runtime`.
 - npm is also the correct distribution for the customer-hosted Agent Trust Gateway package,
-  `@policystrata/agent-trust-gateway`.
+  `policystrata-agent-trust-gateway`.
 
 Do not make Node consumers depend on the PyPI package or a sibling source checkout. Normal Node
 runtime usage should protect tool/action and result-release boundaries in-process:
@@ -25,10 +25,10 @@ npm install policystrata
 import { createPolicyStrataAuthorizer } from "policystrata/runtime";
 ```
 
-Gateway users should install the scoped package:
+Gateway users should install the gateway package:
 
 ```bash
-npm install @policystrata/agent-trust-gateway
+npm install policystrata-agent-trust-gateway
 ```
 
 The initial npm package `policystrata@0.1.0` was published on 2026-07-02. The npm package has a
@@ -37,9 +37,9 @@ environment.
 The Node package version `policystrata@0.1.1` was published through the GitHub trusted publisher
 workflow from the `v1.0.3` tagged release commit.
 The `v1.0.4` release publishes PyPI `policystrata==1.0.4`, npm runtime `policystrata@0.1.2`, and
-the first public gateway package `@policystrata/agent-trust-gateway@0.1.0`.
+the first public gateway package `policystrata-agent-trust-gateway@0.1.0`.
 The `v1.0.5` release publishes PyPI `policystrata==1.0.5`, npm runtime `policystrata@0.1.3`, and
-gateway `@policystrata/agent-trust-gateway@0.1.1`.
+gateway `policystrata-agent-trust-gateway@0.1.1`.
 
 ## Release Policy
 
@@ -49,7 +49,7 @@ Registry-side trusted publisher configuration must match this repository workflo
   workflow filename `publish.yml`, environment `pypi`.
 - npm package `policystrata`: GitHub owner `raintree-technology`, repository `policystrata`,
   workflow filename `publish.yml`, environment `npm`, allowed action `npm publish`.
-- npm package `@policystrata/agent-trust-gateway`: GitHub owner `raintree-technology`,
+- npm package `policystrata-agent-trust-gateway`: GitHub owner `raintree-technology`,
   repository `policystrata`, workflow filename `publish.yml`, environment `npm`, allowed action
   `npm publish`.
 
@@ -104,7 +104,7 @@ versions explicitly, for example:
 
 - PyPI: `policystrata==1.0.5`
 - npm runtime: `policystrata@0.1.3`
-- npm gateway: `@policystrata/agent-trust-gateway@0.1.1`
+- npm gateway: `policystrata-agent-trust-gateway@0.1.1`
 
 If the Node runtime becomes a committed stable SDK at the same maturity level as the scanner, revisit
 whether the npm version should align with the Python package version.
@@ -115,7 +115,7 @@ whether the npm version should align with the Python package version.
 `policystrata/runtime` is an in-process application authorizer. The runtime can enforce app-local
 subject/action/resource decisions and result/lineage release decisions, but it does not replace
 scanner evidence, database controls, or application authorization reviews.
-`@policystrata/agent-trust-gateway` wraps the runtime evaluator in a customer-hosted HTTP sidecar
+`policystrata-agent-trust-gateway` wraps the runtime evaluator in a customer-hosted HTTP sidecar
 and uploads sanitized decision envelopes by default. Fixture-only `expectedDecision` metadata is
 ignored for policy evaluation and stripped before upload. The gateway is not a hosted scanner or
 standalone authorization system.

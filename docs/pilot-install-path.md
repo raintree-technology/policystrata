@@ -4,7 +4,7 @@ PolicyStrata pilots should use one primary install path per artifact type:
 
 - Python CLI/scanner/runner: `uvx policystrata` or `pipx run policystrata`.
 - Node recorder/runtime: `npm install policystrata`.
-- Customer-hosted gateway: `npm install @policystrata/agent-trust-gateway`.
+- Customer-hosted gateway: `npm install policystrata-agent-trust-gateway`.
 
 Do not introduce a Docker image or signed binary as a pilot install path until a pilot explicitly
 chooses that packaging shape. The generic gateway Dockerfile in

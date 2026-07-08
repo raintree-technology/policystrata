@@ -319,7 +319,7 @@ jobs:
     runs-on: ubuntu-24.04
     environment:
       name: npm
-      url: https://www.npmjs.com/package/@policystrata/agent-trust-gateway
+      url: https://www.npmjs.com/package/policystrata-agent-trust-gateway
     permissions:
       contents: read
       id-token: write

@@ -258,7 +258,7 @@ export async function uploadRuntimeEvents(
   const events = options.events.map((event) => runtimeEventForUpload(event, options.includePayload === true));
   const uploadBody = JSON.stringify({
     gateway: {
-      name: "@policystrata/agent-trust-gateway",
+      name: "policystrata-agent-trust-gateway",
       version: POLICYSTRATA_GATEWAY_VERSION,
     },
     events,

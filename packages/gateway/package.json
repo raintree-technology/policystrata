@@ -1,5 +1,5 @@
 {
-  "name": "@policystrata/agent-trust-gateway",
+  "name": "policystrata-agent-trust-gateway",
   "version": "0.1.1",
   "description": "Customer-hosted runtime gateway for PolicyStrata governed-data agents",
   "type": "module",

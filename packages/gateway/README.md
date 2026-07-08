@@ -7,7 +7,7 @@ It is an application-side enforcement and telemetry helper, not a replacement fo
 scan`, `policystrata doctor`, application authorization, or database controls.
 
 ```bash
-npm install @policystrata/agent-trust-gateway
+npm install policystrata-agent-trust-gateway
 ```
 
 ```bash
@@ -30,7 +30,7 @@ curl -s http://127.0.0.1:8787/v1/decide \
 The same evaluator is available in-process:
 
 ```ts
-import { decideRuntimeEvent } from "@policystrata/agent-trust-gateway";
+import { decideRuntimeEvent } from "policystrata-agent-trust-gateway";
 
 const result = decideRuntimeEvent(runtimeManifest, runtimeEvent);
 if (!result.ok) {
