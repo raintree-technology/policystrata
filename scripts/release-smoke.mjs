@@ -127,7 +127,9 @@ function smokePublishedPyPI() {
     run("uv", ["venv", venv]);
     const python = join(venv, process.platform === "win32" ? "Scripts/python.exe" : "bin/python");
     const policystrata = join(venv, process.platform === "win32" ? "Scripts/policystrata.exe" : "bin/policystrata");
-    retry(() => run("uv", ["pip", "install", "--python", python, `policystrata==${version}`]));
+    retry(() =>
+      run("uv", ["pip", "install", "--python", python, "--refresh-package", "policystrata", `policystrata==${version}`]),
+    );
     run(policystrata, ["schema", "--kind", "runtime-event", "--out", join(temp, "runtime-event.schema.json")]);
     run(policystrata, [
       "runtime-evaluate",

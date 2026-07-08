@@ -6,7 +6,7 @@
   "main": "./dist/src/index.js",
   "types": "./dist/src/index.d.ts",
   "bin": {
-    "agent-trust-gateway": "./dist/src/cli.js"
+    "agent-trust-gateway": "dist/src/cli.js"
   },
   "license": "MIT",
   "sideEffects": false,
