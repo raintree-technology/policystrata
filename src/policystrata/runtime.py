@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal
@@ -129,6 +130,7 @@ class RuntimeEventEvaluation:
     control_id: str | None = None
     policy_refs: list[str] | None = None
     redactions: list[str] | None = None
+    query_risk: str | None = None
 
     def to_decision(self) -> dict[str, Any]:
         decision: dict[str, Any] = {
@@ -144,6 +146,8 @@ class RuntimeEventEvaluation:
             decision["policyRefs"] = self.policy_refs
         if self.redactions:
             decision["redactions"] = self.redactions
+        if self.query_risk:
+            decision["queryRisk"] = self.query_risk
         return decision
 
     def to_event(self, event: Mapping[str, Any]) -> dict[str, Any]:
@@ -163,6 +167,7 @@ class RuntimeEventEvaluation:
             "controlId": self.control_id,
             "policyRefs": self.policy_refs or [],
             "redactions": self.redactions or [],
+            "queryRisk": self.query_risk,
         }
 
 
@@ -382,6 +387,7 @@ def evaluate_runtime_event(manifest: Mapping[str, Any], event: Mapping[str, Any]
     action: RuntimeEventAction = "allow"
     control_id: str | None = None
     redactions: list[str] = []
+    query_risk: str | None = None
 
     def apply(next_action: RuntimeEventAction, reason: str, next_control_id: str) -> None:
         nonlocal action, control_id
@@ -389,6 +395,13 @@ def evaluate_runtime_event(manifest: Mapping[str, Any], event: Mapping[str, Any]
         if _event_action_rank(next_action) > _event_action_rank(action):
             action = next_action
             control_id = next_control_id
+
+    if _control_bool(control_config, "runtime", "killSwitch") or _control_bool(
+        control_config,
+        "runtime",
+        "kill_switch",
+    ):
+        apply("deny", "runtime kill switch is enabled", "runtime_kill_switch")
 
     if _control_enabled(control_config, "authContext", default=True):
         missing = _missing_auth_fields(actor, control_config)
@@ -436,14 +449,40 @@ def evaluate_runtime_event(manifest: Mapping[str, Any], event: Mapping[str, Any]
     if layer == "sql" and _control_enabled(control_config, "sql", default=True):
         sql_text = _event_text(event, "sql", "query", "statement", "observed")
         tenant_column = _control_string(control_config, "sql", "tenantColumn") or "tenant_id"
-        if sql_text and tenant_column not in sql_text.lower():
+        query_risk = classify_sql_query_risk(sql_text)
+        if sql_text and not _sql_has_tenant_predicate(sql_text, tenant_column):
             apply(
                 "deny",
                 f"SQL statement is missing tenant predicate {tenant_column}",
                 "tenant_scope_required",
             )
+        if sql_text and _control_bool(control_config, "sql", "requireParameterized"):
+            parameterization_issues = _sql_parameterization_issues(sql_text)
+            if parameterization_issues:
+                apply(
+                    "deny",
+                    f"SQL statement contains unparameterized literals: {', '.join(parameterization_issues)}",
+                    "sql_parameterization_required",
+                )
         if _tenant_mismatch(actor, resource):
             apply("deny", "SQL resource tenant does not match actor tenant", "tenant_scope_required")
+        allowed_risks = _control_string_set(control_config, "sql", "allowedQueryRisks")
+        denied_risks = _control_string_set(control_config, "sql", "deniedQueryRisks")
+        if query_risk in denied_risks or (allowed_risks and query_risk not in allowed_risks):
+            apply("deny", f"SQL query risk {query_risk} is not allowed", "sql_query_risk")
+        max_rows = _control_int(control_config, "sql", "maxRows")
+        row_count = _event_int(event, "rowLimit", "row_limit", "limit", "rowCount", "returnedRows")
+        if max_rows is not None and row_count is not None and row_count > max_rows:
+            apply("deny", f"SQL row count {row_count} exceeds maxRows {max_rows}", "sql_row_limit")
+
+    if layer == "database_rule" and _control_enabled(control_config, "databaseRule", default=True):
+        require_rls = _control_bool(control_config, "databaseRule", "requireRls")
+        rls_enabled = _event_bool(event, "rlsEnabled", "rls_enabled")
+        rls_expected = _event_bool(event, "rlsExpected", "rls_expected")
+        if event.get("rlsDrift") is True or event.get("rls_drift") is True:
+            apply("deny", "RLS drift signal is present", "rls_drift")
+        if (require_rls or rls_expected) and not rls_enabled:
+            apply("deny", "RLS is expected but not enabled", "rls_drift")
 
     if layer == "schema_binding" and _control_enabled(control_config, "schemaBinding", default=True):
         expected_version = _control_expected_version(control_config, resource)
@@ -465,8 +504,20 @@ def evaluate_runtime_event(manifest: Mapping[str, Any], event: Mapping[str, Any]
     if layer == "egress" and _control_enabled(control_config, "egress", default=True):
         destination = _resource_uri_or_name(resource)
         allowed_destinations = _control_string_set(control_config, "egress", "allowedDestinations")
+        allowed_classes = _control_string_set(control_config, "egress", "allowedDestinationClasses")
+        destination_class = (
+            _string_value(resource.get("destinationClass"))
+            or _string_value(resource.get("classification"))
+            or _string_value(event.get("destinationClass"))
+        )
         if allowed_destinations and destination and destination not in allowed_destinations:
             apply("deny", f"egress destination {destination} is not approved", "egress_approval_required")
+        if allowed_classes and destination_class and destination_class not in allowed_classes:
+            apply(
+                "deny",
+                f"egress destination class {destination_class} is not approved",
+                "egress_destination_class",
+            )
         if (
             _control_bool(control_config, "egress", "approvalRequired")
             and not _event_approval_satisfied(event)
@@ -529,6 +580,7 @@ def evaluate_runtime_event(manifest: Mapping[str, Any], event: Mapping[str, Any]
         control_id=control_id,
         policy_refs=policy_refs,
         redactions=redactions or None,
+        query_risk=query_risk,
     )
 
 
@@ -951,6 +1003,11 @@ def _control_bool(controls: Mapping[str, Any], control: str, key: str) -> bool:
     return _control_mapping(controls, control).get(key) is True
 
 
+def _control_int(controls: Mapping[str, Any], control: str, key: str) -> int | None:
+    value = _control_mapping(controls, control).get(key)
+    return value if isinstance(value, int) else None
+
+
 def _control_string_set(controls: Mapping[str, Any], control: str, key: str) -> set[str]:
     return set(_string_sequence(_control_mapping(controls, control).get(key)))
 
@@ -1022,6 +1079,62 @@ def _event_text(event: Mapping[str, Any], *keys: str) -> str | None:
         if value:
             return value
     return None
+
+
+def _event_int(event: Mapping[str, Any], *keys: str) -> int | None:
+    payload = _mapping_value(event.get("payload"))
+    for key in keys:
+        value = event.get(key)
+        if isinstance(value, int):
+            return value
+        value = payload.get(key)
+        if isinstance(value, int):
+            return value
+    return None
+
+
+def classify_sql_query_risk(sql_text: str | None) -> str:
+    if not sql_text:
+        return "unknown"
+    normalized = _normalized_sql_for_detection(sql_text).lstrip()
+    if re.match(r"^(copy|unload|export)\b", normalized) or re.search(
+        r"\binto\s+out(?:file|put)\b",
+        normalized,
+    ):
+        return "export"
+    if re.match(r"^(insert|update|delete|merge|truncate|drop|alter|create|grant|revoke)\b", normalized):
+        return "write"
+    if re.match(r"^(select|with|show|describe|explain)\b", normalized):
+        return "read"
+    return "unknown"
+
+
+def _sql_has_tenant_predicate(sql_text: str, tenant_column: str) -> bool:
+    normalized = _normalized_sql_for_detection(sql_text)
+    escaped = re.escape(tenant_column.lower())
+    identifier = rf'(?:["`\[]?[\w.]+["`\]]?\.)?["`\[]?{escaped}["`\]]?'
+    predicate = rf"\b(?:where|and|or|on)\s+[^;]*{identifier}\s*(?:=|in\b|is\b|between\b)"
+    return re.search(predicate, normalized) is not None
+
+
+def _normalized_sql_for_detection(sql_text: str) -> str:
+    text = re.sub(r"/\*.*?\*/", " ", sql_text, flags=re.S)
+    text = re.sub(r"--[^\n]*", " ", text)
+    text = re.sub(r"'(?:''|[^'])*'", "?", text)
+    text = re.sub(r'"(?:""|[^"])*"', lambda match: match.group(0).lower(), text)
+    return re.sub(r"\s+", " ", text).lower()
+
+
+def _sql_parameterization_issues(sql_text: str) -> list[str]:
+    text = re.sub(r"/\*.*?\*/", " ", sql_text, flags=re.S)
+    text = re.sub(r"--[^\n]*", " ", text)
+    issues: list[str] = []
+    if re.search(r"'(?:''|[^'])*'", text):
+        issues.append("string_literal")
+    numeric_literal = re.search(r"(?:=|<|>|<=|>=|<>|!=)\s*\d+(?:\.\d+)?\b", text)
+    if numeric_literal:
+        issues.append("numeric_literal")
+    return issues
 
 
 def _control_expected_version(controls: Mapping[str, Any], resource: Mapping[str, Any]) -> str | None:

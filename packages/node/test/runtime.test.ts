@@ -7,10 +7,16 @@ import {
   authorize,
   authorizeRelease,
   authorizeTool,
+  buildRuntimeEvent,
+  clearanceEvidencePackRuntimeEvent,
   createPolicyStrataAuthorizer,
+  egressRuntimeEvent,
   evaluateRuntimeEvent,
   evaluateRuntimeEvents,
   expectedRuntimeDecisionMismatches,
+  retrievalRuntimeEvent,
+  sqlRuntimeEvent,
+  toolRuntimeEvent,
   type PolicyStrataAuthorizeInput,
   type PolicyStrataRuntimeEventInput,
   type PolicyStrataRuntimeManifest,
@@ -139,6 +145,107 @@ function runtimeEvent(overrides: Partial<PolicyStrataRuntimeEventInput> = {}): P
     ...overrides,
   };
 }
+
+test("runtime event builders create typed common-layer events", () => {
+  const base = {
+    eventId: "evt_builder",
+    project: "support-bi",
+    observedAt: "2026-07-06T15:58:52Z",
+    agent: { key: "support-bi-copilot" },
+    summary: "builder event",
+    actor: {
+      userId: "user_1",
+      tenantId: "tenant_a",
+      role: "support_manager",
+      purpose: "support",
+      region: "us",
+    },
+  };
+
+  const generic = buildRuntimeEvent({
+    ...base,
+    layer: "memory",
+    operation: "write",
+    resource: { kind: "memory", name: "case_notes", tenantId: "tenant_a" },
+  });
+  assert.equal(generic.schemaVersion, "0.2.0");
+  assert.equal(generic.layer, "memory");
+
+  const sqlEvent = sqlRuntimeEvent({
+    ...base,
+    eventId: "evt_sql_builder",
+    summary: "Tenant-scoped query",
+    sql: "select * from support_tickets where tenant_id = $1",
+    rowCount: 10,
+    resource: { kind: "table", name: "support_tickets" },
+  });
+  assert.equal(sqlEvent.layer, "sql");
+  assert.equal(sqlEvent.operation, "read");
+  assert.deepEqual(sqlEvent.payload, { sql: "select * from support_tickets where tenant_id = $1" });
+  assert.equal(sqlEvent.rowCount, 10);
+  assert.equal(evaluateRuntimeEvent(governedRuntimeManifest, sqlEvent).allowed, true);
+
+  const toolEvent = toolRuntimeEvent({
+    ...base,
+    eventId: "evt_tool_builder",
+    summary: "Workspace search",
+    toolName: "workspace.search_tickets",
+    toolKind: "read",
+    inputSchemaRef: "schema://tools/search_tickets/input.v1",
+    outputSchemaRef: "schema://tools/search_tickets/output.v1",
+  });
+  assert.equal(toolEvent.layer, "tool_call");
+  assert.equal(toolEvent.operation, "read");
+  assert.equal(toolEvent.toolInputSchemaRef, "schema://tools/search_tickets/input.v1");
+  assert.equal(toolEvent.toolOutputSchemaRef, "schema://tools/search_tickets/output.v1");
+  assert.deepEqual(toolEvent.resource, { kind: "mcp_tool", name: "workspace.search_tickets" });
+  assert.equal(evaluateRuntimeEvent(governedRuntimeManifest, toolEvent).allowed, true);
+
+  const retrievalEvent = retrievalRuntimeEvent({
+    ...base,
+    eventId: "evt_retrieval_builder",
+    summary: "Ticket retrieval",
+    resourceName: "ticket_vector_store",
+    tenantId: "tenant_b",
+  });
+  assert.equal(retrievalEvent.layer, "retrieval");
+  assert.equal(evaluateRuntimeEvent(governedRuntimeManifest, retrievalEvent).allowed, false);
+
+  const egressEvent = egressRuntimeEvent({
+    ...base,
+    eventId: "evt_egress_builder",
+    summary: "Webhook delivery",
+    destination: "https://approved.example/webhook",
+    destinationClass: "approved_webhook",
+    approvalRequiredSatisfied: true,
+  });
+  assert.equal(egressEvent.layer, "egress");
+  assert.equal(egressEvent.operation, "send");
+  assert.deepEqual(egressEvent.resource, {
+    kind: "egress_destination",
+    name: "https://approved.example/webhook",
+    uri: "https://approved.example/webhook",
+    destinationClass: "approved_webhook",
+  });
+  assert.equal(evaluateRuntimeEvent(governedRuntimeManifest, egressEvent).allowed, true);
+
+  const evidencePackEvent = clearanceEvidencePackRuntimeEvent({
+    ...base,
+    eventId: "evt_clearance_pack_builder",
+    evidencePackRef: ".clearance/evidence-pack.json",
+    runId: "clr_123",
+    sha256: "abc123",
+  });
+  assert.equal(evidencePackEvent.layer, "trace");
+  assert.equal(evidencePackEvent.operation, "evidence_pack");
+  assert.equal(evidencePackEvent.payloadHash, "abc123");
+  assert.deepEqual(evidencePackEvent.artifactRefs, [".clearance/evidence-pack.json"]);
+  assert.deepEqual(evidencePackEvent.resource, {
+    kind: "clearance_evidence_pack",
+    name: ".clearance/evidence-pack.json",
+    id: "clr_123",
+  });
+});
 
 test("runtime manifest JSON Schema is packaged as a deny-by-default manifest schema", () => {
   assert.equal(runtimeManifestSchema.title, "PolicyStrata Runtime Manifest");

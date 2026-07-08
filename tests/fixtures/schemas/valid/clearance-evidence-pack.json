@@ -1,0 +1,1 @@
+{"schemaVersion":"clearance.evidence_pack.v1","runId":"clr_123","storageMode":"metadata_only","projectId":"support-bi","uploadArtifacts":false,"runner":{"name":"policystrata","policystrataVersion":"1.0.5"},"run":{"domain":"support_saas","suite":"seeded"},"decision":{"state":"passed","failed":false,"blocked":false,"needsReview":false},"summary":{"total":0},"artifactRefs":[]}

@@ -6,6 +6,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from policystrata.clearance import ClearanceRunnerConfig, write_clearance_contract_outputs
 from policystrata.compiler import compile_query
 from policystrata.detection import detect_witness
 from policystrata.domain import load_policy, load_suite_metadata, load_surface_config, load_tasks
@@ -64,6 +65,13 @@ def run_suite(
     generated_count: int | None = None,
     generated_seed: int | None = None,
     freeze_manifest: Path | None = None,
+    *,
+    clearance_config: ClearanceRunnerConfig | None = None,
+    release_candidate: str | None = None,
+    commit_sha: str | None = None,
+    environment: str | None = None,
+    project_id: str | None = None,
+    organization_id: str | None = None,
 ) -> list[Trace]:
     manifest: dict[str, Any] | None = None
     if freeze_manifest is not None:
@@ -107,6 +115,12 @@ def run_suite(
         traces,
         out_dir,
         manifest,
+        clearance_config=clearance_config,
+        release_candidate=release_candidate,
+        commit_sha=commit_sha,
+        environment=environment,
+        project_id=project_id,
+        organization_id=organization_id,
     )
     return traces
 
@@ -123,6 +137,13 @@ def write_run_outputs(
     traces: list[Trace],
     out_dir: Path,
     freeze_manifest: dict[str, Any] | None = None,
+    *,
+    clearance_config: ClearanceRunnerConfig | None = None,
+    release_candidate: str | None = None,
+    commit_sha: str | None = None,
+    environment: str | None = None,
+    project_id: str | None = None,
+    organization_id: str | None = None,
 ) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     witness_dir = out_dir / "witnesses"
@@ -142,12 +163,18 @@ def write_run_outputs(
         traces,
         out_dir,
         freeze_manifest,
+        release_candidate=release_candidate,
+        commit_sha=commit_sha,
+        environment=environment,
+        project_id=project_id,
+        organization_id=organization_id,
     )
     if freeze_manifest is not None:
         (out_dir / "benchmark_manifest.json").write_text(
             json.dumps(freeze_manifest, indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
         )
+    write_clearance_contract_outputs(out_dir, clearance_config)
 
 
 def write_traces(
@@ -203,6 +230,12 @@ def write_run_metadata(
     traces: list[Trace],
     out_dir: Path,
     freeze_manifest: dict[str, Any] | None = None,
+    *,
+    release_candidate: str | None = None,
+    commit_sha: str | None = None,
+    environment: str | None = None,
+    project_id: str | None = None,
+    organization_id: str | None = None,
 ) -> None:
     manifest_metadata = freeze_metadata(freeze_manifest) if freeze_manifest is not None else {}
     (out_dir / "metadata.json").write_text(
@@ -225,6 +258,11 @@ def write_run_metadata(
                 "transition_obligations": surface_config.transition_obligations,
                 "mutation_operator_ids": list(MUTATIONS),
                 "trace_count": len(traces),
+                "release_candidate": release_candidate,
+                "commit_sha": commit_sha,
+                "environment": environment,
+                "project_id": project_id,
+                "organization_id": organization_id,
             },
             indent=2,
             sort_keys=True,

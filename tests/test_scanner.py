@@ -1,6 +1,7 @@
 import json
 from collections import Counter
 from pathlib import Path
+from xml.etree import ElementTree
 
 import psycopg
 import pytest
@@ -9,19 +10,27 @@ from pydantic import ValidationError
 from policystrata.database import assert_read_only_sql
 from policystrata.domain import load_policy
 from policystrata.integrations.dbt_semantic import inspect_dbt_semantic_model
-from policystrata.models import SemanticQuery
+from policystrata.models import SemanticQuery, WitnessClass
 from policystrata.scan_models import (
+    EvidenceLevel,
+    FindingConfidence,
+    FindingSeverity,
+    GateDecision,
     GateOutcome,
     ImportedTrace,
     MutantStatus,
     RegressionCase,
     RlsCheckConfig,
     ScanConfig,
+    ScanFinding,
+    ScanResult,
+    ScanSummary,
     StateAssertionConfig,
 )
 from policystrata.scanner import (
     exercised_evidence_levels,
     load_scan_config,
+    render_junit,
     run_scan,
     scan_imported_trace,
     scan_state_assertions,
@@ -97,6 +106,8 @@ def test_scan_failing_fixture_writes_gate_outputs(tmp_path) -> None:
     assert result.summary.high_confidence_failures >= 2
     assert (tmp_path / "scan" / "scan.json").is_file()
     assert (tmp_path / "scan" / "findings.jsonl").is_file()
+    assert (tmp_path / "scan" / "policystrata" / "findings.json").is_file()
+    assert (tmp_path / "scan" / "witnesses.redacted.json").is_file()
     assert (tmp_path / "scan" / "summary.json").is_file()
     assert (tmp_path / "scan" / "report.md").is_file()
     assert any(item.witness_path for item in result.findings)
@@ -109,12 +120,69 @@ def test_scan_failing_fixture_writes_gate_outputs(tmp_path) -> None:
     assert result.summary.integration_readiness["level"] == "ci-gate-ready"
 
     scan_json = json.loads((tmp_path / "scan" / "scan.json").read_text(encoding="utf-8"))
+    findings_json = json.loads(
+        (tmp_path / "scan" / "policystrata" / "findings.json").read_text(encoding="utf-8")
+    )
+    witnesses_redacted = json.loads(
+        (tmp_path / "scan" / "witnesses.redacted.json").read_text(encoding="utf-8")
+    )
+    witness_path = result.findings[0].witness_path
+    assert witness_path is not None
+    witness = json.loads((tmp_path / "scan" / witness_path).read_text(encoding="utf-8"))
     assert scan_json["gate"]["outcome"] == "fail"
+    assert len(findings_json) == len(result.findings)
+    assert witnesses_redacted["schemaVersion"] == "policystrata.witnesses_redacted.v1"
+    assert "sql" not in witnesses_redacted["witnesses"][0]
+    assert witness["schemaVersion"] == "policystrata.finding_witness.v1"
+    assert set(witness) >= {"id", "semanticIr", "sql", "metadataKeys", "probableFix"}
+    assert witness["sql"] is None or set(witness["sql"]) == {"sha256", "bytes"}
+    assert "select " not in json.dumps(witness).lower()
     report = (tmp_path / "scan" / "report.md").read_text(encoding="utf-8")
     assert "## Production Integration" in report
     assert "Configured readiness:" in report
     assert "Score:" not in report
     assert "## Remediation" in report
+
+
+def test_render_junit_quotes_attribute_values() -> None:
+    result = ScanResult(
+        domain="support_saas",
+        config_path="policystrata.yaml",
+        output_dir="scan-out",
+        gate=GateDecision(outcome=GateOutcome.FAIL, reasons=["failed"], failing_findings=["unsafe_release"]),
+        summary=ScanSummary(
+            total_findings=1,
+            high_confidence_failures=1,
+            warnings=0,
+            infos=0,
+            gate=GateOutcome.FAIL,
+            evidence_levels={"imported_trace": 1},
+            mutant_statuses={},
+        ),
+        findings=[
+            ScanFinding(
+                id="unsafe_release",
+                title='Unsafe "release" finding',
+                severity=FindingSeverity.HIGH,
+                confidence=FindingConfidence.HIGH,
+                surface="grammar",
+                witness_class=WitnessClass.OVER_PERMISSIVE,
+                evidence_level=EvidenceLevel.IMPORTED_TRACE,
+                reasons=['tenant predicate "missing" & row leak'],
+                reproducible_command="policystrata scan --config policystrata.yaml",
+                probable_fix='Add tenant_id = "current tenant"',
+            )
+        ],
+        artifacts={},
+    )
+
+    xml = render_junit(result)
+
+    root = ElementTree.fromstring(xml)
+    failure = root.find(".//failure")
+    assert failure is not None
+    assert failure.attrib["message"] == 'tenant predicate "missing" & row leak'
+    assert failure.text == 'Add tenant_id = "current tenant"'
 
 
 def test_scan_clean_fixture_passes(tmp_path) -> None:

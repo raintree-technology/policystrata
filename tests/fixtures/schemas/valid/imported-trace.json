@@ -1,0 +1,1 @@
+{"id":"trace_1","principal":"analyst","sql":"select count(*) from support_tickets where tenant_id = 'tenant_a'","tenant_ids":["tenant_a"]}

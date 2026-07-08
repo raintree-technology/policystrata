@@ -34,11 +34,13 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db
+      - name: Set up mise
+        uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db
         with:
           version: 2026.7.1
           install: true
           cache: true
+
       - name: Install uv
         uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
         with:
@@ -46,17 +48,17 @@ jobs:
           cache-suffix: py-${{ matrix.python-version }}
 
       - name: Install dependencies
-        run: uv sync --extra dev
+        run: mise x python@${{ matrix.python-version }} -- uv sync --extra dev
 
       - name: Run tests
-        run: uv run pytest
+        run: mise x python@${{ matrix.python-version }} -- uv run pytest
 
       - name: Run release checks
         if: ${{ matrix.python-version == '3.12.13' }}
         run: |
-          uv run ruff check .
-          uv run mypy src
-          node scripts/release-smoke.mjs --python-artifact
+          mise x python@${{ matrix.python-version }} -- uv run ruff check .
+          mise x python@${{ matrix.python-version }} -- uv run mypy src
+          mise x python@${{ matrix.python-version }} node@24.18.0 -- node scripts/release-smoke.mjs --python-artifact
 
   postgres-integration:
     name: PostgreSQL integration
@@ -84,11 +86,13 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db
+      - name: Set up mise
+        uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db
         with:
           version: 2026.7.1
           install: true
           cache: true
+
       - name: Install uv
         uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
         with:
@@ -96,16 +100,16 @@ jobs:
           cache-suffix: postgres-py-3.12
 
       - name: Install dependencies
-        run: uv sync --extra dev
+        run: mise x python@3.12.13 -- uv sync --extra dev
 
       - name: Run PostgreSQL integration tests
         env:
           POLICYSTRATA_RUN_DB_TESTS: "1"
-        run: uv run pytest tests/test_postgres_integration.py
+        run: mise x python@3.12.13 -- uv run pytest tests/test_postgres_integration.py
 
       - name: Run real-db scanner fixture
         run: >
-          uv run policystrata scan
+          mise x python@3.12.13 -- uv run policystrata scan
           --config examples/postgres_dbt/policystrata_real_db_clean.yaml
           --out runs/scan-real-db-clean
 
@@ -119,11 +123,6 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db
-        with:
-          version: 2026.7.1
-          install: true
-          cache: true
       - name: Run local PolicyStrata action
         uses: ./
         with:
@@ -140,29 +139,31 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db
+      - name: Set up mise
+        uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db
         with:
           version: 2026.7.1
           install: true
           cache: true
+
       - name: Install package dependencies
-        run: mise run setup
+        run: mise x node@24.18.0 bun@1.3.11 -- bun install --frozen-lockfile
 
       - name: Run Node SDK tests
         working-directory: packages/node
-        run: mise run test
+        run: mise x node@24.18.0 bun@1.3.11 -- bun run test
 
       - name: Verify Node SDK package contents
         working-directory: packages/node
-        run: bun pm pack --dry-run
+        run: mise x node@24.18.0 bun@1.3.11 -- bun pm pack --dry-run
 
       - name: Run Gateway tests
         working-directory: packages/gateway
-        run: mise run test
+        run: mise x node@24.18.0 bun@1.3.11 -- bun run test
 
       - name: Verify Gateway package contents
         working-directory: packages/gateway
-        run: bun pm pack --dry-run
+        run: mise x node@24.18.0 bun@1.3.11 -- bun pm pack --dry-run
 
       - name: Clean-install packed Node artifacts
-        run: node scripts/release-smoke.mjs --npm-artifacts
+        run: mise x node@24.18.0 bun@1.3.11 -- node scripts/release-smoke.mjs --npm-artifacts

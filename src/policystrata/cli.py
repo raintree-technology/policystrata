@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 
 import yaml
@@ -9,6 +10,18 @@ from pydantic import ValidationError
 
 from policystrata.artifact_report import artifact_report_json, render_artifact_report
 from policystrata.baselines import evaluate_ablation_runs, evaluate_baseline_runs
+from policystrata.clearance import (
+    ClearanceRunnerConfig,
+    ClearanceRunnerExitCode,
+    build_clearance_evidence_pack,
+    build_clearance_upload_payload,
+    clearance_exit_code_for_pack,
+    load_clearance_runner_config,
+    protected_branch_upload_blocker,
+    scan_metadata_boundary,
+    upload_clearance_payload,
+    write_clearance_contract_outputs,
+)
 from policystrata.demo import run_demo
 from policystrata.doctor import (
     environment_doctor,
@@ -23,6 +36,11 @@ from policystrata.freeze import verify_benchmark_manifest, write_benchmark_manif
 from policystrata.generator import MAX_GENERATED_COUNT
 from policystrata.init_scan import SCANNER_EXAMPLES, init_scan_project
 from policystrata.integrations.dbt_semantic import compare_dbt_semantic_model, dbt_semantic_has_warnings
+from policystrata.integrations.native import (
+    NATIVE_INTEGRATION_PROVIDERS,
+    NativeIntegrationConnection,
+    native_evidence_runtime_payload,
+)
 from policystrata.minimize import minimize_witness_file
 from policystrata.runner import run_suite
 from policystrata.runtime import (
@@ -31,7 +49,7 @@ from policystrata.runtime import (
     expected_runtime_decision_mismatches,
 )
 from policystrata.scan_models import GateOutcome
-from policystrata.scanner import run_scan
+from policystrata.scanner import render_junit, run_scan
 from policystrata.schemas import SCHEMA_KINDS, public_schema
 from policystrata.summary import summarize_run
 
@@ -109,6 +127,27 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Benchmark manifest created by freeze-benchmark; verified before running.",
     )
+    run_parser.add_argument(
+        "--clearance-config",
+        type=Path,
+        default=None,
+        help="Optional clearance.runner.yaml metadata for local Clearance artifacts.",
+    )
+    run_parser.add_argument("--release-candidate", default=None)
+    run_parser.add_argument("--commit-sha", default=None)
+    run_parser.add_argument("--environment", default=None)
+    run_parser.add_argument("--project-id", default=None)
+    run_parser.add_argument("--organization-id", default=None)
+    run_parser.add_argument(
+        "--clearance-output-dir",
+        default=None,
+        help="Relative output directory for Clearance artifacts. Defaults to .clearance.",
+    )
+    run_parser.add_argument(
+        "--offline",
+        action="store_true",
+        help="Mark Clearance artifacts as intentionally local/offline.",
+    )
 
     freeze_parser = subparsers.add_parser(
         "freeze-benchmark",
@@ -148,9 +187,13 @@ def build_parser() -> argparse.ArgumentParser:
     ablations_parser.add_argument("--format", choices=["json"], default="json")
     ablations_parser.add_argument("--out", type=Path, default=None)
 
-    export_parser = subparsers.add_parser("export", help="Export a run through an external eval adapter.")
+    export_parser = subparsers.add_parser("export", help="Export a run through an evidence or eval adapter.")
     export_parser.add_argument("run_dir", type=Path)
-    export_parser.add_argument("--format", choices=["inspect", "benchflow"], required=True)
+    export_parser.add_argument(
+        "--format",
+        choices=["inspect", "benchflow", "policystrata-json"],
+        required=True,
+    )
     export_parser.add_argument("--out", type=Path, required=True)
 
     evidence_parser = subparsers.add_parser("evidence", help="Render Markdown evidence tables.")
@@ -194,6 +237,28 @@ def build_parser() -> argparse.ArgumentParser:
         help="Exit 1 when the integration check reports warning-level diagnostics.",
     )
 
+    native_integration_parser = subparsers.add_parser(
+        "integrations",
+        help="Collect native provider evidence as Clearance runtime events.",
+        description=(
+            "Collect normalized provider evidence without storing raw provider payloads.\n\n"
+            "Examples:\n"
+            "  policystrata integrations collect --provider github --project governed-agent "
+            "--connection-id conn_123\n"
+            "  policystrata integrations collect --provider aws --project governed-agent "
+            "--connection-id conn_aws --config aws.json --secret-key externalId"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    native_integration_parser.add_argument("action", choices=["collect"])
+    native_integration_parser.add_argument("--provider", choices=NATIVE_INTEGRATION_PROVIDERS, required=True)
+    native_integration_parser.add_argument("--project", required=True)
+    native_integration_parser.add_argument("--connection-id", required=True)
+    native_integration_parser.add_argument("--display-name", default=None)
+    native_integration_parser.add_argument("--config", type=Path, default=None)
+    native_integration_parser.add_argument("--secret-key", action="append", default=[])
+    native_integration_parser.add_argument("--out", type=Path, default=None)
+
     scan_parser = subparsers.add_parser(
         "scan",
         help="Run a production policy-drift scan over configured adapters and traces.",
@@ -218,6 +283,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Scan config YAML.",
     )
     scan_parser.add_argument("--out", type=Path, default=None, help="Output directory for scan artifacts.")
+    scan_parser.add_argument("--junit", type=Path, default=None, help="Optional JUnit XML output path.")
 
     runtime_parser = subparsers.add_parser(
         "runtime-evaluate",
@@ -242,6 +308,31 @@ def build_parser() -> argparse.ArgumentParser:
             "When set, exit status reflects assertion mismatches instead of blocked events."
         ),
     )
+
+    clearance_parser = subparsers.add_parser(
+        "clearance-runner",
+        help="Validate Clearance runner contracts and metadata-only evidence packs.",
+        description=(
+            "Validate local Clearance runner config and evidence without uploading raw customer data.\n\n"
+            "Examples:\n"
+            "  policystrata clearance-runner validate --config clearance.runner.yaml\n"
+            "  policystrata clearance-runner evidence-pack --run-dir runs/demo --out evidence-pack.json\n"
+            "  policystrata clearance-runner upload --run-dir runs/demo --config clearance.runner.yaml\n"
+            "  policystrata clearance-runner audit-payload --payload runtime-events.json"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    clearance_parser.add_argument("action", choices=["validate", "evidence-pack", "audit-payload", "upload"])
+    clearance_parser.add_argument("--config", type=Path, default=None)
+    clearance_parser.add_argument("--run-dir", type=Path, default=None)
+    clearance_parser.add_argument("--payload", type=Path, default=None)
+    clearance_parser.add_argument("--api-url", default=None)
+    clearance_parser.add_argument("--token", default=None)
+    clearance_parser.add_argument("--upload-path", default="/v1/runner/uploads")
+    clearance_parser.add_argument("--idempotency-key", default=None)
+    clearance_parser.add_argument("--local-override-note", default=None)
+    clearance_parser.add_argument("--max-bytes", type=int, default=1_000_000)
+    clearance_parser.add_argument("--out", type=Path, default=None)
 
     doctor_parser = subparsers.add_parser(
         "doctor",
@@ -304,6 +395,7 @@ def run_command(args: argparse.Namespace) -> int:
         return 0
 
     if args.command == "run":
+        clearance_config = clearance_config_from_args(args)
         traces = run_suite(
             args.domain,
             args.suite,
@@ -312,6 +404,12 @@ def run_command(args: argparse.Namespace) -> int:
             args.count,
             args.seed,
             args.freeze_manifest,
+            clearance_config=clearance_config,
+            release_candidate=args.release_candidate,
+            commit_sha=args.commit_sha,
+            environment=args.environment,
+            project_id=args.project_id,
+            organization_id=args.organization_id,
         )
         print(json.dumps({"traces": len(traces), "out": str(args.out)}, sort_keys=True))
         return 0
@@ -402,8 +500,28 @@ def run_command(args: argparse.Namespace) -> int:
         )
         return 1 if args.fail_on_warning and dbt_semantic_has_warnings(integration_result) else 0
 
+    if args.command == "integrations" and args.action == "collect":
+        config = read_json_or_yaml(args.config) if args.config is not None else {}
+        if not isinstance(config, dict):
+            raise ValueError("integration config must be a JSON/YAML object")
+        payload = native_evidence_runtime_payload(
+            NativeIntegrationConnection(
+                provider=args.provider,
+                project=args.project,
+                connection_id=args.connection_id,
+                display_name=args.display_name,
+                config=config,
+                secret_keys=tuple(args.secret_key),
+            )
+        )
+        output = json.dumps(payload, indent=2, sort_keys=True) + "\n"
+        return write_text_result(output, args.out)
+
     if args.command == "scan":
         scan_result = run_scan(args.config, args.out)
+        if args.junit is not None:
+            args.junit.parent.mkdir(parents=True, exist_ok=True)
+            args.junit.write_text(render_junit(scan_result), encoding="utf-8")
         print(
             json.dumps(
                 {
@@ -438,17 +556,166 @@ def run_command(args: argparse.Namespace) -> int:
             ],
             "decisions": [evaluation.to_dict() for evaluation in evaluations],
         }
-        payload = json.dumps(runtime_output, indent=2, sort_keys=True) + "\n"
+        runtime_payload = json.dumps(runtime_output, indent=2, sort_keys=True) + "\n"
         exit_code = 0 if not expected_mismatches else 1
         if not args.assert_expected:
             exit_code = 0 if runtime_output["ok"] else 1
         if args.out is not None:
-            args.out.parent.mkdir(parents=True, exist_ok=True)
-            args.out.write_text(payload, encoding="utf-8")
-            print(json.dumps({"out": str(args.out)}, sort_keys=True))
+            output_path = runtime_output_path(args.out)
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_text(runtime_payload, encoding="utf-8")
+            print(json.dumps({"out": str(output_path)}, sort_keys=True))
         else:
-            print(payload, end="")
+            print(runtime_payload, end="")
         return exit_code
+
+    if args.command == "clearance-runner":
+        if args.action == "validate":
+            if args.config is None:
+                raise ValueError("--config is required for clearance-runner validate")
+            try:
+                config = load_clearance_runner_config(args.config)
+            except (ValidationError, ValueError) as exc:
+                return write_invalid_config_result(exc, args.out)
+            output = json.dumps(
+                {
+                    "ok": True,
+                    "schemaVersion": config.schema_version,
+                    "projectId": config.project_id,
+                    "uploadMode": config.upload_mode,
+                    "uploadArtifacts": config.upload_artifacts,
+                    "failMode": config.fail_mode,
+                },
+                indent=2,
+                sort_keys=True,
+            ) + "\n"
+            return write_text_result(output, args.out)
+        if args.action == "evidence-pack":
+            if args.run_dir is None:
+                raise ValueError("--run-dir is required for clearance-runner evidence-pack")
+            try:
+                config = load_clearance_runner_config(args.config) if args.config is not None else None
+            except (ValidationError, ValueError) as exc:
+                return write_invalid_config_result(exc, args.out)
+            artifacts = write_clearance_contract_outputs(args.run_dir, config)
+            pack = build_clearance_evidence_pack(args.run_dir, config)
+            output = json.dumps({**pack, "localArtifacts": artifacts}, indent=2, sort_keys=True) + "\n"
+            exit_code = int(clearance_exit_code_for_pack(pack))
+            if args.out is not None:
+                args.out.parent.mkdir(parents=True, exist_ok=True)
+                args.out.write_text(output, encoding="utf-8")
+                print(
+                    json.dumps(
+                        {
+                            "out": str(args.out),
+                            "exitCode": exit_code,
+                            "state": pack["decision"]["state"],
+                            "blocked": pack["decision"]["blocked"],
+                            "needsReview": pack["decision"]["needsReview"],
+                        },
+                        sort_keys=True,
+                    )
+                )
+            else:
+                print(output, end="")
+            return exit_code
+        if args.action == "audit-payload":
+            if args.payload is None:
+                raise ValueError("--payload is required for clearance-runner audit-payload")
+            audited_payload = read_json_or_yaml(args.payload)
+            findings = [finding.model_dump() for finding in scan_metadata_boundary(audited_payload)]
+            output = json.dumps(
+                {
+                    "ok": not findings,
+                    "findings": findings,
+                },
+                indent=2,
+                sort_keys=True,
+            ) + "\n"
+            if findings:
+                return _write_failing_text_result(output, args.out)
+            return write_text_result(output, args.out)
+        if args.action == "upload":
+            if args.run_dir is None:
+                raise ValueError("--run-dir is required for clearance-runner upload")
+            if args.config is None:
+                raise ValueError("--config is required for clearance-runner upload")
+            try:
+                config = load_clearance_runner_config(args.config)
+            except (ValidationError, ValueError) as exc:
+                return write_invalid_config_result(exc, args.out)
+            if args.local_override_note:
+                config = config.model_copy(update={"local_override_note": args.local_override_note})
+            blocker = protected_branch_upload_blocker(config)
+            if blocker is not None:
+                return write_upload_auth_failure(
+                    {
+                        "ok": False,
+                        "status": 0,
+                        "error": "protected_branch_local_only_blocked",
+                        "message": blocker,
+                    },
+                    args.out,
+                )
+            api_url = args.api_url or config.api_url
+            if not api_url:
+                raise ValueError("--api-url or apiUrl in clearance.runner.yaml is required for upload")
+            runtime_events = read_json_or_yaml(args.payload) if args.payload is not None else None
+            upload_payload = build_clearance_upload_payload(
+                args.run_dir,
+                config,
+                runtime_events=runtime_events,
+                idempotency_key=args.idempotency_key,
+            )
+            if config.upload_mode == "local_only":
+                local_output: dict[str, object] = {
+                    "ok": True,
+                    "status": 0,
+                    "uploadMode": "local_only",
+                    "uploadId": upload_payload["uploadId"],
+                    "runId": upload_payload["runId"],
+                    "localOverrideNote": config.local_override_note,
+                }
+                return write_json_result(local_output, args.out)
+            token = args.token or os.environ.get("CLEARANCE_RUNNER_TOKEN")
+            if not token:
+                return write_upload_auth_failure(
+                    {
+                        "ok": False,
+                        "status": 0,
+                        "uploadId": upload_payload["uploadId"],
+                        "runId": upload_payload["runId"],
+                        "error": "missing_runner_token",
+                    },
+                    args.out,
+                )
+            result = upload_clearance_payload(
+                upload_payload,
+                api_url=api_url,
+                token=token,
+                organization_id=config.organization_id,
+                path=args.upload_path,
+                max_bytes=args.max_bytes,
+            )
+            output = json.dumps(
+                {
+                    "ok": result.ok,
+                    "status": result.status,
+                    "uploadId": upload_payload["uploadId"],
+                    "runId": upload_payload["runId"],
+                    "body": result.body,
+                    "error": result.error,
+                },
+                indent=2,
+                sort_keys=True,
+            ) + "\n"
+            if args.out is not None:
+                args.out.parent.mkdir(parents=True, exist_ok=True)
+                args.out.write_text(output, encoding="utf-8")
+                print(json.dumps({"out": str(args.out), "exitCode": 0 if result.ok else 4}, sort_keys=True))
+            else:
+                print(output, end="")
+            return 0 if result.ok else 4
 
     if args.command == "doctor":
         if args.config is None:
@@ -483,6 +750,66 @@ def write_json_result(result: object, out_path: Path | None) -> int:
     return write_text_result(payload, out_path)
 
 
+def write_upload_auth_failure(result: object, out_path: Path | None) -> int:
+    payload = json.dumps(result, indent=2, sort_keys=True) + "\n"
+    if out_path is not None:
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(payload, encoding="utf-8")
+        print(json.dumps({"out": str(out_path), "exitCode": 4}, sort_keys=True))
+    else:
+        print(payload, end="")
+    return int(ClearanceRunnerExitCode.UPLOAD_AUTH_FAILURE)
+
+
+def write_invalid_config_result(exc: Exception, out_path: Path | None) -> int:
+    message = format_validation_error(exc) if isinstance(exc, ValidationError) else str(exc)
+    payload = json.dumps(
+        {
+            "ok": False,
+            "error": "invalid_config",
+            "message": message,
+        },
+        indent=2,
+        sort_keys=True,
+    ) + "\n"
+    if out_path is not None:
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(payload, encoding="utf-8")
+        print(
+            json.dumps(
+                {"out": str(out_path), "exitCode": int(ClearanceRunnerExitCode.INVALID_CONFIG)},
+                sort_keys=True,
+            )
+        )
+    else:
+        print(payload, end="")
+    return int(ClearanceRunnerExitCode.INVALID_CONFIG)
+
+
+def clearance_config_from_args(args: argparse.Namespace) -> ClearanceRunnerConfig | None:
+    config = (
+        load_clearance_runner_config(args.clearance_config)
+        if args.clearance_config is not None
+        else None
+    )
+    updates = {
+        "organizationId": args.organization_id,
+        "projectId": args.project_id,
+        "environment": args.environment,
+        "releaseCandidate": args.release_candidate,
+        "outputDir": args.clearance_output_dir,
+        "offline": True if args.offline else None,
+    }
+    updates = {key: value for key, value in updates.items() if value is not None}
+    if not updates:
+        return config
+    data = config.model_dump(by_alias=True) if config is not None else {}
+    data.update(updates)
+    if "projectId" not in data:
+        data["projectId"] = args.domain
+    return ClearanceRunnerConfig.model_validate(data)
+
+
 def read_json_or_yaml(path: Path) -> object:
     text = path.read_text(encoding="utf-8")
     if path.suffix.lower() == ".json":
@@ -499,6 +826,14 @@ def runtime_event_list(payload: object) -> list[dict[str, object]]:
     if len(events) != len(items):
         raise ValueError("runtime event payload must be an event object or {events:[...]}")
     return events
+
+
+def runtime_output_path(out_path: Path) -> Path:
+    if out_path.exists() and out_path.is_dir():
+        return out_path / "runtime-events.json"
+    if out_path.suffix:
+        return out_path
+    return out_path / "runtime-events.json"
 
 
 def runtime_expected_mismatches(
@@ -537,6 +872,11 @@ def write_text_result(payload: str, out_path: Path | None) -> int:
     else:
         print(payload, end="")
     return 0
+
+
+def _write_failing_text_result(payload: str, out_path: Path | None) -> int:
+    write_text_result(payload, out_path)
+    return 1
 
 
 def strip_manifest_payloads(verification: dict[str, object]) -> dict[str, object]:

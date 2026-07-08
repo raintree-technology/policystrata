@@ -1,18 +1,29 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { createServer, type IncomingMessage } from "node:http";
 import type { AddressInfo } from "node:net";
+import { dirname, join } from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 import {
+  POLICYSTRATA_GATEWAY_VERSION,
   PolicyStrataGatewayBlockedError,
   decideRuntimeEvent,
   decideRuntimeEvents,
   guardRuntimePayload,
+  nativeIntegrationRuntimeEvent,
+  scanMetadataBoundary,
   startAgentTrustGateway,
   uploadRuntimeEvents,
   type RuntimeEventWithDecision,
 } from "../src/index.js";
 import type { PolicyStrataRuntimeEventInput, PolicyStrataRuntimeManifest } from "policystrata/runtime";
+
+const TEST_DIR = dirname(fileURLToPath(import.meta.url));
+const PACKAGE_JSON = JSON.parse(
+  readFileSync(join(TEST_DIR, "..", "..", "package.json"), "utf8"),
+) as { version: string };
 
 const manifest: PolicyStrataRuntimeManifest = {
   schemaVersion: "policystrata.runtime_manifest.v1",
@@ -87,8 +98,10 @@ test("decideRuntimeEvents permits shadow-mode observation without changing the d
 
 test("uploadRuntimeEvents strips payloads by default", async () => {
   let received: unknown;
+  let idempotency: string | undefined;
   const controlPlane = await startJsonServer(async (request) => {
     received = await readJson(request);
+    idempotency = request.headers["idempotency-key"]?.toString();
     return { ok: true };
   });
   try {
@@ -97,14 +110,187 @@ test("uploadRuntimeEvents strips payloads by default", async () => {
       apiUrl: controlPlane.url,
       token: "token_test",
       organizationId: "org_test",
+      idempotencyKey: "evt-upload-once",
       events: result.events,
     });
 
     assert.equal(upload.ok, true);
     assert.equal(upload.status, 200);
+    assert.equal(
+      (received as { gateway: { version: string } }).gateway.version,
+      PACKAGE_JSON.version,
+    );
     assert.deepEqual((received as { events: RuntimeEventWithDecision[] }).events[0].payload, undefined);
     assert.equal((received as { events: RuntimeEventWithDecision[] }).events[0].expectedDecision, undefined);
     assert.equal((received as { events: RuntimeEventWithDecision[] }).events[0].payloadHash, undefined);
+    assert.equal((received as { headers?: unknown }).headers, undefined);
+    assert.equal(idempotency, "evt-upload-once");
+  } finally {
+    await controlPlane.close();
+  }
+});
+
+test("gateway version constant matches package metadata", () => {
+  assert.equal(POLICYSTRATA_GATEWAY_VERSION, PACKAGE_JSON.version);
+});
+
+test("scanMetadataBoundary finds raw prompts and secrets before upload", () => {
+  const findings = scanMetadataBoundary({
+    events: [
+      {
+        eventId: "evt_secret",
+        rawPrompt: "contact alice@example.com",
+        sampledRows: [{ customerEmail: "alice@example.com" }],
+        toolPayload: { card: "4111 1111 1111 1111" },
+        summary: "Authorization: Bearer tokenfixturevalue",
+      },
+    ],
+  });
+
+  assert.ok(findings.some((finding) => finding.path === "$.events[0].rawPrompt"));
+  assert.ok(findings.some((finding) => finding.path === "$.events[0].sampledRows"));
+  assert.ok(findings.some((finding) => finding.path === "$.events[0].toolPayload"));
+  assert.ok(findings.some((finding) => finding.reason.includes("bearer token")));
+});
+
+test("uploadRuntimeEvents fails closed on metadata boundary violations", async () => {
+  const result = decideRuntimeEvent(
+    manifest,
+    event({ summary: "Authorization: Bearer tokenfixturevalue" }),
+  );
+
+  await assert.rejects(
+    uploadRuntimeEvents({
+      apiUrl: "https://clearance.example",
+      events: result.events,
+    }),
+    /metadata-only boundary violation/,
+  );
+});
+
+test("uploadRuntimeEvents enforces upload payload size before network", async () => {
+  const result = decideRuntimeEvent(manifest, event());
+
+  await assert.rejects(
+    uploadRuntimeEvents({
+      apiUrl: "https://clearance.example",
+      events: result.events,
+      maxBodyBytes: 1,
+    }),
+    /too large/,
+  );
+});
+
+test("runtime evaluation rejects SQL substring tenant matches and classifies risk", () => {
+  const substring = decideRuntimeEvent(
+    {
+      ...manifest,
+      controls: { ...manifest.controls, sql: { tenantColumn: "tenant_id" } },
+    },
+    event({ payload: { sql: "select tenant_id from support_tickets where status = 'open'" } }),
+  );
+  const exportRisk = decideRuntimeEvent(
+    {
+      ...manifest,
+      controls: { ...manifest.controls, sql: { tenantColumn: "tenant_id", allowedQueryRisks: ["read"] } },
+    },
+    event({ payload: { sql: "copy support_tickets to stdout where tenant_id = 'tenant_a'" } }),
+  );
+
+  assert.equal(substring.ok, false);
+  assert.match(substring.decisions[0].reason, /missing tenant predicate/);
+  assert.equal(exportRisk.decisions[0].queryRisk, "export");
+  assert.match(exportRisk.decisions[0].reasons.join("\n"), /SQL query risk export/);
+});
+
+test("runtime evaluation denies unparameterized SQL when required", () => {
+  const result = decideRuntimeEvent(
+    {
+      ...manifest,
+      controls: { ...manifest.controls, sql: { tenantColumn: "tenant_id", requireParameterized: true } },
+    },
+    event({ payload: { sql: "select * from support_tickets where tenant_id = 'tenant_a'" } }),
+  );
+
+  assert.equal(result.ok, false);
+  assert.equal(result.decisions[0].controlId, "sql_parameterization_required");
+  assert.match(result.decisions[0].reason, /string_literal/);
+});
+
+test("runtime evaluation checks RLS drift and egress destination classes", () => {
+  const rls = decideRuntimeEvent(
+    { ...manifest, controls: { ...manifest.controls, databaseRule: { requireRls: true } } },
+    event({
+      layer: "database_rule",
+      operation: "rls_drift",
+      resource: { kind: "table", name: "support_tickets" },
+      rlsExpected: true,
+      rlsEnabled: false,
+    }),
+  );
+  const egress = decideRuntimeEvent(
+    { ...manifest, controls: { ...manifest.controls, egress: { allowedDestinationClasses: ["approved_vendor"] } } },
+    event({
+      layer: "egress",
+      operation: "export",
+      resource: {
+        kind: "webhook",
+        name: "external",
+        uri: "https://analytics.example/webhook",
+        destinationClass: "public_internet",
+      },
+    }),
+  );
+
+  assert.equal(rls.decisions[0].controlId, "rls_drift");
+  assert.equal(egress.decisions[0].controlId, "egress_destination_class");
+});
+
+test("runtime evaluation denies when manifest kill switch is enabled", () => {
+  const result = decideRuntimeEvent(
+    { ...manifest, controls: { ...manifest.controls, runtime: { killSwitch: true } } },
+    event(),
+  );
+
+  assert.equal(result.ok, false);
+  assert.equal(result.decisions[0].controlId, "runtime_kill_switch");
+});
+
+test("nativeIntegrationRuntimeEvent emits provider traceability", () => {
+  const integrationEvent = nativeIntegrationRuntimeEvent({
+    provider: "aws",
+    project: "support-bi",
+    connectionId: "conn_aws",
+    payload: { accountId: "123456789012" },
+  });
+
+  assert.equal(integrationEvent.provider, "aws");
+  assert.equal(integrationEvent.integrationConnectionId, "conn_aws");
+  assert.equal(integrationEvent.layer, "egress");
+  assert.equal(integrationEvent.decision?.action, "require_approval");
+  assert.deepEqual(integrationEvent.artifactRefs, ["integration://aws/conn_aws"]);
+});
+
+test("uploadRuntimeEvents sends clearance and legacy organization headers", async () => {
+  let organizationHeaders: { clearance?: string; assurance?: string } = {};
+  const controlPlane = await startJsonServer(async (request) => {
+    organizationHeaders = {
+      clearance: request.headers["x-clearance-organization-id"]?.toString(),
+      assurance: request.headers["x-assurance-organization-id"]?.toString(),
+    };
+    return { ok: true };
+  });
+  try {
+    const result = decideRuntimeEvent(manifest, event());
+    await uploadRuntimeEvents({
+      apiUrl: controlPlane.url,
+      token: "token_test",
+      organizationId: "org_test",
+      events: result.events,
+    });
+
+    assert.equal(organizationHeaders.clearance, "org_test");
+    assert.equal(organizationHeaders.assurance, "org_test");
   } finally {
     await controlPlane.close();
   }
@@ -143,6 +329,45 @@ test("HTTP gateway evaluates, blocks, and uploads redacted runtime events", asyn
     await gateway.close();
     await controlPlane.close();
   }
+});
+
+test("HTTP gateway requires a token when configured", async () => {
+  const gateway = await startAgentTrustGateway({
+    manifest,
+    port: 0,
+    gatewayToken: "gateway_secret",
+  });
+  try {
+    const unauthorized = await fetch(`${gateway.url}/v1/decide`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(event()),
+    });
+    assert.equal(unauthorized.status, 401);
+
+    const authorized = await fetch(`${gateway.url}/v1/decide`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer gateway_secret",
+      },
+      body: JSON.stringify(event()),
+    });
+    assert.equal(authorized.status, 200);
+  } finally {
+    await gateway.close();
+  }
+});
+
+test("HTTP gateway refuses non-loopback binding without a token", async () => {
+  await assert.rejects(
+    startAgentTrustGateway({
+      manifest,
+      host: "0.0.0.0",
+      port: 0,
+    }),
+    /POLICYSTRATA_GATEWAY_TOKEN/,
+  );
 });
 
 async function startJsonServer(

@@ -38,6 +38,8 @@ The Node package version `policystrata@0.1.1` was published through the GitHub t
 workflow from the `v1.0.3` tagged release commit.
 The `v1.0.4` release publishes PyPI `policystrata==1.0.4`, npm runtime `policystrata@0.1.2`, and
 the first public gateway package `@policystrata/agent-trust-gateway@0.1.0`.
+The `v1.0.5` release publishes PyPI `policystrata==1.0.5`, npm runtime `policystrata@0.1.3`, and
+gateway `@policystrata/agent-trust-gateway@0.1.1`.
 
 ## Release Policy
 
@@ -84,6 +86,11 @@ Before publishing the PyPI package:
 
 - bump `pyproject.toml` and `src/policystrata/__init__.py` together;
 - update `CHANGELOG.md`;
+- verify public schema contracts with `uv run policystrata schema --kind <kind>` for each kind in
+  `policystrata.schemas.SCHEMA_KINDS`;
+- keep valid and invalid schema fixtures in the source distribution under `tests/fixtures/schemas`;
+- verify wheel package data still includes built-in domains, task fixtures, and packaged scanner
+  examples;
 - run `uv run pytest`, `uv run ruff check .`, and `uv run mypy src`;
 - build and check the wheel/sdist with `uv build` and `uv run twine check --strict dist/*`;
 - run `node scripts/release-smoke.mjs --python-artifact`;
@@ -95,9 +102,9 @@ The Python and npm artifacts may version independently because they serve differ
 ecosystems. If they are released together from one tag, the release notes should state both artifact
 versions explicitly, for example:
 
-- PyPI: `policystrata==1.0.4`
-- npm runtime: `policystrata@0.1.2`
-- npm gateway: `@policystrata/agent-trust-gateway@0.1.0`
+- PyPI: `policystrata==1.0.5`
+- npm runtime: `policystrata@0.1.3`
+- npm gateway: `@policystrata/agent-trust-gateway@0.1.1`
 
 If the Node runtime becomes a committed stable SDK at the same maturity level as the scanner, revisit
 whether the npm version should align with the Python package version.

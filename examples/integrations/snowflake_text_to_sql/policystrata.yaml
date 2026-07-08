@@ -1,0 +1,10 @@
+version: 1
+domain: support_saas
+sql_traces:
+  files:
+    - traces.jsonl
+  required: true
+fuzz:
+  enabled: false
+gate:
+  required_inputs: [sql_traces]

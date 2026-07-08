@@ -273,6 +273,7 @@ export interface PolicyStrataRuntimeEventDecision {
   policyRefs?: readonly string[];
   redactions?: readonly string[];
   approvalRef?: string;
+  queryRisk?: string;
 }
 
 export interface PolicyStrataRuntimeExpectedDecision {
@@ -307,6 +308,10 @@ export interface PolicyStrataRuntimeEventInput {
   spanId?: string;
   eventRef?: string;
   witnessRefs?: readonly string[];
+  toolInputSchemaRef?: string;
+  toolOutputSchemaRef?: string;
+  mcpInputSchemaRef?: string;
+  mcpOutputSchemaRef?: string;
   payloadHash?: string;
   artifactRefs?: readonly string[];
   findingIds?: readonly string[];
@@ -316,6 +321,73 @@ export interface PolicyStrataRuntimeEventInput {
   tainted?: boolean;
   [key: string]: unknown;
 }
+
+export type PolicyStrataRuntimeEventBuilderInput = Omit<
+  PolicyStrataRuntimeEventInput,
+  "schemaVersion" | "observedAt"
+> & {
+  schemaVersion?: string;
+  observedAt?: string;
+};
+
+export type PolicyStrataLayerRuntimeEventBuilderInput = Omit<
+  PolicyStrataRuntimeEventBuilderInput,
+  "layer" | "operation"
+> & {
+  operation?: string;
+};
+
+export type PolicyStrataSqlRuntimeEventInput = Omit<
+  PolicyStrataLayerRuntimeEventBuilderInput,
+  "payload"
+> & {
+  sql: string;
+  payload?: Record<string, unknown>;
+  rowCount?: number;
+  rowLimit?: number;
+};
+
+export type PolicyStrataToolRuntimeEventInput = Omit<
+  PolicyStrataLayerRuntimeEventBuilderInput,
+  "resource" | "toolInputSchemaRef" | "toolOutputSchemaRef" | "mcpInputSchemaRef" | "mcpOutputSchemaRef"
+> & {
+  toolName: string;
+  toolKind?: PolicyStrataRuntimeToolKind;
+  resource?: Partial<PolicyStrataRuntimeResourceEventRef>;
+  inputSchemaRef?: string;
+  outputSchemaRef?: string;
+  mcpInputSchemaRef?: string;
+  mcpOutputSchemaRef?: string;
+};
+
+export type PolicyStrataRetrievalRuntimeEventInput = Omit<
+  PolicyStrataLayerRuntimeEventBuilderInput,
+  "resource"
+> & {
+  resourceName: string;
+  resource?: Partial<PolicyStrataRuntimeResourceEventRef>;
+  tenantId?: string;
+  requiredEntitlements?: readonly string[];
+};
+
+export type PolicyStrataEgressRuntimeEventInput = Omit<
+  PolicyStrataLayerRuntimeEventBuilderInput,
+  "resource"
+> & {
+  destination: string;
+  destinationClass?: string;
+  resource?: Partial<PolicyStrataRuntimeResourceEventRef>;
+};
+
+export type PolicyStrataClearanceEvidencePackRuntimeEventInput = Omit<
+  PolicyStrataLayerRuntimeEventBuilderInput,
+  "artifactRefs" | "layer" | "operation" | "payloadHash" | "resource" | "summary"
+> & {
+  evidencePackRef: string;
+  runId?: string;
+  sha256?: string;
+  summary?: string;
+};
 
 export interface PolicyStrataRuntimeEventEvaluation {
   eventId: string;
@@ -328,8 +400,110 @@ export interface PolicyStrataRuntimeEventEvaluation {
   controlId?: string;
   policyRefs: string[];
   redactions: string[];
+  queryRisk?: string;
   decision: PolicyStrataRuntimeEventDecision;
   event: PolicyStrataRuntimeEventInput & { decision: PolicyStrataRuntimeEventDecision };
+}
+
+export function buildRuntimeEvent(input: PolicyStrataRuntimeEventBuilderInput): PolicyStrataRuntimeEventInput {
+  const { schemaVersion, observedAt, ...event } = input;
+  return {
+    ...event,
+    schemaVersion: schemaVersion ?? "0.2.0",
+    observedAt: observedAt ?? new Date().toISOString(),
+  } as PolicyStrataRuntimeEventInput;
+}
+
+export function sqlRuntimeEvent(input: PolicyStrataSqlRuntimeEventInput): PolicyStrataRuntimeEventInput {
+  const { sql, payload, rowCount, rowLimit, ...event } = input;
+  return buildRuntimeEvent({
+    ...event,
+    layer: "sql",
+    operation: input.operation ?? "read",
+    payload: { ...(payload ?? {}), sql },
+    ...(rowCount !== undefined ? { rowCount } : {}),
+    ...(rowLimit !== undefined ? { rowLimit } : {}),
+  });
+}
+
+export function toolRuntimeEvent(input: PolicyStrataToolRuntimeEventInput): PolicyStrataRuntimeEventInput {
+  const {
+    toolName,
+    toolKind = "read",
+    resource,
+    inputSchemaRef,
+    outputSchemaRef,
+    mcpInputSchemaRef,
+    mcpOutputSchemaRef,
+    ...event
+  } = input;
+  return buildRuntimeEvent({
+    ...event,
+    layer: "tool_call",
+    operation: input.operation ?? toolKind,
+    resource: {
+      kind: "mcp_tool",
+      name: toolName,
+      ...(resource ?? {}),
+    },
+    ...(inputSchemaRef ? { toolInputSchemaRef: inputSchemaRef } : {}),
+    ...(outputSchemaRef ? { toolOutputSchemaRef: outputSchemaRef } : {}),
+    ...(mcpInputSchemaRef ? { mcpInputSchemaRef } : {}),
+    ...(mcpOutputSchemaRef ? { mcpOutputSchemaRef } : {}),
+  });
+}
+
+export function retrievalRuntimeEvent(
+  input: PolicyStrataRetrievalRuntimeEventInput,
+): PolicyStrataRuntimeEventInput {
+  const { resourceName, resource, tenantId, requiredEntitlements, ...event } = input;
+  return buildRuntimeEvent({
+    ...event,
+    layer: "retrieval",
+    operation: input.operation ?? "read",
+    resource: {
+      kind: "retrieval_result",
+      name: resourceName,
+      ...(tenantId ? { tenantId } : {}),
+      ...(requiredEntitlements ? { requiredEntitlements } : {}),
+      ...(resource ?? {}),
+    },
+  });
+}
+
+export function egressRuntimeEvent(input: PolicyStrataEgressRuntimeEventInput): PolicyStrataRuntimeEventInput {
+  const { destination, destinationClass, resource, ...event } = input;
+  return buildRuntimeEvent({
+    ...event,
+    layer: "egress",
+    operation: input.operation ?? "send",
+    resource: {
+      kind: "egress_destination",
+      name: destination,
+      uri: destination,
+      ...(destinationClass ? { destinationClass } : {}),
+      ...(resource ?? {}),
+    },
+  });
+}
+
+export function clearanceEvidencePackRuntimeEvent(
+  input: PolicyStrataClearanceEvidencePackRuntimeEventInput,
+): PolicyStrataRuntimeEventInput {
+  const { evidencePackRef, runId, sha256, summary, ...event } = input;
+  return buildRuntimeEvent({
+    ...event,
+    layer: "trace",
+    operation: "evidence_pack",
+    summary: summary ?? "Clearance evidence pack metadata is available locally",
+    resource: {
+      kind: "clearance_evidence_pack",
+      name: evidencePackRef,
+      ...(runId ? { id: runId } : {}),
+    },
+    artifactRefs: [evidencePackRef],
+    ...(sha256 ? { payloadHash: sha256 } : {}),
+  });
 }
 
 interface NormalizedRuntimeAction {
@@ -529,6 +703,7 @@ export function evaluateRuntimeEvent(
   const resource = recordValue(input.resource);
   const reasons: string[] = [];
   const redactions: string[] = [];
+  let queryRisk: string | undefined;
   let action: PolicyStrataRuntimeEventAction = "allow";
   let controlId: string | undefined;
 
@@ -538,6 +713,10 @@ export function evaluateRuntimeEvent(
       action = nextAction;
       controlId = nextControlId;
     }
+  }
+
+  if (controlBool(controls, "runtime", "killSwitch") || controlBool(controls, "runtime", "kill_switch")) {
+    apply("deny", "runtime kill switch is enabled", "runtime_kill_switch");
   }
 
   if (controlEnabled(controls, "authContext", true)) {
@@ -576,11 +755,44 @@ export function evaluateRuntimeEvent(
   if (input.layer === "sql" && controlEnabled(controls, "sql", true)) {
     const sqlText = eventText(input, "sql", "query", "statement", "observed");
     const tenantColumn = controlString(controls, "sql", "tenantColumn") ?? "tenant_id";
-    if (sqlText && !sqlText.toLowerCase().includes(tenantColumn.toLowerCase())) {
+    queryRisk = classifySqlQueryRisk(sqlText);
+    if (sqlText && !sqlHasTenantPredicate(sqlText, tenantColumn)) {
       apply("deny", `SQL statement is missing tenant predicate ${tenantColumn}`, "tenant_scope_required");
+    }
+    if (sqlText && controlBool(controls, "sql", "requireParameterized")) {
+      const parameterizationIssues = sqlParameterizationIssues(sqlText);
+      if (parameterizationIssues.length > 0) {
+        apply(
+          "deny",
+          `SQL statement contains unparameterized literals: ${parameterizationIssues.join(", ")}`,
+          "sql_parameterization_required",
+        );
+      }
     }
     if (tenantMismatch(actor, resource)) {
       apply("deny", "SQL resource tenant does not match actor tenant", "tenant_scope_required");
+    }
+    const allowedRisks = controlStringSet(controls, "sql", "allowedQueryRisks");
+    const deniedRisks = controlStringSet(controls, "sql", "deniedQueryRisks");
+    if (deniedRisks.has(queryRisk) || (allowedRisks.size > 0 && !allowedRisks.has(queryRisk))) {
+      apply("deny", `SQL query risk ${queryRisk} is not allowed`, "sql_query_risk");
+    }
+    const maxRows = controlNumber(controls, "sql", "maxRows");
+    const rowCount = eventNumber(input, "rowLimit", "row_limit", "limit", "rowCount", "returnedRows");
+    if (maxRows !== undefined && rowCount !== undefined && rowCount > maxRows) {
+      apply("deny", `SQL row count ${rowCount} exceeds maxRows ${maxRows}`, "sql_row_limit");
+    }
+  }
+
+  if (input.layer === "database_rule" && controlEnabled(controls, "databaseRule", true)) {
+    const requireRls = controlBool(controls, "databaseRule", "requireRls");
+    const rlsEnabled = eventBool(input, "rlsEnabled", "rls_enabled");
+    const rlsExpected = eventBool(input, "rlsExpected", "rls_expected");
+    if (input.rlsDrift === true || input.rls_drift === true) {
+      apply("deny", "RLS drift signal is present", "rls_drift");
+    }
+    if ((requireRls || rlsExpected) && !rlsEnabled) {
+      apply("deny", "RLS is expected but not enabled", "rls_drift");
     }
   }
 
@@ -603,8 +815,20 @@ export function evaluateRuntimeEvent(
   if (input.layer === "egress" && controlEnabled(controls, "egress", true)) {
     const destination = resourceUriOrName(resource);
     const allowedDestinations = controlStringSet(controls, "egress", "allowedDestinations");
+    const allowedClasses = controlStringSet(controls, "egress", "allowedDestinationClasses");
+    const destinationClass =
+      stringValue(resource.destinationClass) ??
+      stringValue(resource.classification) ??
+      stringValue(input.destinationClass);
     if (destination && allowedDestinations.size > 0 && !allowedDestinations.has(destination)) {
       apply("deny", `egress destination ${destination} is not approved`, "egress_approval_required");
+    }
+    if (destinationClass && allowedClasses.size > 0 && !allowedClasses.has(destinationClass)) {
+      apply(
+        "deny",
+        `egress destination class ${destinationClass} is not approved`,
+        "egress_destination_class",
+      );
     }
     if (controlBool(controls, "egress", "approvalRequired") && !eventApprovalSatisfied(input)) {
       apply("require_approval", "egress requires approval", "egress_approval_required");
@@ -654,6 +878,7 @@ export function evaluateRuntimeEvent(
     ...(controlId ? { control: { id: controlId, mode: "runtime_enforcement" } } : {}),
     ...(input.policyRefs ? { policyRefs: input.policyRefs } : {}),
     ...(redactions.length > 0 ? { redactions } : {}),
+    ...(queryRisk ? { queryRisk } : {}),
   };
   return {
     eventId: input.eventId,
@@ -666,6 +891,7 @@ export function evaluateRuntimeEvent(
     controlId,
     policyRefs: [...(input.policyRefs ?? [])],
     redactions,
+    queryRisk,
     decision,
     event: {
       ...input,
@@ -1053,6 +1279,15 @@ function controlBool(
   return controlRecord(controls, control)[key] === true;
 }
 
+function controlNumber(
+  controls: Record<string, unknown>,
+  control: string,
+  key: string,
+): number | undefined {
+  const value = controlRecord(controls, control)[key];
+  return typeof value === "number" && Number.isInteger(value) ? value : undefined;
+}
+
 function controlStringSet(
   controls: Record<string, unknown>,
   control: string,
@@ -1126,6 +1361,63 @@ function eventText(input: PolicyStrataRuntimeEventInput, ...keys: string[]): str
     if (value) return value;
   }
   return undefined;
+}
+
+function eventNumber(input: PolicyStrataRuntimeEventInput, ...keys: string[]): number | undefined {
+  const payload = recordValue(input.payload);
+  for (const key of keys) {
+    const value = input[key] ?? payload[key];
+    if (typeof value === "number" && Number.isInteger(value)) return value;
+  }
+  return undefined;
+}
+
+function classifySqlQueryRisk(sqlText: string | undefined): string {
+  if (!sqlText) return "unknown";
+  const normalized = normalizedSqlForDetection(sqlText).trimStart();
+  if (/^(copy|unload|export)\b/.test(normalized) || /\binto\s+out(?:file|put)\b/.test(normalized)) {
+    return "export";
+  }
+  if (/^(insert|update|delete|merge|truncate|drop|alter|create|grant|revoke)\b/.test(normalized)) {
+    return "write";
+  }
+  if (/^(select|with|show|describe|explain)\b/.test(normalized)) {
+    return "read";
+  }
+  return "unknown";
+}
+
+function sqlHasTenantPredicate(sqlText: string, tenantColumn: string): boolean {
+  const normalized = normalizedSqlForDetection(sqlText);
+  const escaped = escapeRegExp(tenantColumn.toLowerCase());
+  const identifier = String.raw`(?:["'\[]?[\w.]+["'\]]?\.)?["'\[]?${escaped}["'\]]?`;
+  const predicate = new RegExp(String.raw`\b(?:where|and|or|on)\s+[^;]*${identifier}\s*(?:=|in\b|is\b|between\b)`);
+  return predicate.test(normalized);
+}
+
+function normalizedSqlForDetection(sqlText: string): string {
+  return sqlText
+    .replace(/\/\*.*?\*\//gs, " ")
+    .replace(/--[^\n]*/g, " ")
+    .replace(/'(?:''|[^'])*'/g, "?")
+    .replace(/\s+/g, " ")
+    .toLowerCase();
+}
+
+function sqlParameterizationIssues(sqlText: string): string[] {
+  const text = sqlText.replace(/\/\*.*?\*\//gs, " ").replace(/--[^\n]*/g, " ");
+  const issues: string[] = [];
+  if (/'(?:''|[^'])*'/.test(text)) {
+    issues.push("string_literal");
+  }
+  if (/(?:=|<|>|<=|>=|<>|!=)\s*\d+(?:\.\d+)?\b/.test(text)) {
+    issues.push("numeric_literal");
+  }
+  return issues;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function controlExpectedVersion(

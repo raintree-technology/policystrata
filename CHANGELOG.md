@@ -2,6 +2,24 @@
 
 ## [Unreleased]
 
+## [1.0.5] - 2026-07-08
+
+- Add generic `policystrata-json` evidence export, runtime event builder helpers for common Node
+  layers, and source-distribution coverage for schema compatibility fixtures.
+- Add Clearance runner/upload contract scaffolding with metadata-only validation, size limits,
+  idempotency keys, protected-branch fail-closed behavior, and mock upload tests.
+- Include PolicyStrata package version metadata in both Clearance run artifacts and validate nested
+  upload payload contracts against the public evidence-pack and run-contract schemas.
+- Harden metadata-only boundary scanners and gateway/runtime uploads for raw prompts, documents,
+  tool payloads, credentials, JWTs, API keys, emails, cards, and stripped fixture-only fields.
+- Improve runtime and gateway coverage for SQL tenant predicates, query-risk classification,
+  row-limit checks, RLS drift events, egress classes, and fail-open/fail-closed documentation.
+- Add schema compatibility fixtures/tests, audit fixtures, generic integration/export docs, and the
+  TODO completion audit that separates PolicyStrata OSS work from agent-assurance hosted work.
+- Fix scanner JUnit XML attribute quoting for findings with quoted messages.
+- Publish the release tuple: PyPI `policystrata==1.0.5`, npm runtime `policystrata@0.1.3`, and
+  gateway `@policystrata/agent-trust-gateway@0.1.1`.
+
 ## [1.0.4] - 2026-07-07
 
 - Add public JSON Schema rendering for scanner, trace, scan-result, and runtime event contracts.

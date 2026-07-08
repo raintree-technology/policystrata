@@ -1,0 +1,139 @@
+{
+  "schemaVersion": "policystrata.audit_fixtures.v1",
+  "reviewerFeedbackFormat": {
+    "schemaVersion": "policystrata.reviewer_feedback.v1",
+    "fields": ["findingId", "reviewer", "disposition", "reason", "createdAt"],
+    "dispositions": ["confirmed", "false_positive", "needs_more_evidence", "waived"]
+  },
+  "qualityTracking": {
+    "falseNegatives": {
+      "fields": ["auditCaseId", "missedControl", "rootCause", "regressionTestRef"]
+    },
+    "noisyFalsePositives": {
+      "fields": ["auditCaseId", "findingId", "noiseReason", "tuningRef"]
+    }
+  },
+  "cases": [
+    {
+      "id": "metadata_only_enforcement",
+      "title": "Product metadata-only enforcement",
+      "kind": "metadata_boundary",
+      "expectedControl": "metadata_only_boundary",
+      "fixtureRefs": ["runtime-events/redacted-event.json"],
+      "metadataOnly": true
+    },
+    {
+      "id": "redaction_audit",
+      "title": "Redaction removes prompts, rows, documents, and tool payloads",
+      "kind": "redaction",
+      "expectedControl": "pii_secret_minimization",
+      "fixtureRefs": ["payloads/redaction-negative.json"],
+      "metadataOnly": true
+    },
+    {
+      "id": "tenant_isolation_audit",
+      "title": "Tenant isolation blocks cross-tenant retrieval and SQL",
+      "kind": "tenant_isolation",
+      "expectedControl": "tenant_scope_required",
+      "fixtureRefs": ["runtime-events/cross-tenant-retrieval.json"],
+      "metadataOnly": true
+    },
+    {
+      "id": "runner_token_abuse",
+      "title": "Runner token missing or invalid fails upload closed",
+      "kind": "runner_upload",
+      "expectedControl": "runner_token_required",
+      "fixtureRefs": ["clearance/upload-missing-token.json"],
+      "metadataOnly": true
+    },
+    {
+      "id": "evidence_integrity_audit",
+      "title": "Evidence refs include SHA-256 and byte length",
+      "kind": "evidence_integrity",
+      "expectedControl": "artifact_integrity",
+      "fixtureRefs": ["clearance/evidence-pack.json"],
+      "metadataOnly": true
+    },
+    {
+      "id": "release_decision_audit",
+      "title": "Release decisions preserve blocked, review, and pass states",
+      "kind": "release_decision",
+      "expectedControl": "release_gate_decision",
+      "fixtureRefs": ["clearance/clearance-run.json"],
+      "metadataOnly": true
+    },
+    {
+      "id": "waiver_audit",
+      "title": "Waiver evidence is data, not hosted workflow state",
+      "kind": "waiver_schema",
+      "expectedControl": "waiver_evidence_schema",
+      "fixtureRefs": ["waivers/waiver-evidence.json"],
+      "metadataOnly": true,
+      "hostedWorkflow": false
+    },
+    {
+      "id": "runtime_event_audit",
+      "title": "Runtime event decisions are evaluated locally",
+      "kind": "runtime_event",
+      "expectedControl": "runtime_enforcement",
+      "fixtureRefs": ["runtime-events/sql-deny.json"],
+      "metadataOnly": true
+    },
+    {
+      "id": "sql_rls_audit",
+      "title": "SQL tenant scope and RLS drift are detected",
+      "kind": "sql_rls",
+      "expectedControl": "rls_drift",
+      "fixtureRefs": ["runtime-events/rls-drift.json"],
+      "metadataOnly": true
+    },
+    {
+      "id": "retrieval_audit",
+      "title": "Retrieval entitlement and tenant checks are enforced",
+      "kind": "retrieval",
+      "expectedControl": "retrieval_entitlement_required",
+      "fixtureRefs": ["runtime-events/retrieval-entitlement.json"],
+      "metadataOnly": true
+    },
+    {
+      "id": "pii_audit",
+      "title": "PII and regulated data classes drive redaction or denial",
+      "kind": "pii",
+      "expectedControl": "data_class_policy",
+      "fixtureRefs": ["runtime-events/pii-redaction.json"],
+      "metadataOnly": true
+    },
+    {
+      "id": "egress_audit",
+      "title": "Egress destinations and destination classes are checked",
+      "kind": "egress",
+      "expectedControl": "egress_destination_class",
+      "fixtureRefs": ["runtime-events/egress-class.json"],
+      "metadataOnly": true
+    },
+    {
+      "id": "mcp_tool_audit",
+      "title": "MCP and tool calls include schema evidence refs",
+      "kind": "mcp_tool",
+      "expectedControl": "mcp_tool_allowlist_required",
+      "fixtureRefs": ["runtime-events/mcp-tool-schema.json"],
+      "metadataOnly": true
+    },
+    {
+      "id": "ci_gate_audit",
+      "title": "CI gate exits and artifact summaries are stable",
+      "kind": "ci_gate",
+      "expectedControl": "clearance_runner_exit_codes",
+      "fixtureRefs": ["ci/clearance-summary.json"],
+      "metadataOnly": true
+    },
+    {
+      "id": "export_audit",
+      "title": "External eval exports remain adapter-based",
+      "kind": "export",
+      "expectedControl": "adapter_boundary",
+      "fixtureRefs": ["exports/inspect.jsonl", "exports/benchflow.json"],
+      "metadataOnly": true
+    }
+  ]
+}

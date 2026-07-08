@@ -38,6 +38,8 @@ Commercial work should focus on the parts that become expensive in real organiza
 - Private CI integration.
 - Self-hosted runners for private schemas, policies, and sample data.
 - Enterprise connectors for warehouses, semantic layers, BI tools, and governance systems.
+- Cloud-specific private networking, customer VPC peering, enterprise IdP provisioning, and
+  hosted app integrations.
 - Dashboards, history, triage, and audit exports.
 - Managed regression campaigns for policy, schema, and semantic-model changes.
 - Custom adapters.

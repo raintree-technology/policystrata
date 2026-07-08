@@ -28,5 +28,6 @@ recursive-include packages/gateway/src *.ts
 recursive-include packages/gateway/test *.ts
 recursive-include scripts *.py *.sh
 recursive-include tests *.py
+recursive-include tests/fixtures *.json
 recursive-include src/policystrata/domains *.sql *.yaml
 recursive-include src/policystrata/scanner_examples *.jsonl *.yaml *.yml

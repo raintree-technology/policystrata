@@ -154,6 +154,21 @@ uv run policystrata doctor --config policystrata/policystrata.yaml --strict
 `scan` is the policy-drift gate. `doctor --strict` is the implementation-readiness gate for
 missing, partial, or invalid scanner wiring.
 
+`scan` writes both legacy line-oriented artifacts and metadata-friendly aggregate artifacts:
+
+- `scan.json`
+- `findings.jsonl`
+- `policystrata/findings.json`
+- `witnesses/*.json`
+- `witnesses.redacted.json`
+- `summary.json`
+- `report.md`
+
+Per-finding files under `witnesses/*.json` use the minimized
+`policystrata.finding_witness.v1` format. They keep finding identity, semantic IR, remediation
+fields, metadata keys, and a SQL SHA-256/byte-count summary instead of copying raw SQL into each
+witness file. The full local `scan.json` and `findings.jsonl` remain available for debugging.
+
 Doctor-only config sections are passive for `policystrata scan` and exist to account for stack
 wiring that may be enforced by current or future adapters:
 

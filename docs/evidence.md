@@ -156,7 +156,14 @@ Runs can be exported through adapter files without coupling core execution to ex
 ```bash
 uv run policystrata export runs/repro/seeded --format inspect --out runs/repro/seeded/inspect.jsonl
 uv run policystrata export runs/repro/seeded --format benchflow --out runs/repro/seeded/benchflow.json
+uv run policystrata export runs/repro/seeded --format policystrata-json --out runs/repro/seeded/evidence.json
 ```
 
-These exports package tasks, traces, and deterministic verifier expectations for downstream eval
-harnesses. They are not part of the deterministic benchmark score.
+The `inspect` and `benchflow` formats are explicit framework adapters. The
+`policystrata-json` format is a generic local evidence export with run metadata, aggregate counts,
+trace IDs, semantic IR, expected/observed witness classes, decision summaries, artifact refs, and
+cost/latency metrics. It intentionally omits raw request text, raw SQL text, and raw database
+result values.
+
+These exports package evidence for downstream eval harnesses, CI artifacts, or local audit
+handoffs. They are not part of the deterministic benchmark score.
