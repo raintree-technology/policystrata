@@ -1,3 +1,4 @@
+import { createHash, timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 
@@ -10,10 +11,35 @@ import {
   type PolicyStrataRuntimeManifest,
 } from "policystrata/runtime";
 
+export const POLICYSTRATA_GATEWAY_VERSION = "0.1.1";
+
 export type AgentTrustGatewayMode = "shadow" | "enforce";
 
 export interface RuntimeEventBatchPayload {
   events: readonly PolicyStrataRuntimeEventInput[];
+}
+
+export type NativeIntegrationProvider =
+  | "github"
+  | "vercel"
+  | "datadog"
+  | "snowflake"
+  | "slack"
+  | "jira"
+  | "aws"
+  | "gcp"
+  | "azure";
+
+export interface NativeIntegrationEvidenceInput {
+  provider: NativeIntegrationProvider;
+  project: string;
+  connectionId: string;
+  eventType?: string;
+  observedAt?: string;
+  decision?: PolicyStrataRuntimeEventDecision["action"];
+  summary?: string;
+  evidenceRefs?: readonly string[];
+  payload?: Record<string, unknown>;
 }
 
 export type RuntimeEventPayload = PolicyStrataRuntimeEventInput | RuntimeEventBatchPayload;
@@ -34,7 +60,10 @@ export interface RuntimeEventUploadOptions {
   token?: string;
   organizationId?: string;
   path?: string;
+  idempotencyKey?: string;
+  maxBodyBytes?: number;
   includePayload?: boolean;
+  allowBoundaryViolations?: boolean;
   fetch?: typeof fetch;
 }
 
@@ -48,6 +77,7 @@ export interface AgentTrustGatewayOptions {
   manifest: PolicyStrataRuntimeManifest;
   mode?: AgentTrustGatewayMode;
   upload?: RuntimeEventUploadOptions;
+  gatewayToken?: string;
   failOnUploadError?: boolean;
   maxBodyBytes?: number;
 }
@@ -58,6 +88,12 @@ export interface StartedAgentTrustGateway {
   close(): Promise<void>;
 }
 
+export interface MetadataBoundaryFinding {
+  path: string;
+  reason: string;
+  severity: "high" | "critical";
+}
+
 export class PolicyStrataGatewayBlockedError extends Error {
   readonly result: GatewayDecisionResult;
 
@@ -66,6 +102,52 @@ export class PolicyStrataGatewayBlockedError extends Error {
     this.name = "PolicyStrataGatewayBlockedError";
     this.result = result;
   }
+}
+
+export function nativeIntegrationRuntimeEvent(
+  input: NativeIntegrationEvidenceInput,
+): PolicyStrataRuntimeEventInput {
+  const eventType = input.eventType ?? defaultIntegrationEventType(input.provider);
+  const evidenceRefs = input.evidenceRefs ?? [`integration://${input.provider}/${input.connectionId}`];
+  const payload = {
+    storageMode: "metadata_only",
+    provider: input.provider,
+    connectionId: input.connectionId,
+    ...(input.payload ?? {}),
+  };
+  return {
+    schemaVersion: "0.2.0",
+    eventId: `integration-${input.provider}-${input.connectionId}-${sha256Json(payload).slice(0, 16)}`,
+    project: input.project,
+    observedAt: input.observedAt ?? new Date().toISOString(),
+    agent: {
+      key: `${input.provider}-integration`,
+      name: `${input.provider} integration`,
+      kind: "integration",
+    },
+    layer: defaultIntegrationLayer(input.provider),
+    operation: eventType,
+    summary: input.summary ?? `${input.provider} evidence synchronized for ${input.project}`,
+    decision: {
+      action: input.decision ?? defaultIntegrationDecision(input.provider),
+      reason: `${input.provider} provider evidence`,
+      control: {
+        id: `${input.provider}.native_integration`,
+        mode: "release_gate",
+        objective: "Use native provider evidence in Clearance gates",
+      },
+    },
+    provider: input.provider,
+    integrationConnectionId: input.connectionId,
+    externalRefs: evidenceRefs.map((ref) => ({
+      provider: input.provider,
+      ref,
+      kind: "evidence",
+      connectionId: input.connectionId,
+    })),
+    artifactRefs: [...evidenceRefs],
+    payloadHash: sha256Json(payload),
+  } as PolicyStrataRuntimeEventInput;
 }
 
 export function decideRuntimeEvent(
@@ -117,8 +199,47 @@ export function runtimeEventsFromPayload(payload: unknown): PolicyStrataRuntimeE
 }
 
 export function redactRuntimeEventForUpload(event: RuntimeEventWithDecision): RuntimeEventWithDecision {
-  const { expectedDecision: _expectedDecision, payload: _payload, ...redacted } = event;
+  const {
+    expectedDecision: _expectedDecision,
+    expected_decision: _expectedDecisionSnake,
+    payload: _payload,
+    ...redacted
+  } = event;
   return redacted;
+}
+
+export function scanMetadataBoundary(payload: unknown): MetadataBoundaryFinding[] {
+  const findings: MetadataBoundaryFinding[] = [];
+  for (const [path, value] of walkPayload(payload)) {
+    const key = path.split(".").at(-1) ?? path;
+    if (SENSITIVE_KEY_PATTERN.test(key)) {
+      findings.push({
+        path,
+        reason: `sensitive field name: ${key}`,
+        severity: "critical",
+      });
+    }
+    if (typeof value === "string") {
+      for (const [pattern, label] of SECRET_VALUE_PATTERNS) {
+        if (pattern.test(value)) {
+          findings.push({
+            path,
+            reason: `possible ${label}`,
+            severity: "critical",
+          });
+        }
+      }
+    }
+  }
+  return findings;
+}
+
+export function assertMetadataBoundary(payload: unknown): void {
+  const findings = scanMetadataBoundary(payload);
+  if (findings.length > 0) {
+    const first = findings[0];
+    throw new Error(`metadata-only boundary violation at ${first.path}: ${first.reason}`);
+  }
 }
 
 function runtimeEventForUpload(
@@ -135,10 +256,24 @@ export async function uploadRuntimeEvents(
 ): Promise<RuntimeEventUploadResult> {
   const client = options.fetch ?? fetch;
   const events = options.events.map((event) => runtimeEventForUpload(event, options.includePayload === true));
+  const uploadBody = JSON.stringify({
+    gateway: {
+      name: "@policystrata/agent-trust-gateway",
+      version: POLICYSTRATA_GATEWAY_VERSION,
+    },
+    events,
+  });
+  const maxBodyBytes = options.maxBodyBytes ?? 1_000_000;
+  if (Buffer.byteLength(uploadBody, "utf8") > maxBodyBytes) {
+    throw new Error(`runtime event upload payload is too large: exceeds ${maxBodyBytes} bytes`);
+  }
+  if (options.allowBoundaryViolations !== true) {
+    assertMetadataBoundary({ events });
+  }
   const response = await client(runtimeEventsEndpoint(options), {
     method: "POST",
     headers: uploadHeaders(options),
-    body: JSON.stringify({ events }),
+    body: uploadBody,
   });
   const body = await responseBody(response);
   return {
@@ -153,9 +288,10 @@ export function createAgentTrustGatewayHandler(
 ): (request: IncomingMessage, response: ServerResponse) => void {
   const mode = options.mode ?? "enforce";
   const maxBodyBytes = options.maxBodyBytes ?? 1_000_000;
+  const gatewayToken = resolveGatewayToken(options.gatewayToken);
 
   return (request, response) => {
-    void handleRequest(request, response, options, mode, maxBodyBytes);
+    void handleRequest(request, response, options, mode, maxBodyBytes, gatewayToken);
   };
 }
 
@@ -169,6 +305,9 @@ export async function startAgentTrustGateway(
   const server = createAgentTrustGatewayServer(options);
   const host = options.host ?? "127.0.0.1";
   const port = options.port ?? 8787;
+  if (!isLoopbackHost(host) && !resolveGatewayToken(options.gatewayToken)) {
+    throw new Error("POLICYSTRATA_GATEWAY_TOKEN or --gateway-token is required when binding beyond loopback");
+  }
   await new Promise<void>((resolve, reject) => {
     server.once("error", reject);
     server.listen(port, host, () => {
@@ -193,6 +332,7 @@ async function handleRequest(
   options: AgentTrustGatewayOptions,
   mode: AgentTrustGatewayMode,
   maxBodyBytes: number,
+  gatewayToken: string | undefined,
 ): Promise<void> {
   try {
     const url = new URL(request.url ?? "/", "http://localhost");
@@ -202,6 +342,10 @@ async function handleRequest(
     }
     if (request.method !== "POST" || url.pathname !== "/v1/decide") {
       sendJson(response, 404, { ok: false, error: "not_found" });
+      return;
+    }
+    if (gatewayToken && !isAuthorizedGatewayRequest(request, gatewayToken)) {
+      sendJson(response, 401, { ok: false, error: "unauthorized" });
       return;
     }
 
@@ -259,9 +403,38 @@ function uploadHeaders(options: RuntimeEventUploadOptions): HeadersInit {
     headers.authorization = `Bearer ${options.token}`;
   }
   if (options.organizationId) {
+    headers["x-clearance-organization-id"] = options.organizationId;
     headers["x-assurance-organization-id"] = options.organizationId;
   }
+  if (options.idempotencyKey) {
+    headers["idempotency-key"] = options.idempotencyKey;
+  }
   return headers;
+}
+
+function resolveGatewayToken(explicitToken: string | undefined): string | undefined {
+  return explicitToken || process.env.POLICYSTRATA_GATEWAY_TOKEN;
+}
+
+function isLoopbackHost(host: string): boolean {
+  const normalized = host.trim().toLowerCase();
+  return (
+    normalized === "localhost" ||
+    normalized === "127.0.0.1" ||
+    normalized === "::1" ||
+    normalized === "[::1]"
+  );
+}
+
+function isAuthorizedGatewayRequest(request: IncomingMessage, gatewayToken: string): boolean {
+  const authorization = request.headers.authorization ?? "";
+  const credential = authorization.toLowerCase().startsWith("bearer ")
+    ? authorization.slice(7).trim()
+    : "";
+  if (!credential) return false;
+  const left = Buffer.from(credential);
+  const right = Buffer.from(gatewayToken);
+  return left.length === right.length && timingSafeEqual(left, right);
 }
 
 async function responseBody(response: Response): Promise<unknown> {
@@ -301,4 +474,105 @@ function recordValue(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
+}
+
+const SENSITIVE_KEY_PATTERN =
+  /(?:^|[_\-.])(api[_\-.]?key|authorization|bearer|cookie|credential|customer[_\-.]?rows|doc[_\-.]?text|documents?|full[_\-.]?trace|input[_\-.]?schema|output[_\-.]?schema|password|passwd|private[_\-.]?schema|prompt|raw[_\-.]?docs?|raw[_\-.]?documents?|raw[_\-.]?payload|raw[_\-.]?prompt|rows|sampled[_\-.]?rows|secret|source[_\-.]?credentials|token|tool[_\-.]?(?:input|output|payload|request|response))(?:$|[_\-.])/i;
+
+const SECRET_VALUE_PATTERNS: readonly [RegExp, string][] = [
+  [/\bBearer\s+[A-Za-z0-9._~+/=-]{8,}\b/i, "bearer token"],
+  [/\b(?:api[_-]?key|password|passwd|secret|token)\s*[:=]\s*[^\s,;]+/i, "secret assignment"],
+  [/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/, "JWT"],
+  [/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i, "email address"],
+  [/\b(?:\d[ -]*?){13,19}\b/, "possible payment card"],
+  [/\bsk-[A-Za-z0-9_-]{16,}\b/, "API key"],
+  [/\bgh[pousr]_[A-Za-z0-9_]{20,}\b/, "API key"],
+  [/\bAKIA[0-9A-Z]{16}\b/, "API key"],
+  [/https?:\/\/[^\s?#]+[^\s]*[?&](?:api[_-]?key|token|secret|password)=[^&\s]+/i, "secret in URL"],
+];
+
+function* walkPayload(value: unknown, prefix = "$"): Generator<[string, unknown]> {
+  yield [prefix, value];
+  if (Array.isArray(value)) {
+    for (let index = 0; index < value.length; index += 1) {
+      yield* walkPayload(value[index], `${prefix}[${index}]`);
+    }
+    return;
+  }
+  if (!value || typeof value !== "object") return;
+  for (const [key, child] of Object.entries(value)) {
+    yield* walkPayload(child, `${prefix}.${key}`);
+  }
+}
+
+function defaultIntegrationEventType(provider: NativeIntegrationProvider): string {
+  switch (provider) {
+    case "github":
+      return "github.check_gate";
+    case "vercel":
+      return "vercel.deployment_gate";
+    case "datadog":
+      return "datadog.monitor_signal";
+    case "snowflake":
+      return "snowflake.data_policy_signal";
+    case "slack":
+      return "slack.approval_channel";
+    case "jira":
+      return "jira.workflow_gate";
+    case "aws":
+      return "aws.control_plane_signal";
+    case "gcp":
+      return "gcp.control_plane_signal";
+    case "azure":
+      return "azure.control_plane_signal";
+    default:
+      return exhaustiveProvider(provider);
+  }
+}
+
+function defaultIntegrationLayer(provider: NativeIntegrationProvider): string {
+  switch (provider) {
+    case "snowflake":
+      return "sql";
+    case "aws":
+    case "gcp":
+    case "azure":
+    case "vercel":
+      return "egress";
+    case "datadog":
+    case "github":
+    case "slack":
+    case "jira":
+      return "trace";
+    default:
+      return exhaustiveProvider(provider);
+  }
+}
+
+function defaultIntegrationDecision(provider: NativeIntegrationProvider): PolicyStrataRuntimeEventDecision["action"] {
+  switch (provider) {
+    case "github":
+    case "vercel":
+      return "allow";
+    case "datadog":
+    case "snowflake":
+    case "slack":
+    case "jira":
+    case "aws":
+    case "gcp":
+    case "azure":
+      return "require_approval";
+    default:
+      return exhaustiveProvider(provider);
+  }
+}
+
+function sha256Json(value: unknown): string {
+  return createHash("sha256")
+    .update(JSON.stringify(value, Object.keys(recordValue(value)).sort()))
+    .digest("hex");
+}
+
+function exhaustiveProvider(provider: never): never {
+  throw new Error(`Unsupported native integration provider: ${provider}`);
 }

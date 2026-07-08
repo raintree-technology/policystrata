@@ -1,0 +1,1 @@
+{"events":[{"schemaVersion":"0.2.0","eventId":"evt_1","project":"support-bi","observedAt":"2026-07-06T15:58:52Z","agent":{"key":"support-bi-copilot"},"layer":"sql","operation":"read","summary":"SQL metadata"}]}

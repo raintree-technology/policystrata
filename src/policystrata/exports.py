@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import json
+from collections import Counter
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from policystrata.models import Trace
-from policystrata.summary import load_traces
+from policystrata.summary import accounting_status, load_traces, summarize_traces
 
-ExportFormat = Literal["inspect", "benchflow"]
+ExportFormat = Literal["inspect", "benchflow", "policystrata-json"]
 
 
 def export_run(run_dir: Path, export_format: ExportFormat, out_path: Path) -> dict[str, Any]:
@@ -16,11 +17,88 @@ def export_run(run_dir: Path, export_format: ExportFormat, out_path: Path) -> di
         content = render_inspect_jsonl(traces)
     elif export_format == "benchflow":
         content = render_benchflow_json(traces)
+    elif export_format == "policystrata-json":
+        content = render_policystrata_json(run_dir, traces)
     else:
         raise ValueError(f"unsupported export format: {export_format}")
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(content, encoding="utf-8")
     return {"format": export_format, "records": len(traces), "out": str(out_path)}
+
+
+def render_policystrata_json(run_dir: Path, traces: list[Trace]) -> str:
+    summary = summarize_traces(traces)
+    metadata = load_run_metadata(run_dir)
+    payload = {
+        "version": "policystrata.evidence_export.v1",
+        "metadata": {
+            "adapter": "policystrata.json.v1",
+            "source": "policystrata",
+            "requires_llm_api_key": False,
+            "authorization_boundary": False,
+            "run": metadata,
+        },
+        "summary": summary.model_dump(mode="json"),
+        "counts": {
+            "witnessClasses": dict(sorted(Counter(trace.witness_class.value for trace in traces).items())),
+            "accountingStatuses": dict(sorted(Counter(accounting_status(trace) for trace in traces).items())),
+            "domains": dict(sorted(Counter(trace.domain for trace in traces).items())),
+        },
+        "traces": [policystrata_evidence_record(trace) for trace in traces],
+    }
+    return json.dumps(payload, indent=2, sort_keys=True) + "\n"
+
+
+def load_run_metadata(run_dir: Path) -> dict[str, Any]:
+    metadata_path = run_dir / "metadata.json"
+    if not metadata_path.exists():
+        return {}
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    if not isinstance(metadata, dict):
+        return {}
+    return cast(dict[str, Any], metadata)
+
+
+def policystrata_evidence_record(trace: Trace) -> dict[str, Any]:
+    return {
+        "id": trace.task_id,
+        "domain": trace.domain,
+        "principal": trace.principal,
+        "mutation": trace.mutation,
+        "policyVersion": trace.policy_version,
+        "surfaceVersions": trace.surface_versions,
+        "semanticIr": trace.semantic_ir.model_dump(mode="json"),
+        "expected": {
+            "witnessClass": trace.expected_witness_class.value,
+            "localizedSurface": trace.expected_localized_surface,
+            "containmentLayer": trace.expected_containment_layer,
+        },
+        "observed": {
+            "witnessClass": trace.witness_class.value,
+            "localizedSurface": trace.localized_surface,
+            "containmentLayer": trace.containment_layer,
+            "releaseAllowed": trace.release_decision.allowed,
+            "semanticDifference": trace.semantic_difference,
+        },
+        "accounting": {
+            "status": accounting_status(trace),
+            "reason": trace.accounting_reason,
+        },
+        "decisions": {
+            "canonicalAllowed": trace.canonical_decision.allowed,
+            "releaseAllowed": trace.release_decision.allowed,
+            "releaseReasons": trace.release_decision.reasons,
+        },
+        "artifacts": {
+            "witnessPath": trace.witness_path,
+            "compiledSqlPresent": bool(trace.compiled_sql),
+            "databaseResultKeys": sorted(trace.db_result.keys()),
+        },
+        "metrics": {
+            "latencyMs": trace.latency_ms,
+            "cost": trace.cost,
+        },
+    }
 
 
 def render_inspect_jsonl(traces: list[Trace]) -> str:

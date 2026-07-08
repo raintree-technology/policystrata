@@ -1,10 +1,20 @@
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { analyzePolicyStrataSql, createPolicyStrataRecorder } from "../src/node.js";
+import {
+  POLICYSTRATA_NODE_SDK_VERSION,
+  analyzePolicyStrataSql,
+  createPolicyStrataRecorder,
+} from "../src/node.js";
+
+const TEST_DIR = dirname(fileURLToPath(import.meta.url));
+const PACKAGE_JSON = JSON.parse(
+  readFileSync(join(TEST_DIR, "..", "..", "package.json"), "utf8"),
+) as { version: string };
 
 function tempTracePath(): { dir: string; path: string } {
   const dir = mkdtempSync(join(tmpdir(), "policystrata-node-"));
@@ -66,6 +76,7 @@ test("wrapTool emits a redacted PolicyStrata-compatible SQL trace", async () => 
   assert.equal(records.length, 1);
   const record = records[0];
   assert.equal(record.record_type, "sql_trace");
+  assert.equal(record.node_sdk_version, PACKAGE_JSON.version);
   assert.equal(record.service, "demo-data-agent");
   assert.equal(record.principal, "household_admin");
   assert.equal(record.session_id, "chat-run-1");
@@ -91,6 +102,10 @@ test("wrapTool emits a redacted PolicyStrata-compatible SQL trace", async () => 
   assert.equal(record.tenant_ids, undefined);
 
   rmSync(dir, { recursive: true, force: true });
+});
+
+test("Node SDK version constant matches package metadata", () => {
+  assert.equal(POLICYSTRATA_NODE_SDK_VERSION, PACKAGE_JSON.version);
 });
 
 test("recordSession drops prompt text by default", () => {

@@ -38,6 +38,8 @@ Commercial work should focus on the parts that become expensive in real organiza
 - Private CI integration.
 - Self-hosted runners for private schemas, policies, and sample data.
 - Enterprise connectors for warehouses, semantic layers, BI tools, and governance systems.
+- Cloud-specific private networking, customer VPC peering, enterprise IdP provisioning, and
+  Clearance integrations.
 - Dashboards, history, triage, and audit exports.
 - Managed regression campaigns for policy, schema, and semantic-model changes.
 - Custom adapters.
@@ -54,7 +56,8 @@ Initial sequence:
    `policystrata scan`.
 3. Run design-partner pilots against real governed data-agent stacks.
 4. Package a self-hosted enterprise edition with runners, connectors, dashboards, and audit exports.
-5. Add a hosted control plane only for metadata and collaboration state when customers accept it.
+5. Add Clearance by PolicyStrata only for metadata, review workflow, and collaboration state when
+   customers accept it.
 
 A hosted-only SaaS should not be the first product shape. The inputs are sensitive: schemas,
 policies, tenant models, warehouse access patterns, traces, and sometimes representative rows.

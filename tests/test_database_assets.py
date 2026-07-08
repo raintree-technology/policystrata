@@ -1,5 +1,19 @@
 from pathlib import Path
 
+import tomllib
+
+
+def test_python_package_data_includes_domain_and_scanner_assets() -> None:
+    pyproject = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
+    package_data = pyproject["tool"]["setuptools"]["package-data"]["policystrata"]
+
+    assert "domains/*/*.yaml" in package_data
+    assert "domains/*/*.sql" in package_data
+    assert "domains/*/tasks/*.yaml" in package_data
+    assert "scanner_examples/*/*.jsonl" in package_data
+    assert "scanner_examples/*/*.yaml" in package_data
+    assert "scanner_examples/*/*.yml" in package_data
+
 
 def test_postgres_assets_define_rls_policies() -> None:
     root = Path("src/policystrata/domains/support_saas")

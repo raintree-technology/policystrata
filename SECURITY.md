@@ -22,3 +22,16 @@ Security-relevant issues include:
 
 Detection gaps against unknown production incidents are methodology limitations, not security
 vulnerabilities in the artifact.
+
+## Repository Guards
+
+The test suite includes deterministic high-confidence secret-pattern scanning over repository text
+files and fixture checks that require fixture email addresses to use reserved `.example` domains.
+Run them with:
+
+```bash
+uv run pytest tests/test_security_posture.py
+```
+
+This guard is intentionally conservative and should be kept alongside GitHub dependency review,
+CodeQL, and Socket alerts.

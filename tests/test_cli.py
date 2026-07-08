@@ -1,6 +1,7 @@
 import json
 import re
 from pathlib import Path
+from xml.etree import ElementTree
 
 import pytest
 
@@ -128,6 +129,66 @@ def test_cli_runtime_evaluate_writes_decision_batch(tmp_path, capsys) -> None:
     assert result["ok"] is False
     assert result["decisions"][0]["action"] == "deny"
     assert result["events"][0]["decision"]["control"]["id"] == "auth_context_required"
+
+
+def test_cli_runtime_evaluate_writes_runtime_events_artifact_for_directory_out(tmp_path, capsys) -> None:
+    manifest_path = tmp_path / "runtime-manifest.json"
+    event_path = tmp_path / "runtime-event.json"
+    out_dir = tmp_path / "runtime-out"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "schemaVersion": "policystrata.runtime_manifest.v1",
+                "version": "runtime.cli.test",
+                "defaultDecision": "deny",
+                "resources": [
+                    {
+                        "name": "support_tickets",
+                        "actions": [{"name": "read", "allowedRoles": ["support_manager"]}],
+                    }
+                ],
+                "controls": {"sql": {"tenantColumn": "tenant_id"}},
+            }
+        ),
+        encoding="utf-8",
+    )
+    event_path.write_text(
+        json.dumps(
+            {
+                "schemaVersion": "0.2.0",
+                "eventId": "evt_allowed",
+                "project": "support-bi",
+                "observedAt": "2026-07-06T15:58:52Z",
+                "agent": {"key": "support-bi-copilot"},
+                "layer": "sql",
+                "operation": "read",
+                "summary": "SQL read",
+                "actor": {"userId": "user_1", "tenantId": "tenant_a", "role": "support_manager"},
+                "resource": {"kind": "table", "name": "support_tickets"},
+                "payload": {"sql": "select * from support_tickets where tenant_id = 'tenant_a'"},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    assert (
+        main(
+            [
+                "runtime-evaluate",
+                "--manifest",
+                str(manifest_path),
+                "--event",
+                str(event_path),
+                "--out",
+                str(out_dir),
+            ]
+        )
+        == 0
+    )
+
+    artifact_path = out_dir / "runtime-events.json"
+    assert json.loads(capsys.readouterr().out) == {"out": str(artifact_path)}
+    assert json.loads(artifact_path.read_text(encoding="utf-8"))["events"][0]["eventId"] == "evt_allowed"
 
 
 def test_cli_runtime_evaluate_asserts_expected_decisions(tmp_path, capsys) -> None:
@@ -275,10 +336,39 @@ def test_docs_github_action_examples_use_current_release_tag() -> None:
     assert set(action_refs) == {f"raintree-technology/policystrata@v{__version__}"}
 
 
+def test_cli_scan_writes_junit_output(tmp_path, capsys) -> None:
+    out_dir = tmp_path / "scan"
+    junit_path = tmp_path / "reports" / "policystrata.xml"
+
+    assert (
+        main(
+            [
+                "scan",
+                "--config",
+                "examples/postgres_dbt/policystrata.yaml",
+                "--out",
+                str(out_dir),
+                "--junit",
+                str(junit_path),
+            ]
+        )
+        == 1
+    )
+    capsys.readouterr()
+
+    root = ElementTree.fromstring(junit_path.read_text(encoding="utf-8"))
+    assert root.tag == "testsuite"
+    assert root.attrib["name"] == "policystrata"
+    assert int(root.attrib["tests"]) > 0
+    assert int(root.attrib["failures"]) > 0
+    assert root.findall(".//failure")
+
+
 def test_cli_export_adapters(tmp_path, capsys) -> None:
     out_dir = tmp_path / "run"
     inspect_path = tmp_path / "exports" / "inspect.jsonl"
     benchflow_path = tmp_path / "exports" / "benchflow.json"
+    policystrata_path = tmp_path / "exports" / "policystrata.json"
 
     assert main(["run", "--domain", "support_saas", "--suite", "seeded", "--out", str(out_dir)]) == 0
     capsys.readouterr()
@@ -297,6 +387,27 @@ def test_cli_export_adapters(tmp_path, capsys) -> None:
     assert benchflow["version"] == "policystrata.benchflow.adapter.v1"
     assert benchflow["environment"]["requires_llm_api_key"] is False
     assert len(benchflow["tasks"]) == 50
+
+    assert (
+        main(["export", str(out_dir), "--format", "policystrata-json", "--out", str(policystrata_path)])
+        == 0
+    )
+    policystrata_output = json.loads(capsys.readouterr().out)
+    assert policystrata_output["records"] == 50
+    policystrata = json.loads(policystrata_path.read_text(encoding="utf-8"))
+    assert policystrata["version"] == "policystrata.evidence_export.v1"
+    assert policystrata["metadata"]["requires_llm_api_key"] is False
+    assert policystrata["metadata"]["authorization_boundary"] is False
+    assert policystrata["metadata"]["run"]["domain"] == "support_saas"
+    assert policystrata["summary"]["total"] == 50
+    assert len(policystrata["traces"]) == 50
+    first_trace = policystrata["traces"][0]
+    assert set(first_trace) >= {"id", "semanticIr", "expected", "observed", "artifacts"}
+    assert "request" not in first_trace
+    assert "compiledSql" not in first_trace
+    assert "dbResult" not in first_trace
+    assert first_trace["artifacts"]["compiledSqlPresent"] is True
+    assert first_trace["artifacts"]["databaseResultKeys"]
 
 
 def test_cli_rejects_negative_generated_count(tmp_path) -> None:
