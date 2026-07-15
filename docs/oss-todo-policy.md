@@ -6,7 +6,7 @@ artifact, and documentation work.
 
 Hosted Clearance by PolicyStrata product work belongs in the private
 `raintree-technology/agent-assurance` repository, deployed at
-`https://policystrata.com`.
+[policystrata.com](https://policystrata.com).
 
 When an item is app-only, record the boundary in the OSS checklist instead of implementing hosted
 auth, UI, billing, or operations in this repository. Only bring app work back into OSS when it is a
