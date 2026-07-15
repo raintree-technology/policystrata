@@ -4,7 +4,7 @@ PolicyStrata is the open-source package and local evidence/runtime engine.
 Clearance / agent-assurance is the hosted app on policystrata.com.
 
 Root-level TODO stays here for OSS package work. See `docs/oss-todo-policy.md`.
-Hosted app work belongs in `/Users/mb1/Code/raintree/apps/agent-assurance/todo.txt`.
+Hosted app work belongs in the private `raintree-technology/agent-assurance` repository.
 Stable OSS contract issue/milestone labels are in `docs/contract-milestones.md`.
 
 Use the split like Pydantic and Logfire:
