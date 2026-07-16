@@ -1,5 +1,8 @@
 name: Publish
 
+env:
+  MISE_LOCKED: "1"
+
 on:
   workflow_dispatch:
     inputs:
@@ -33,6 +36,7 @@ jobs:
   build-python:
     name: Build Python distribution
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
 
     steps:
       - name: Check out repository
@@ -110,6 +114,7 @@ jobs:
   build-node:
     name: Build Node distribution
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
 
     steps:
       - name: Check out repository
@@ -151,6 +156,7 @@ jobs:
   build-gateway:
     name: Build Gateway distribution
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
 
     steps:
       - name: Check out repository
@@ -194,6 +200,7 @@ jobs:
     needs: build-python
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_pypi }}
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     environment:
       name: pypi
       url: https://pypi.org/p/policystrata
@@ -249,6 +256,7 @@ jobs:
     needs: build-node
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_npm }}
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     environment:
       name: npm
       url: https://www.npmjs.com/package/policystrata
@@ -301,6 +309,7 @@ jobs:
     needs: build-gateway
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_gateway_npm }}
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     environment:
       name: npm
       url: https://www.npmjs.com/package/@policystrata/agent-trust-gateway
