@@ -6,6 +6,7 @@ import hashlib
 import json
 import shutil
 import stat
+import subprocess
 import tempfile
 import zipfile
 from collections.abc import Callable
@@ -19,6 +20,8 @@ FORBIDDEN_STRINGS = (
     "Zachary",
     "raintree",
     "BetterOff",
+    "betteroff",
+    "betteroff-ask-ai",
     "/Users/mb1",
     " mb1",
     "mb1/",
@@ -39,6 +42,19 @@ TREE_EXCLUDES = {
     "runs",
     "scan-out",
 }
+SECRET_FILE_NAMES = {
+    ".env",
+    ".env.local",
+    ".npmrc",
+    ".pypirc",
+    ".netrc",
+    "id_ed25519",
+    "id_rsa",
+}
+SECRET_FILE_SUFFIXES = {".key", ".pem", ".p12", ".pfx"}
+MANIFEST_NAME = "artifact-manifest.json"
+SELF_REFERENTIAL_SHA256 = "self-referential"
+TRACKED_FILES: set[str] | None = None
 DOC_ALLOWLIST = {
     "benchmark-reference.md",
     "evidence.md",
@@ -328,6 +344,9 @@ def copy_docs(dest: Path) -> None:
 
 def copy_file(src: str | Path, dest: Path) -> None:
     source = ROOT / src if isinstance(src, str) else src
+    reject_symlink(source)
+    if is_secret_filename(source):
+        raise ValueError(f"refusing to copy secret-like file into anonymous artifact: {display_path(source)}")
     dest.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(source, dest)
 
@@ -337,6 +356,9 @@ def copy_tree(src: Path, dest: Path, skip: Callable[[Path], bool] | None = None)
         rel = path.relative_to(src)
         if should_skip(path, rel) or (skip is not None and skip(path)):
             continue
+        reject_symlink(path)
+        if path.is_file() and not is_tracked_source_file(path):
+            continue
         target = dest / rel
         if path.is_dir():
             target.mkdir(parents=True, exist_ok=True)
@@ -345,18 +367,61 @@ def copy_tree(src: Path, dest: Path, skip: Callable[[Path], bool] | None = None)
             shutil.copy2(path, target)
 
 
+def reject_symlink(path: Path) -> None:
+    if path.is_symlink():
+        raise ValueError(f"refusing to copy symlink into anonymous artifact: {display_path(path)}")
+
+
+def display_path(path: Path) -> str:
+    try:
+        return path.relative_to(ROOT).as_posix()
+    except ValueError:
+        return str(path)
+
+
 def should_skip(path: Path, rel: Path) -> bool:
     parts = set(rel.parts)
     if parts & TREE_EXCLUDES:
+        return True
+    if is_secret_filename(path):
         return True
     if path.name.endswith(".egg-info"):
         return True
     return bool(path.name.endswith((".pyc", ".pyo")))
 
 
+def is_secret_filename(path: Path) -> bool:
+    name = path.name.lower()
+    return name in SECRET_FILE_NAMES or path.suffix.lower() in SECRET_FILE_SUFFIXES
+
+
+def is_tracked_source_file(path: Path) -> bool:
+    try:
+        rel = path.relative_to(ROOT).as_posix()
+    except ValueError:
+        return True
+    return rel in tracked_files()
+
+
+def tracked_files() -> set[str]:
+    global TRACKED_FILES
+    if TRACKED_FILES is None:
+        result = subprocess.run(
+            ["git", "ls-files", "-z"],
+            cwd=ROOT,
+            check=True,
+            capture_output=True,
+        )
+        TRACKED_FILES = {item for item in result.stdout.decode("utf-8").split("\0") if item}
+    return TRACKED_FILES
+
+
 def write_manifest(stage: Path) -> list[dict[str, object]]:
-    entries = []
+    manifest_path = stage / MANIFEST_NAME
+    entries: list[dict[str, object]] = []
     for path in sorted(item for item in stage.rglob("*") if item.is_file()):
+        if path == manifest_path:
+            continue
         rel = path.relative_to(stage).as_posix()
         entries.append(
             {
@@ -365,15 +430,25 @@ def write_manifest(stage: Path) -> list[dict[str, object]]:
                 "sha256": sha256_file(path),
             }
         )
-    manifest_path = stage / "artifact-manifest.json"
-    write_text(manifest_path, json.dumps(entries, indent=2, sort_keys=True) + "\n")
-    return entries + [
-        {
-            "path": "artifact-manifest.json",
-            "bytes": manifest_path.stat().st_size,
-            "sha256": sha256_file(manifest_path),
-        }
-    ]
+    self_entry: dict[str, object] = {
+        "path": MANIFEST_NAME,
+        "bytes": 0,
+        "sha256": SELF_REFERENTIAL_SHA256,
+        "sha256_scope": (
+            "The manifest lists itself so file counts are complete. Its own sha256 is "
+            "self-referential and must be verified from the build command's zip digest."
+        ),
+    }
+    manifest = [*entries, self_entry]
+    rendered = ""
+    while True:
+        rendered = json.dumps(manifest, indent=2, sort_keys=True) + "\n"
+        byte_count = len(rendered.encode("utf-8"))
+        if self_entry["bytes"] == byte_count:
+            break
+        self_entry["bytes"] = byte_count
+    write_text(manifest_path, rendered)
+    return manifest
 
 
 def find_forbidden_strings(stage: Path) -> list[tuple[str, str]]:
@@ -385,8 +460,9 @@ def find_forbidden_strings(stage: Path) -> list[tuple[str, str]]:
             text = path.read_text(encoding="utf-8")
         except UnicodeDecodeError:
             continue
+        folded_text = text.casefold()
         for term in FORBIDDEN_STRINGS:
-            if term in text:
+            if term.casefold() in folded_text:
                 leaks.append((path.relative_to(stage).as_posix(), term))
     return leaks
 
