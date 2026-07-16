@@ -1,16 +1,10 @@
 name: CI
 
+env:
+  MISE_LOCKED: "1"
+
 on:
-  push:
-    branches: [main]
-  pull_request:
   workflow_dispatch:
-    inputs:
-      run_postgres:
-        description: "Run Dockerized PostgreSQL integration tests"
-        required: false
-        default: false
-        type: boolean
 
 permissions:
   contents: read
@@ -23,6 +17,7 @@ jobs:
   quality:
     name: Python ${{ matrix.python-version }}
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -63,6 +58,7 @@ jobs:
   postgres-integration:
     name: PostgreSQL integration
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_postgres }}
 
     services:
@@ -116,6 +112,7 @@ jobs:
   github-action:
     name: GitHub Action smoke test
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
 
     steps:
       - name: Check out repository
@@ -132,6 +129,7 @@ jobs:
   node-sdk:
     name: Node packages
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
 
     steps:
       - name: Check out repository
