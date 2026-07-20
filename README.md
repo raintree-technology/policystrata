@@ -52,7 +52,7 @@ scaffolding, exit codes, artifact refs, and metadata-boundary checks.
 SHA256:
 
 ```text
-9a4da81d78c37fd81e9ab6b36f094756e61e6b88cfcd74dcab51cfdd8e5bbcd9  PolicyStrata.pdf
+9f02c08fba2c29fc0d864bb9722ade2c8510854966e4f5bf0b00401289d961b5  PolicyStrata.pdf
 961778c1e8affc04f76e27ce7958572d904e69d7701494e0047e4f7bffbc466d  policystrata-submission-kit-2026-06-26.zip
 ```
 
