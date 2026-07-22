@@ -21,7 +21,7 @@ from policystrata.database import (
     PostgresAdapter,
     assert_read_only_sql,
 )
-from policystrata.domain import load_policy, load_surface_config, load_yaml_mapping
+from policystrata.domain import BUILTIN_DOMAINS, load_policy, load_surface_config, load_yaml_mapping
 from policystrata.evidence import markdown_table
 from policystrata.integrations.dbt_semantic import inspect_dbt_semantic_model
 from policystrata.models import Decision, Policy, SemanticQuery, SurfaceName, WitnessClass
@@ -1083,7 +1083,12 @@ def sql_preserves_tenant_scope(config: ScanConfig, policy: Policy, trace: Import
             tenant_predicate_matches_sql(predicate, trace.sql, tenant_ids, allow_placeholder_binding)
             for predicate in config.tenancy.canonical_predicates
         )
-    columns = tenant_columns_for_scope_check(config)
+    columns = tenant_columns_for_scope_check(config, trace)
+    if not columns:
+        # No tenancy basis is configured for this (custom) domain, so the
+        # tenant-scope check is not applicable and must not be reported as a
+        # violation. Built-in domains keep their canonical column below.
+        return True
     return sql_mentions_any_tenant_column(trace.sql, columns) and sql_has_tenant_binding(
         trace.sql,
         tenant_ids,
@@ -1101,7 +1106,7 @@ def tenant_scope_reason(config: ScanConfig, policy: Policy, trace: ImportedTrace
             "expected SQL to include one configured tenancy predicate "
             f"({predicates}) scoped to one of {expected_tenants}"
         )
-    columns = ", ".join(tenant_columns_for_scope_check(config))
+    columns = ", ".join(tenant_columns_for_scope_check(config, trace))
     return (
         f"expected SQL to include one configured tenant column ({columns}) "
         f"scoped to one of {expected_tenants}"
@@ -1154,19 +1159,67 @@ def usable_tenant_ids(tenant_ids: Sequence[str]) -> list[str]:
     ]
 
 
-def tenant_columns_for_scope_check(config: ScanConfig) -> list[str]:
+def builtin_domain_tenant_column(config: ScanConfig) -> str | None:
+    """The canonical tenant column for a built-in domain, or None for a custom one.
+
+    A scan against a custom domain (one loaded from ``domain_path``) has no
+    business inheriting a built-in domain's hardcoded tenant column, so this
+    returns None and callers must rely on explicit tenancy config instead.
+    """
+    if config.domain_path is not None:
+        return None
+    if config.domain not in BUILTIN_DOMAINS:
+        return None
+    return tenant_column(config.domain)
+
+
+def tenant_columns_for_scope_check(
+    config: ScanConfig,
+    trace: ImportedTrace | None = None,
+) -> list[str]:
+    if trace is not None and config.tenancy.table_tenant_columns:
+        table = primary_table_from_sql(trace.sql)
+        if table is not None:
+            per_table = config.tenancy.table_tenant_columns.get(table)
+            if per_table:
+                return list(per_table)
     if config.tenancy.tenant_columns:
         return list(config.tenancy.tenant_columns)
-    return [tenant_column(config.domain)]
+    builtin = builtin_domain_tenant_column(config)
+    return [builtin] if builtin is not None else []
 
 
 def tenant_columns_for_mutation(config: ScanConfig) -> list[str]:
     columns = list(config.tenancy.tenant_columns)
     for predicate in config.tenancy.canonical_predicates:
         columns.extend(tenant_columns_from_predicate(predicate))
+    for per_table in config.tenancy.table_tenant_columns.values():
+        columns.extend(per_table)
     if not columns:
-        columns = [tenant_column(config.domain)]
+        builtin = builtin_domain_tenant_column(config)
+        columns = [builtin] if builtin is not None else []
     return list(dict.fromkeys(columns))
+
+
+def primary_table_from_sql(sql: str) -> str | None:
+    """Extract the primary table a statement reads from or writes to.
+
+    Handles the leading ``from``/``update``/``into`` clause (``delete from`` and
+    ``insert into`` are covered by ``from``/``into``). Used only to resolve
+    per-table tenant columns; returns None when no table is found (the caller
+    then falls back to the global tenant columns). Operates on the raw SQL, not
+    the whitespace-stripped normalized form.
+    """
+    match = re.search(
+        r"\b(?:from|update|into)\s+([A-Za-z_][A-Za-z0-9_.]*)",
+        sql,
+        flags=re.IGNORECASE,
+    )
+    if match is None:
+        return None
+    table = match.group(1)
+    # Strip a schema/database qualifier: "public.accounts" -> "accounts".
+    return table.split(".")[-1].lower()
 
 
 def tenant_columns_from_predicate(predicate: str) -> list[str]:
