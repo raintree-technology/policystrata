@@ -1,0 +1,12 @@
+version: 1
+domain: support_saas
+database:
+  state_assertions:
+    - id: no_cross_tenant_rows
+      sql: select tenant_id, value from tenant_scope_report
+      forbidden_values:
+        tenant_id: [beta]
+fuzz:
+  enabled: false
+gate:
+  fail_on_high_confidence: true

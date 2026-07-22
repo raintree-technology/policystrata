@@ -1,0 +1,1 @@
+{"id":"write_sql_smuggle","principal":"acme_analyst","tenant_ids":["acme"],"source":"tcb_fixture","sql":"select accounts.tenant_id from accounts where accounts.tenant_id in ('acme') limit 100; drop table accounts"}
