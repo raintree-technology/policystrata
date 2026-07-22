@@ -79,6 +79,11 @@ class FileInputConfig(InputModel):
 class TenancyScanConfig(InputModel):
     canonical_predicates: list[str] = Field(default_factory=list)
     tenant_columns: list[str] = Field(default_factory=list)
+    # Per-table tenant columns for schemas that scope different tables by
+    # different columns (e.g. team_id on most tables, user_id on a few). Keys are
+    # table names; a trace whose primary table matches uses these columns instead
+    # of the global tenant_columns.
+    table_tenant_columns: dict[str, list[str]] = Field(default_factory=dict)
 
 
 class RlsCheckConfig(InputModel):
