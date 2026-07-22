@@ -2,6 +2,34 @@
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-07-21
+
+Responds to the external review of the artifact. PyPI package only; the npm
+runtime and gateway packages are unchanged this cycle.
+
+- Lead the README and evidence snapshot with the defense-in-depth gap (a layered
+  conventional stack misses 159/1720 that responsibility contracts localize);
+  frame 1720/1720 as a construction-consistency check.
+- Run CI on push and pull requests (was `workflow_dispatch` only); score the
+  PostgreSQL integration job by default and add a ClickHouse integration job.
+- Fix the scanner's custom-domain tenant-column fallback: a `domain_path` domain
+  with no tenancy config no longer inherits the built-in `accounts.tenant_id`
+  column and is no longer flagged as tenant-scope-missing. Add per-table
+  `table_tenant_columns` config.
+- Add a real ClickHouse row-policy adapter (`database_clickhouse.py`), DDL
+  fixture, env-gated integration tests, and evidence script.
+- Add counterfactual-repair attribution validation, higher-order compound
+  mutants, witness-minimization metrics, a soundness invariant with per-class
+  completeness, scalability curves with a covering-array generator, difficulty
+  tiers, and adversarial clean controls at scale.
+- Add deployable comparator baselines (`conventional_test_suite`,
+  `property_differential`) and a baseline false-positive evaluator.
+- Add a reconstructed real-fault suite (19 cited public faults), a spec-blind
+  mutant suite, brownfield scan configs for four open-source stacks, adapter
+  trusted-computing-base mutation testing, a build-only LLM reachability harness,
+  and a self-contained write-action fault model.
+- New CLI subcommands: `compound`, `counterfactual`, `minimization-report`.
+
 ## [1.0.5] - 2026-07-08
 
 - Add generic `policystrata-json` evidence export, runtime event builder helpers for common Node
