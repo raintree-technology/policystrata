@@ -1,0 +1,1455 @@
+version: brownfield-metricflow-v1
+principals:
+  metricflow_query_service:
+    id: metricflow_query_service
+    role: compiler_output
+    tenant_ids:
+    - mf_default_tenant
+roles:
+  compiler_output:
+    allowed_metrics:
+    - account_balance
+    - active_listings
+    - approximate_continuous_booking_value_p99
+    - approximate_discrete_booking_value_p99
+    - archived_users_join_to_time_spine
+    - average_booking_value
+    - average_instant_booking_value
+    - bookers
+    - booking_fees
+    - booking_fees_last_week_per_booker_this_week
+    - booking_fees_per_booker
+    - booking_fees_since_start_of_month
+    - booking_payments
+    - booking_value
+    - booking_value_for_non_null_listing_id
+    - booking_value_p99
+    - booking_value_per_view
+    - booking_value_sub_instant
+    - booking_value_sub_instant_add_10
+    - bookings
+    - bookings_1_month_ago
+    - bookings_1_year_ago
+    - bookings_5_day_lag
+    - bookings_alien_day_over_alien_day
+    - bookings_all_time
+    - bookings_all_time_at_start_of_month
+    - bookings_all_time_at_start_of_year
+    - bookings_at_start_of_month
+    - bookings_fill_nulls_with_0
+    - bookings_fill_nulls_with_0_without_time_spine
+    - bookings_growth_2_weeks
+    - bookings_growth_2_weeks_fill_nulls_with_0
+    - bookings_growth_2_weeks_fill_nulls_with_0_for_non_offset
+    - bookings_growth_since_start_of_month
+    - bookings_join_to_time_spine
+    - bookings_join_to_time_spine_with_tiered_filters
+    - bookings_mom
+    - bookings_month_start_compared_to_1_month_prior
+    - bookings_offset_alien_day
+    - bookings_offset_once
+    - bookings_offset_one_alien_day
+    - bookings_offset_twice
+    - bookings_per_booker
+    - bookings_per_dollar
+    - bookings_per_listing
+    - bookings_per_lux_listing_derived
+    - bookings_per_view
+    - bookings_since_start_of_month
+    - bookings_since_start_of_year
+    - bookings_yoy
+    - current_account_balance_by_user
+    - derived_bookings_0
+    - derived_bookings_1
+    - derived_shared_alias_1a
+    - derived_shared_alias_1b
+    - derived_shared_alias_2
+    - discrete_booking_value_p99
+    - double_counted_delayed_bookings
+    - every_2_days_bookers_2_days_ago
+    - every_two_days_bookers
+    - every_two_days_bookers_fill_nulls_with_0
+    - identity_verifications
+    - instant_booking_fraction_of_max_value
+    - instant_booking_value
+    - instant_booking_value_ratio
+    - instant_bookings
+    - instant_bookings_with_measure_filter
+    - instant_lux_booking_value_rate
+    - instant_plus_non_referred_bookings_pct
+    - largest_listing
+    - listings
+    - lux_booking_fraction_of_max_value
+    - lux_booking_value_rate_expr
+    - lux_listings
+    - max_booking_value
+    - median_booking_value
+    - min_booking_value
+    - nested_fill_nulls_without_time_spine
+    - non_referred_bookings_pct
+    - popular_listing_bookings_per_booker
+    - referred_bookings
+    - regional_starting_balance_ratios
+    - revenue
+    - revenue_all_time
+    - revenue_mtd
+    - simple_subdaily_metric_default_day
+    - simple_subdaily_metric_default_hour
+    - smallest_listing
+    - subdaily_cumulative_grain_to_date_metric
+    - subdaily_cumulative_window_metric
+    - subdaily_join_to_time_spine_metric
+    - subdaily_offset_grain_to_date_metric
+    - subdaily_offset_window_metric
+    - test_simple_derived_metric
+    - total_account_balance_first_day
+    - trailing_2_months_revenue
+    - trailing_2_months_revenue_sub_10
+    - trailing_2_months_revenue_with_filter
+    - trailing_7_days_bookings
+    - trailing_7_days_bookings_offset_1_week
+    - twice_bookings_fill_nulls_with_0_without_time_spine
+    - views
+    - views_times_booking_value
+    - visit_buy_conversion_rate
+    - visit_buy_conversion_rate_7days
+    - visit_buy_conversion_rate_7days_fill_nulls_with_0
+    - visit_buy_conversion_rate_by_session
+    - visit_buy_conversion_rate_with_filter
+    - visit_buy_conversion_rate_with_monthly_conversion
+    - visit_buy_conversions
+    allowed_dimensions:
+    - account_type
+    - archived_at
+    - bio_added_ts
+    - booking__is_instant
+    - capacity_latest
+    - company_name
+    - country_latest
+    - created_at
+    - ds
+    - ds_latest
+    - ds_month
+    - ds_partitioned
+    - guest
+    - home_state
+    - home_state_latest
+    - host
+    - is_instant
+    - is_lux_latest
+    - last_login_ts
+    - last_profile_edit_ts
+    - listing
+    - listing__country_latest
+    - listing__is_lux_latest
+    - listing__lux_listing
+    - metric_time
+    - paid_at
+    - referrer_id
+    - user
+    - user__company_name
+    - user__home_state
+    - user__home_state_latest
+    - verification__ds
+    - verification__ds_partitioned
+    - verification__verification_type
+    - verification_type
+    allowed_time_ranges:
+    - all_time
+    max_rows: 100000
+    max_cost: 100000
+    aggregate_only: false
+metrics:
+  subdaily_cumulative_window_metric:
+    expression: SUM(1)
+    table: archived_users
+    columns: []
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  subdaily_cumulative_grain_to_date_metric:
+    expression: SUM(1)
+    table: archived_users
+    columns: []
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  subdaily_offset_window_metric:
+    expression: sum(subdaily_offset_window_metric)
+    table: subdaily_offset_window_metric
+    columns:
+    - subdaily_offset_window_metric
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  subdaily_offset_grain_to_date_metric:
+    expression: sum(subdaily_offset_grain_to_date_metric)
+    table: subdaily_offset_grain_to_date_metric
+    columns:
+    - subdaily_offset_grain_to_date_metric
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  subdaily_join_to_time_spine_metric:
+    expression: SUM(1)
+    table: archived_users
+    columns: []
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  simple_subdaily_metric_default_day:
+    expression: SUM(1)
+    table: archived_users
+    columns: []
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  simple_subdaily_metric_default_hour:
+    expression: SUM(1)
+    table: archived_users
+    columns: []
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  archived_users_join_to_time_spine:
+    expression: SUM(1)
+    table: archived_users
+    columns: []
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  bookings:
+    expression: SUM(1)
+    table: bookings
+    columns: []
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  average_booking_value:
+    expression: average(booking_value)
+    table: average_booking_value
+    columns:
+    - booking_value
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  instant_bookings:
+    expression: SUM(CASE WHEN is_instant THEN 1 ELSE 0 END)
+    table: instant_bookings
+    columns:
+    - is_instant
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  booking_value:
+    expression: SELECT SUM(booking_value)
+    table: booking_value
+    columns:
+    - booking_value
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  max_booking_value:
+    expression: max(booking_value)
+    table: max_booking_value
+    columns:
+    - booking_value
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  min_booking_value:
+    expression: min(booking_value)
+    table: min_booking_value
+    columns:
+    - booking_value
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  instant_booking_value:
+    expression: SUM(booking_value)
+    table: booking_value
+    columns:
+    - booking_value
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  average_instant_booking_value:
+    expression: average(booking_value)
+    table: average_booking_value
+    columns:
+    - booking_value
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  booking_value_for_non_null_listing_id:
+    expression: SUM(booking_value)
+    table: booking_value
+    columns:
+    - booking_value
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  bookers:
+    expression: COUNT(DISTINCT guest_id)
+    table: bookers
+    columns:
+    - guest_id
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  booking_payments:
+    expression: SUM(booking_value)
+    table: booking_payments
+    columns:
+    - booking_value
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  views:
+    expression: SUM(1)
+    table: views
+    columns: []
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  listings:
+    expression: SUM(1)
+    table: listings
+    columns: []
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  lux_listings:
+    expression: SUM(1)
+    table: listings
+    columns: []
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  smallest_listing:
+    expression: MIN(capacity)
+    table: smallest_listing
+    columns:
+    - capacity
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  largest_listing:
+    expression: max(capacity)
+    table: largest_listing
+    columns:
+    - capacity
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  identity_verifications:
+    expression: SUM(1)
+    table: identity_verifications
+    columns: []
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  revenue:
+    expression: sum(revenue)
+    table: txn_revenue
+    columns:
+    - revenue
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  trailing_2_months_revenue:
+    expression: sum(revenue)
+    table: txn_revenue
+    columns:
+    - revenue
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  revenue_all_time:
+    expression: SUM(revenue)
+    table: txn_revenue
+    columns:
+    - revenue
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  every_two_days_bookers:
+    expression: count_distinct(guest_id)
+    table: bookers
+    columns:
+    - guest_id
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  revenue_mtd:
+    expression: sum(revenue)
+    table: txn_revenue
+    columns:
+    - revenue
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  booking_fees:
+    expression: SUM(booking_value) * 0.05
+    table: booking_fees
+    columns:
+    - booking_fees
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  booking_fees_per_booker:
+    expression: SUM(booking_value) * 0.05 / COUNT(DISTINCT guest_id)
+    table: booking_fees_per_booker
+    columns:
+    - booking_fees_per_booker
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  booking_fees_last_week_per_booker_this_week:
+    expression: sum(booking_fees_last_week_per_booker_this_week)
+    table: booking_fees_last_week_per_booker_this_week
+    columns:
+    - booking_fees_last_week_per_booker_this_week
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  views_times_booking_value:
+    expression: booking_value * views
+    table: views_times_booking_value
+    columns:
+    - views_times_booking_value
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  bookings_per_booker:
+    expression: sum(bookings_per_booker)
+    table: bookings_per_booker
+    columns:
+    - bookings_per_booker
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  bookings_per_view:
+    expression: sum(bookings_per_view)
+    table: bookings_per_view
+    columns:
+    - bookings_per_view
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  bookings_per_listing:
+    expression: sum(bookings_per_listing)
+    table: bookings_per_listing
+    columns:
+    - bookings_per_listing
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  bookings_per_dollar:
+    expression: sum(bookings_per_dollar)
+    table: bookings_per_dollar
+    columns:
+    - bookings_per_dollar
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  account_balance:
+    expression: sum(account_balance)
+    table: account_balance
+    columns:
+    - account_balance
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  total_account_balance_first_day:
+    expression: sum(account_balance)
+    table: total_account_balance_first_day
+    columns:
+    - account_balance
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  current_account_balance_by_user:
+    expression: ', SUM(a.current_account_balance_by_user)'
+    table: current_account_balance_by_user
+    columns:
+    - account_balance
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  instant_booking_fraction_of_max_value:
+    expression: sum(instant_booking_fraction_of_max_value)
+    table: instant_booking_fraction_of_max_value
+    columns:
+    - instant_booking_fraction_of_max_value
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  lux_booking_fraction_of_max_value:
+    expression: sum(lux_booking_fraction_of_max_value)
+    table: lux_booking_fraction_of_max_value
+    columns:
+    - lux_booking_fraction_of_max_value
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  lux_booking_value_rate_expr:
+    expression: sum(lux_booking_value_rate_expr)
+    table: lux_booking_value_rate_expr
+    columns:
+    - lux_booking_value_rate_expr
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  instant_booking_value_ratio:
+    expression: sum(instant_booking_value_ratio)
+    table: instant_booking_value_ratio
+    columns:
+    - instant_booking_value_ratio
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  instant_lux_booking_value_rate:
+    expression: sum(instant_lux_booking_value_rate)
+    table: instant_lux_booking_value_rate
+    columns:
+    - instant_lux_booking_value_rate
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  regional_starting_balance_ratios:
+    expression: sum(regional_starting_balance_ratios)
+    table: regional_starting_balance_ratios
+    columns:
+    - regional_starting_balance_ratios
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  double_counted_delayed_bookings:
+    expression: SUM(1) * 2
+    table: double_counted_delayed_bookings
+    columns:
+    - double_counted_delayed_bookings
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  referred_bookings:
+    expression: SUM(CASE WHEN referrer_id IS NOT NULL THEN 1 ELSE 0 END)
+    table: referred_bookings
+    columns:
+    - referrer_id
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  non_referred_bookings_pct:
+    expression: (bookings - ref_bookings) * 1.0 / bookings
+    table: non_referred_bookings_pct
+    columns:
+    - non_referred_bookings_pct
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  booking_value_sub_instant:
+    expression: booking_value - instant_booking_value
+    table: booking_value_sub_instant
+    columns:
+    - booking_value_sub_instant
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  booking_value_sub_instant_add_10:
+    expression: c.booking_value_sub_instant + 10
+    table: booking_value_sub_instant_add_10
+    columns:
+    - booking_value_sub_instant_add_10
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  bookings_per_lux_listing_derived:
+    expression: sum(bookings_per_lux_listing_derived)
+    table: bookings_per_lux_listing_derived
+    columns:
+    - bookings_per_lux_listing_derived
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  instant_plus_non_referred_bookings_pct:
+    expression: (instant_bookings * 1.0 / bookings) + ((bookings - ref_bookings) *
+      1.0 / bookings)
+    table: instant_plus_non_referred_bookings_pct
+    columns:
+    - instant_plus_non_referred_bookings_pct
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  trailing_2_months_revenue_sub_10:
+    expression: sum(trailing_2_months_revenue_sub_10)
+    table: trailing_2_months_revenue_sub_10
+    columns:
+    - trailing_2_months_revenue_sub_10
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  booking_value_per_view:
+    expression: booking_value / NULLIF(views, 0)
+    table: booking_value_per_view
+    columns:
+    - booking_value_per_view
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  median_booking_value:
+    expression: median(booking_value)
+    table: median_booking_value
+    columns:
+    - booking_value
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  booking_value_p99:
+    expression: percentile(booking_value)
+    table: booking_value_p99
+    columns:
+    - booking_value
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  discrete_booking_value_p99:
+    expression: percentile(booking_value)
+    table: discrete_booking_value_p99
+    columns:
+    - booking_value
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  approximate_continuous_booking_value_p99:
+    expression: percentile(booking_value)
+    table: approximate_continuous_booking_value_p99
+    columns:
+    - booking_value
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  approximate_discrete_booking_value_p99:
+    expression: percentile(booking_value)
+    table: approximate_discrete_booking_value_p99
+    columns:
+    - booking_value
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  bookings_growth_2_weeks:
+    expression: sum(bookings_growth_2_weeks)
+    table: bookings_growth_2_weeks
+    columns:
+    - bookings_growth_2_weeks
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  bookings_all_time:
+    expression: sum(1)
+    table: bookings
+    columns: []
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  bookings_all_time_at_start_of_month:
+    expression: sum(bookings_all_time_at_start_of_month)
+    table: bookings_all_time_at_start_of_month
+    columns:
+    - bookings_all_time_at_start_of_month
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  bookings_all_time_at_start_of_year:
+    expression: sum(bookings_all_time_at_start_of_year)
+    table: bookings_all_time_at_start_of_year
+    columns:
+    - bookings_all_time_at_start_of_year
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  bookings_growth_since_start_of_month:
+    expression: sum(bookings_growth_since_start_of_month)
+    table: bookings_growth_since_start_of_month
+    columns:
+    - bookings_growth_since_start_of_month
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  bookings_since_start_of_month:
+    expression: sum(bookings_since_start_of_month)
+    table: bookings_since_start_of_month
+    columns:
+    - bookings_since_start_of_month
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  bookings_since_start_of_year:
+    expression: sum(bookings_since_start_of_year)
+    table: bookings_since_start_of_year
+    columns:
+    - bookings_since_start_of_year
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  bookings_month_start_compared_to_1_month_prior:
+    expression: sum(bookings_month_start_compared_to_1_month_prior)
+    table: bookings_month_start_compared_to_1_month_prior
+    columns:
+    - bookings_month_start_compared_to_1_month_prior
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  bookings_5_day_lag:
+    expression: sum(bookings_5_day_lag)
+    table: bookings_5_day_lag
+    columns:
+    - bookings_5_day_lag
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  every_2_days_bookers_2_days_ago:
+    expression: sum(every_2_days_bookers_2_days_ago)
+    table: every_2_days_bookers_2_days_ago
+    columns:
+    - every_2_days_bookers_2_days_ago
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  bookings_join_to_time_spine:
+    expression: sum(1)
+    table: bookings
+    columns: []
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  visit_buy_conversion_rate_7days:
+    expression: sum(visit_buy_conversion_rate_7days)
+    table: visit_buy_conversion_rate_7days
+    columns:
+    - visit_buy_conversion_rate_7days
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  visit_buy_conversion_rate:
+    expression: sum(visit_buy_conversion_rate)
+    table: visit_buy_conversion_rate
+    columns:
+    - visit_buy_conversion_rate
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  visit_buy_conversions:
+    expression: sum(visit_buy_conversions)
+    table: visit_buy_conversions
+    columns:
+    - visit_buy_conversions
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  visit_buy_conversion_rate_with_monthly_conversion:
+    expression: sum(visit_buy_conversion_rate_with_monthly_conversion)
+    table: visit_buy_conversion_rate_with_monthly_conversion
+    columns:
+    - visit_buy_conversion_rate_with_monthly_conversion
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  visit_buy_conversion_rate_by_session:
+    expression: sum(visit_buy_conversion_rate_by_session)
+    table: visit_buy_conversion_rate_by_session
+    columns:
+    - visit_buy_conversion_rate_by_session
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  bookings_fill_nulls_with_0_without_time_spine:
+    expression: sum(1)
+    table: bookings
+    columns: []
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  bookings_fill_nulls_with_0:
+    expression: ', COALESCE(SUM(1), 0)'
+    table: bookings
+    columns: []
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  instant_bookings_with_measure_filter:
+    expression: sum(1)
+    table: bookings
+    columns: []
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  bookings_join_to_time_spine_with_tiered_filters:
+    expression: sum(1)
+    table: bookings
+    columns: []
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  every_two_days_bookers_fill_nulls_with_0:
+    expression: count_distinct(guest_id)
+    table: bookers
+    columns:
+    - guest_id
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  bookings_growth_2_weeks_fill_nulls_with_0:
+    expression: sum(bookings_growth_2_weeks_fill_nulls_with_0)
+    table: bookings_growth_2_weeks_fill_nulls_with_0
+    columns:
+    - bookings_growth_2_weeks_fill_nulls_with_0
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  bookings_growth_2_weeks_fill_nulls_with_0_for_non_offset:
+    expression: sum(bookings_growth_2_weeks_fill_nulls_with_0_for_non_offset)
+    table: bookings_growth_2_weeks_fill_nulls_with_0_for_non_offset
+    columns:
+    - bookings_growth_2_weeks_fill_nulls_with_0_for_non_offset
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  bookings_offset_once:
+    expression: sum(bookings_offset_once)
+    table: bookings_offset_once
+    columns:
+    - bookings_offset_once
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  bookings_offset_twice:
+    expression: sum(bookings_offset_twice)
+    table: bookings_offset_twice
+    columns:
+    - bookings_offset_twice
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  bookings_offset_alien_day:
+    expression: sum(bookings_offset_alien_day)
+    table: bookings_offset_alien_day
+    columns:
+    - bookings_offset_alien_day
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  bookings_at_start_of_month:
+    expression: sum(bookings_at_start_of_month)
+    table: bookings_at_start_of_month
+    columns:
+    - bookings_at_start_of_month
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  booking_fees_since_start_of_month:
+    expression: sum(booking_fees_since_start_of_month)
+    table: booking_fees_since_start_of_month
+    columns:
+    - booking_fees_since_start_of_month
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  bookings_1_month_ago:
+    expression: sum(bookings_1_month_ago)
+    table: bookings_1_month_ago
+    columns:
+    - bookings_1_month_ago
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  bookings_mom:
+    expression: sum(bookings_mom)
+    table: bookings_mom
+    columns:
+    - bookings_mom
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  bookings_1_year_ago:
+    expression: sum(bookings_1_year_ago)
+    table: bookings_1_year_ago
+    columns:
+    - bookings_1_year_ago
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  bookings_yoy:
+    expression: sum(bookings_yoy)
+    table: bookings_yoy
+    columns:
+    - bookings_yoy
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  derived_bookings_0:
+    expression: sum(derived_bookings_0)
+    table: derived_bookings_0
+    columns:
+    - derived_bookings_0
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  derived_bookings_1:
+    expression: sum(derived_bookings_1)
+    table: derived_bookings_1
+    columns:
+    - derived_bookings_1
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  twice_bookings_fill_nulls_with_0_without_time_spine:
+    expression: sum(twice_bookings_fill_nulls_with_0_without_time_spine)
+    table: twice_bookings_fill_nulls_with_0_without_time_spine
+    columns:
+    - twice_bookings_fill_nulls_with_0_without_time_spine
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  nested_fill_nulls_without_time_spine:
+    expression: sum(nested_fill_nulls_without_time_spine)
+    table: nested_fill_nulls_without_time_spine
+    columns:
+    - nested_fill_nulls_without_time_spine
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  visit_buy_conversion_rate_7days_fill_nulls_with_0:
+    expression: sum(visit_buy_conversion_rate_7days_fill_nulls_with_0)
+    table: visit_buy_conversion_rate_7days_fill_nulls_with_0
+    columns:
+    - visit_buy_conversion_rate_7days_fill_nulls_with_0
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  active_listings:
+    expression: SUM(1)
+    table: listings
+    columns: []
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  popular_listing_bookings_per_booker:
+    expression: sum(popular_listing_bookings_per_booker)
+    table: popular_listing_bookings_per_booker
+    columns:
+    - popular_listing_bookings_per_booker
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  derived_shared_alias_1a:
+    expression: sum(derived_shared_alias_1a)
+    table: derived_shared_alias_1a
+    columns:
+    - derived_shared_alias_1a
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  derived_shared_alias_1b:
+    expression: sum(derived_shared_alias_1b)
+    table: derived_shared_alias_1b
+    columns:
+    - derived_shared_alias_1b
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  derived_shared_alias_2:
+    expression: sum(derived_shared_alias_2)
+    table: derived_shared_alias_2
+    columns:
+    - derived_shared_alias_2
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  bookings_offset_one_alien_day:
+    expression: sum(bookings_offset_one_alien_day)
+    table: bookings_offset_one_alien_day
+    columns:
+    - bookings_offset_one_alien_day
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  bookings_alien_day_over_alien_day:
+    expression: sum(bookings_alien_day_over_alien_day)
+    table: bookings_alien_day_over_alien_day
+    columns:
+    - bookings_alien_day_over_alien_day
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  trailing_7_days_bookings:
+    expression: sum(1)
+    table: bookings
+    columns: []
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  trailing_7_days_bookings_offset_1_week:
+    expression: sum(trailing_7_days_bookings_offset_1_week)
+    table: trailing_7_days_bookings_offset_1_week
+    columns:
+    - trailing_7_days_bookings_offset_1_week
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  test_simple_derived_metric:
+    expression: sum(test_simple_derived_metric)
+    table: test_simple_derived_metric
+    columns:
+    - test_simple_derived_metric
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  trailing_2_months_revenue_with_filter:
+    expression: sum(revenue)
+    table: txn_revenue
+    columns:
+    - revenue
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+  visit_buy_conversion_rate_with_filter:
+    expression: sum(visit_buy_conversion_rate_with_filter)
+    table: visit_buy_conversion_rate_with_filter
+    columns:
+    - visit_buy_conversion_rate_with_filter
+    allowed_roles:
+    - compiler_output
+    aliases: []
+    grain: row
+    cost: 10
+dimensions:
+  ds:
+    column: accounts_source.ds
+    allowed_roles:
+    - compiler_output
+    sensitive: false
+    cost: 1
+  ds_month:
+    column: accounts_source.ds_month
+    allowed_roles:
+    - compiler_output
+    sensitive: false
+    cost: 1
+  account_type:
+    column: accounts_source.account_type
+    allowed_roles:
+    - compiler_output
+    sensitive: false
+    cost: 1
+  is_instant:
+    column: bookings_source.is_instant
+    allowed_roles:
+    - compiler_output
+    sensitive: false
+    cost: 1
+  ds_partitioned:
+    column: bookings_source.ds_partitioned
+    allowed_roles:
+    - compiler_output
+    sensitive: false
+    cost: 1
+  paid_at:
+    column: bookings_source.paid_at
+    allowed_roles:
+    - compiler_output
+    sensitive: false
+    cost: 1
+  company_name:
+    column: companies.company_name
+    allowed_roles:
+    - compiler_output
+    sensitive: true
+    cost: 1
+  verification_type:
+    column: id_verifications.verification_type
+    allowed_roles:
+    - compiler_output
+    sensitive: false
+    cost: 1
+  created_at:
+    column: listings_latest.created_at
+    allowed_roles:
+    - compiler_output
+    sensitive: false
+    cost: 1
+  country_latest:
+    column: listings_latest.country_latest
+    allowed_roles:
+    - compiler_output
+    sensitive: false
+    cost: 1
+  is_lux_latest:
+    column: listings_latest.is_lux_latest
+    allowed_roles:
+    - compiler_output
+    sensitive: false
+    cost: 1
+  capacity_latest:
+    column: listings_latest.capacity_latest
+    allowed_roles:
+    - compiler_output
+    sensitive: false
+    cost: 1
+  home_state:
+    column: users_ds_source.home_state
+    allowed_roles:
+    - compiler_output
+    sensitive: false
+    cost: 1
+  last_profile_edit_ts:
+    column: users_ds_source.last_profile_edit_ts
+    allowed_roles:
+    - compiler_output
+    sensitive: false
+    cost: 1
+  bio_added_ts:
+    column: users_ds_source.bio_added_ts
+    allowed_roles:
+    - compiler_output
+    sensitive: false
+    cost: 1
+  last_login_ts:
+    column: users_ds_source.last_login_ts
+    allowed_roles:
+    - compiler_output
+    sensitive: false
+    cost: 1
+  archived_at:
+    column: users_ds_source.archived_at
+    allowed_roles:
+    - compiler_output
+    sensitive: false
+    cost: 1
+  ds_latest:
+    column: users_latest.ds_latest
+    allowed_roles:
+    - compiler_output
+    sensitive: false
+    cost: 1
+  home_state_latest:
+    column: users_latest.home_state_latest
+    allowed_roles:
+    - compiler_output
+    sensitive: false
+    cost: 1
+  referrer_id:
+    column: visits_source.referrer_id
+    allowed_roles:
+    - compiler_output
+    sensitive: false
+    cost: 1
+  booking__is_instant:
+    column: query_token.booking__is_instant
+    allowed_roles:
+    - compiler_output
+    sensitive: false
+    cost: 1
+  guest:
+    column: query_token.guest
+    allowed_roles:
+    - compiler_output
+    sensitive: false
+    cost: 1
+  host:
+    column: query_token.host
+    allowed_roles:
+    - compiler_output
+    sensitive: false
+    cost: 1
+  listing:
+    column: query_token.listing
+    allowed_roles:
+    - compiler_output
+    sensitive: false
+    cost: 1
+  listing__country_latest:
+    column: query_token.listing__country_latest
+    allowed_roles:
+    - compiler_output
+    sensitive: false
+    cost: 1
+  listing__is_lux_latest:
+    column: query_token.listing__is_lux_latest
+    allowed_roles:
+    - compiler_output
+    sensitive: false
+    cost: 1
+  listing__lux_listing:
+    column: query_token.listing__lux_listing
+    allowed_roles:
+    - compiler_output
+    sensitive: false
+    cost: 1
+  metric_time:
+    column: query_token.metric_time
+    allowed_roles:
+    - compiler_output
+    sensitive: false
+    cost: 1
+  user:
+    column: query_token.user
+    allowed_roles:
+    - compiler_output
+    sensitive: false
+    cost: 1
+  user__company_name:
+    column: query_token.user__company_name
+    allowed_roles:
+    - compiler_output
+    sensitive: true
+    cost: 1
+  user__home_state:
+    column: query_token.user__home_state
+    allowed_roles:
+    - compiler_output
+    sensitive: false
+    cost: 1
+  user__home_state_latest:
+    column: query_token.user__home_state_latest
+    allowed_roles:
+    - compiler_output
+    sensitive: false
+    cost: 1
+  verification__ds:
+    column: query_token.verification__ds
+    allowed_roles:
+    - compiler_output
+    sensitive: false
+    cost: 1
+  verification__ds_partitioned:
+    column: query_token.verification__ds_partitioned
+    allowed_roles:
+    - compiler_output
+    sensitive: false
+    cost: 1
+  verification__verification_type:
+    column: query_token.verification__verification_type
+    allowed_roles:
+    - compiler_output
+    sensitive: false
+    cost: 1

@@ -1,0 +1,38 @@
+# Hand-authored (not script-generated). midday has no semantic layer, no metric/dimension
+# vocabulary, and no principal/role ACL model of its own -- it is a real multi-tenant SaaS
+# backend, not a data-agent semantic product. principals/roles below are a minimal synthetic
+# bridge that exists only so PolicyStrata's principal-lookup gate (`PolicyOracle.principal`)
+# passes and the static SQL/tenant-scope checks run; metrics/dimensions are intentionally empty
+# because every trace in this target omits `semantic_ir` (see traces.jsonl / README.md) so the
+# metric/dimension authorization path is never exercised -- inventing fake business metrics for
+# a raw multitenancy target would be more synthetic than the target warrants.
+version: brownfield-midday-v1
+principals:
+  midday_team_member:
+    id: midday_team_member
+    role: team_member
+    # Real-shaped (v4 UUID format), not a captured real customer id.
+    tenant_ids:
+      - 3d3a1c1e-6f2b-4a9e-9c9a-9b7b4b6b8e21
+  midday_authenticated_user:
+    id: midday_authenticated_user
+    role: authenticated_user
+    tenant_ids:
+      - 7b1e2a44-9c3d-4f10-8b2a-1e6d9a4c5f77
+roles:
+  team_member:
+    allowed_metrics: []
+    allowed_dimensions: []
+    allowed_time_ranges: []
+    max_rows: 1000
+    max_cost: 1000
+    aggregate_only: false
+  authenticated_user:
+    allowed_metrics: []
+    allowed_dimensions: []
+    allowed_time_ranges: []
+    max_rows: 1000
+    max_cost: 1000
+    aggregate_only: false
+metrics: {}
+dimensions: {}

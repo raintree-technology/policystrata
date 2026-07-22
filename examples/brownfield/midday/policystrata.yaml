@@ -1,0 +1,33 @@
+version: 1
+domain: brownfield_midday
+domain_path: domain
+output: scan-out
+# midday has no dbt/semantic layer (confirmed in inventory) -- no dbt: block.
+sql_traces:
+  required: true
+  files:
+    - traces.jsonl
+tenancy:
+  # midday's dominant, real RLS pattern (packages/db/migrations/*.sql, 20 CREATE POLICY
+  # statements): team_id IN (SELECT private.get_teams_for_authenticated_user()). We declare the
+  # bare column, not the full RLS predicate text, because that predicate is enforced transparently
+  # by Postgres and never appears literally in the application's own emitted SQL (see
+  # docs/trace-contract.md: "If SQL intentionally relies on database RLS rather than literal
+  # tenant predicates, add trusted database.rls_checks or database.state_assertions" -- we did
+  # not stand up a live database for this pass, see README.md).
+  tenant_columns:
+    - team_id
+# schema.sql is a real, deterministic concatenation of packages/db/migrations/*.sql (see
+# scripts/brownfield-transform-midday.py) but no live PostgreSQL fixture is started in this pass,
+# so this is expected to produce one non-gating "fixture could not be prepared" WARNING, not a
+# database read. See README.md.
+database:
+  required: false
+  schema: schema.sql
+fuzz:
+  enabled: true
+  seed: 1729
+  max_cases_per_trace: 8
+gate:
+  fail_on_high_confidence: true
+  required_inputs: [sql_traces]
