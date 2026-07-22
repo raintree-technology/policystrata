@@ -1,0 +1,14 @@
+{
+  "dimensions_in_policy": 35,
+  "itest_files_scanned": 19,
+  "metrics_in_policy": 110,
+  "metrics_merged": 110,
+  "semantic_models_merged": 12,
+  "traces_selected": 68,
+  "traces_skipped": {
+    "multi_metric_ir_unsupported": 43,
+    "non_simple_manifest_model": 33,
+    "unrendered_jinja_macro": 122,
+    "unusable_sql": 0
+  }
+}

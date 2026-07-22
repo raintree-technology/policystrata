@@ -1,0 +1,38 @@
+version: brownfield-wrenai-v1
+principals:
+  wren_session_reader:
+    id: wren_session_reader
+    role: session_reader
+    tenant_ids:
+    - '4821'
+roles:
+  session_reader:
+    allowed_metrics: []
+    allowed_dimensions:
+    - c_custkey
+    - c_name
+    - custkey_plus
+    allowed_time_ranges: []
+    max_rows: 1000
+    max_cost: 1000
+    aggregate_only: false
+metrics: {}
+dimensions:
+  c_custkey:
+    column: customer.c_custkey
+    allowed_roles:
+    - session_reader
+    sensitive: false
+    cost: 1
+  c_name:
+    column: customer.c_name
+    allowed_roles:
+    - session_reader
+    sensitive: false
+    cost: 1
+  custkey_plus:
+    column: customer.custkey_plus
+    allowed_roles:
+    - session_reader
+    sensitive: false
+    cost: 1

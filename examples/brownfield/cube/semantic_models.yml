@@ -1,0 +1,23 @@
+semantic_models:
+- name: orders
+  model: ref('orders')
+  measures:
+  - name: count
+    agg: count
+    expr: id
+  dimensions:
+  - name: id
+    type: categorical
+  - name: user_id
+    type: categorical
+  - name: status
+    type: categorical
+  - name: created_at
+    type: time
+  - name: completed_at
+    type: time
+metrics:
+- name: count
+  type: simple
+  type_params:
+    measure: count

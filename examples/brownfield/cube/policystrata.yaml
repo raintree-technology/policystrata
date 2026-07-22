@@ -1,0 +1,27 @@
+version: 1
+domain: brownfield_cube
+domain_path: domain
+output: scan-out
+dbt:
+  files:
+    - semantic_models.yml
+sql_traces:
+  required: true
+  files:
+    - traces.jsonl
+tenancy:
+  # The admin group's real, resolved rowLevel filter from orders_big.yml (member: status,
+  # operator: equals, values: [completed]) -- see transform_report.json and README.md for how
+  # this was mechanically derived. Declared here as the row-level predicate any SQL executed by
+  # the admin principal must preserve.
+  canonical_predicates:
+    - "orders.status = 'completed'"
+  tenant_columns:
+    - orders.status
+fuzz:
+  enabled: true
+  seed: 1729
+  max_cases_per_trace: 8
+gate:
+  fail_on_high_confidence: true
+  required_inputs: [dbt, sql_traces]

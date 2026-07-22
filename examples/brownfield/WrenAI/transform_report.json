@@ -1,0 +1,8 @@
+{
+  "canonical_predicate": "c_custkey = :principal.tenant_id",
+  "models_merged": 3,
+  "native_condition": "c_custkey = @session_id",
+  "rule": "rule1",
+  "target_model": "customer",
+  "traces_built": 2
+}

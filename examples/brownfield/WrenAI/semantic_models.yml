@@ -1,0 +1,40 @@
+semantic_models:
+- name: customer
+  model: ref('customer')
+  measures: []
+  dimensions:
+  - name: c_custkey
+    type: integer
+  - name: c_name
+    type: varchar
+  - name: custkey_plus
+    type: integer
+- name: profile
+  model: ref('profile')
+  measures: []
+  dimensions:
+  - name: p_custkey
+    type: integer
+  - name: p_phone
+    type: varchar
+  - name: p_sex
+    type: varchar
+  - name: totalcost
+    type: integer
+- name: orders
+  model: ref('orders')
+  measures: []
+  dimensions:
+  - name: o_orderkey
+    type: integer
+  - name: o_custkey
+    type: integer
+  - name: o_totalprice
+    type: integer
+  - name: customer_name
+    type: varchar
+  - name: orderkey_plus_custkey
+    type: integer
+  - name: hash_orderkey
+    type: varchar
+metrics: []

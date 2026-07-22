@@ -1,0 +1,14 @@
+version: 1
+domain: brownfield_cube
+domain_path: domain
+output: scan-clean-out
+dbt:
+  files:
+    - semantic_models.yml
+sql_traces:
+  files:
+    - traces_clean.jsonl
+fuzz:
+  enabled: false
+gate:
+  fail_on_high_confidence: true
