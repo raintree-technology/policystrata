@@ -1,0 +1,705 @@
+# SPEC-BLIND mutant suite for the support_saas domain.
+#
+# Authoring method (see docs/spec-blind-results.md for the full "rules of the
+# blind"): every task below was written from the domain CONTRACT
+# (surfaces.yaml + policy.yaml + schema.sql), docs/methodology.md, and
+# docs/failure-taxonomy.md, plus the operator id/description/affected-surface
+# catalog in src/policystrata/mutations.py (the equivalent of a paper's
+# Table 1). The detector/simulator/generator source
+# (detection.py, runner.py, compiler.py, policy.py, generator.py, summary.py,
+# minimize.py) was never opened while writing this file. expected_* labels
+# below are the author's own contract-derived judgment, not values copied out
+# of mutations.py's MutationSpec.witness_class/containment_layer fields.
+#
+# Two structural exceptions, disclosed for honesty:
+#   1. Principal ids (acme_analyst, acme_finance_admin, beta_analyst) and the
+#      literal `mutation:` operator ids are taken directly from the allowed
+#      catalogs (policy.yaml, mutations.py) -- this is unavoidable, a task
+#      must name a real principal and a real operator id to be well-formed.
+#   2. The old-version numbers used in `surface_versions` overrides
+#      (e.g. compiler: v5 vs v6) follow the wiring pattern observed in
+#      tasks/seeded.yaml, which we were told we may read to learn the task
+#      YAML schema. For operators seeded.yaml does not demonstrate, the
+#      version number is a guess and is called out per-task below as
+#      genuinely uncertain -- we have no contract-level way to know which
+#      historical surface version a given operator is wired to.
+#
+# Every semantic_query / principal choice, and every expected_witness_class /
+# expected_localized_surface / expected_containment_layer label, was designed
+# independently rather than copied from tasks/seeded.yaml's specific request
+# text or query shape.
+
+suite: spec_blind
+policy_version: v7
+surface_versions:
+  manifest: v7
+  grammar: v7
+  validator: v7
+  compiler: v7
+  database: v7
+  release: v7
+
+suite_metadata:
+  provenance: hand_authored
+  evidence_level: blinded_suite
+  detector_frozen: false
+  authored_after_detector_freeze: false
+  notes:
+    - "spec-blind authored; labels derived from contract docs without detector access"
+    - "not a fully independent/external author: same repo worktree, same agent session, self-restricted to a documented allowlist of contract files (see header comment and docs/spec-blind-results.md)"
+    - "provenance is 'hand_authored' rather than 'generated' because every task was written by hand from the contract, not synthesized by policystrata's generator.py seed/count mechanism; 'generated' would overclaim the method used here"
+
+tasks:
+  # ---------------------------------------------------------------------
+  # Operator: stale_metric_alias_manifest
+  # Contract reading: manifest's declared responsibility is
+  # "omit_retired_aliases_and_forbidden_capabilities". gross_revenue's
+  # aliases (bookings, gross_bookings) are finance_admin-only per
+  # policy.yaml. A stale manifest (v6) that still exposes those aliases to
+  # an analyst violates that responsibility at the manifest layer.
+  # UNCERTAIN: whether validator resolves an alias back to the canonical
+  # gross_revenue metric and denies it for a non-finance_admin principal,
+  # or whether it trusts the manifest-declared capability_scope and lets it
+  # through end to end. We guess validator catches it (contract says
+  # validator, not manifest, "authorize[s] metric ... " against role), but
+  # this is exactly the kind of cross-layer interaction the contract docs
+  # don't fully pin down.
+  # ---------------------------------------------------------------------
+  - id: sb-manifest-alias-01
+    domain: support_saas
+    principal: acme_analyst
+    request: "Show bookings by region for last month."
+    policy_version: v7
+    surface_versions: {manifest: v6, grammar: v7, validator: v7, compiler: v7, database: v7, release: v7}
+    mutation: stale_metric_alias_manifest
+    semantic_query: {metric: bookings, dimensions: [region], time_range: last_month, grain: month, limit: 100}
+    expected_witness_class: over_permissive
+    expected_localized_surface: manifest
+    expected_containment_layer: validator  # UNCERTAIN, see comment above
+
+  - id: sb-manifest-alias-02
+    domain: support_saas
+    principal: acme_analyst
+    request: "Break down gross bookings by plan for last month."
+    policy_version: v7
+    surface_versions: {manifest: v6, grammar: v7, validator: v7, compiler: v7, database: v7, release: v7}
+    mutation: stale_metric_alias_manifest
+    semantic_query: {metric: gross_bookings, dimensions: [plan], time_range: last_month, grain: month, limit: 100}
+    expected_witness_class: over_permissive
+    expected_localized_surface: manifest
+    expected_containment_layer: validator  # UNCERTAIN, see comment above
+
+  - id: sb-manifest-alias-03
+    domain: support_saas
+    principal: beta_analyst
+    request: "Show bookings by severity for the last fiscal month."
+    policy_version: v7
+    surface_versions: {manifest: v6, grammar: v7, validator: v7, compiler: v7, database: v7, release: v7}
+    mutation: stale_metric_alias_manifest
+    semantic_query: {metric: bookings, dimensions: [severity], time_range: last_fiscal_month, grain: month, limit: 100}
+    expected_witness_class: over_permissive
+    expected_localized_surface: manifest
+    expected_containment_layer: validator  # UNCERTAIN, see comment above; tenant-varied control for the same guess
+
+  # ---------------------------------------------------------------------
+  # Operator: grammar_permits_forbidden_dimension
+  # Contract reading: grammar's declared responsibility is
+  # "avoid_advertising_capabilities_outside_manifest_scope". customer_email
+  # is finance_admin-only and sensitive per policy.yaml. A grammar (v6)
+  # that still parses/permits customer_email into syntactic_intent for an
+  # analyst violates that responsibility. Moderate confidence (not flagged
+  # fully uncertain) that validator, whose contract explicitly says
+  # "authorize_metric_dimension_time_and_budget", independently rejects the
+  # dimension for the analyst role regardless of what grammar let through.
+  # ---------------------------------------------------------------------
+  - id: sb-grammar-dim-01
+    domain: support_saas
+    principal: acme_analyst
+    request: "Break escalated tickets down by customer email for last month."
+    policy_version: v7
+    surface_versions: {manifest: v7, grammar: v6, validator: v7, compiler: v7, database: v7, release: v7}
+    mutation: grammar_permits_forbidden_dimension
+    semantic_query: {metric: escalated_tickets, dimensions: [customer_email], time_range: last_month, grain: month, limit: 100}
+    expected_witness_class: over_permissive
+    expected_localized_surface: grammar
+    expected_containment_layer: validator
+
+  - id: sb-grammar-dim-02
+    domain: support_saas
+    principal: acme_analyst
+    request: "Show ticket count by customer email for the last fiscal month."
+    policy_version: v7
+    surface_versions: {manifest: v7, grammar: v6, validator: v7, compiler: v7, database: v7, release: v7}
+    mutation: grammar_permits_forbidden_dimension
+    semantic_query: {metric: ticket_count, dimensions: [customer_email], time_range: last_fiscal_month, grain: month, limit: 100}
+    expected_witness_class: over_permissive
+    expected_localized_surface: grammar
+    expected_containment_layer: validator
+
+  - id: sb-grammar-dim-03
+    domain: support_saas
+    principal: beta_analyst
+    request: "Break average resolution hours down by customer email for last month."
+    policy_version: v7
+    surface_versions: {manifest: v7, grammar: v6, validator: v7, compiler: v7, database: v7, release: v7}
+    mutation: grammar_permits_forbidden_dimension
+    semantic_query: {metric: average_resolution_hours, dimensions: [customer_email], time_range: last_month, grain: month, limit: 100}
+    expected_witness_class: over_permissive
+    expected_localized_surface: grammar
+    expected_containment_layer: validator
+
+  # ---------------------------------------------------------------------
+  # Operator: validator_omits_sensitive_column
+  # Contract reading: this time the bug is IN the validator itself (the
+  # single layer the contract names as authoritative for dimension
+  # authorization). No other surface's declared responsibility covers
+  # dimension-level sensitivity (compiler preserves semantics, database
+  # only does tenant-row isolation, release only withholds based on an
+  # authorization_decision it is handed). So a buggy validator (v6) here
+  # should leak all the way to release with nothing downstream to catch it.
+  # High confidence, not flagged uncertain.
+  # ---------------------------------------------------------------------
+  - id: sb-validator-sensitive-01
+    domain: support_saas
+    principal: acme_analyst
+    request: "Show escalations by customer email for last month."
+    policy_version: v7
+    surface_versions: {manifest: v7, grammar: v7, validator: v6, compiler: v7, database: v7, release: v7}
+    mutation: validator_omits_sensitive_column
+    semantic_query: {metric: escalated_tickets, dimensions: [customer_email], time_range: last_month, grain: month, limit: 100}
+    expected_witness_class: over_permissive
+    expected_localized_surface: validator
+
+  - id: sb-validator-sensitive-02
+    domain: support_saas
+    principal: acme_analyst
+    request: "Show net revenue by customer email for last month."
+    policy_version: v7
+    surface_versions: {manifest: v7, grammar: v7, validator: v6, compiler: v7, database: v7, release: v7}
+    mutation: validator_omits_sensitive_column
+    semantic_query: {metric: net_revenue, dimensions: [customer_email], time_range: last_month, grain: month, limit: 100}
+    expected_witness_class: over_permissive
+    expected_localized_surface: validator
+
+  - id: sb-validator-sensitive-03
+    domain: support_saas
+    principal: beta_analyst
+    request: "Show ticket count by customer email for the last fiscal month."
+    policy_version: v7
+    surface_versions: {manifest: v7, grammar: v7, validator: v6, compiler: v7, database: v7, release: v7}
+    mutation: validator_omits_sensitive_column
+    semantic_query: {metric: ticket_count, dimensions: [customer_email], time_range: last_fiscal_month, grain: month, limit: 100}
+    expected_witness_class: over_permissive
+    expected_localized_surface: validator
+
+  # ---------------------------------------------------------------------
+  # Operator: compiler_drops_tenant_predicate
+  # Contract reading: compiler's job is "preserve_tenant_scope_predicates".
+  # Dropping it is a lowering_violation localized at compiler. But
+  # schema.sql shows tenant isolation is *also* enforced independently by
+  # Postgres RLS keyed on current_setting('app.tenant_id'), which does not
+  # depend on the app's own WHERE-clause predicate. RLS wraps every query
+  # regardless of what SQL the compiler wrote, so the database layer
+  # should still contain the row-level exposure even though the compiler
+  # violated its transition obligation. This is the worked example in
+  # docs/failure-taxonomy.md almost verbatim. High confidence.
+  # ---------------------------------------------------------------------
+  - id: sb-compiler-droptenant-01
+    domain: support_saas
+    principal: acme_analyst
+    request: "Show ticket count by region for my tenant, last month."
+    policy_version: v7
+    surface_versions: {manifest: v7, grammar: v7, validator: v7, compiler: v5, database: v7, release: v7}
+    mutation: compiler_drops_tenant_predicate
+    semantic_query: {metric: ticket_count, dimensions: [region], time_range: last_month, grain: month, limit: 100}
+    expected_witness_class: lowering_violation
+    expected_localized_surface: compiler
+    expected_containment_layer: database
+
+  - id: sb-compiler-droptenant-02
+    domain: support_saas
+    principal: acme_analyst
+    request: "Show escalations by plan for last month."
+    policy_version: v7
+    surface_versions: {manifest: v7, grammar: v7, validator: v7, compiler: v5, database: v7, release: v7}
+    mutation: compiler_drops_tenant_predicate
+    semantic_query: {metric: escalated_tickets, dimensions: [plan], time_range: last_month, grain: month, limit: 100}
+    expected_witness_class: lowering_violation
+    expected_localized_surface: compiler
+    expected_containment_layer: database
+
+  - id: sb-compiler-droptenant-03
+    domain: support_saas
+    principal: beta_analyst
+    request: "Show net revenue by severity for last month."
+    policy_version: v7
+    surface_versions: {manifest: v7, grammar: v7, validator: v7, compiler: v5, database: v7, release: v7}
+    mutation: compiler_drops_tenant_predicate
+    semantic_query: {metric: net_revenue, dimensions: [severity], time_range: last_month, grain: month, limit: 100}
+    expected_witness_class: lowering_violation
+    expected_localized_surface: compiler
+    expected_containment_layer: database
+
+  # ---------------------------------------------------------------------
+  # Operator: compiler_uses_old_tenant_key
+  # Same reasoning as compiler_drops_tenant_predicate: the compiler emits
+  # a predicate against the wrong column (legacy_tenant_id, which really
+  # exists on accounts per schema.sql), but RLS is not driven by the
+  # app-supplied predicate at all, so the database layer should still
+  # contain it. High confidence.
+  # ---------------------------------------------------------------------
+  - id: sb-compiler-oldkey-01
+    domain: support_saas
+    principal: acme_analyst
+    request: "Show escalations by severity for last month."
+    policy_version: v7
+    surface_versions: {manifest: v7, grammar: v7, validator: v7, compiler: v5, database: v7, release: v7}
+    mutation: compiler_uses_old_tenant_key
+    semantic_query: {metric: escalated_tickets, dimensions: [severity], time_range: last_month, grain: month, limit: 100}
+    expected_witness_class: lowering_violation
+    expected_localized_surface: compiler
+    expected_containment_layer: database
+
+  - id: sb-compiler-oldkey-02
+    domain: support_saas
+    principal: acme_analyst
+    request: "Show ticket count by region for the last fiscal month."
+    policy_version: v7
+    surface_versions: {manifest: v7, grammar: v7, validator: v7, compiler: v5, database: v7, release: v7}
+    mutation: compiler_uses_old_tenant_key
+    semantic_query: {metric: ticket_count, dimensions: [region], time_range: last_fiscal_month, grain: month, limit: 100}
+    expected_witness_class: lowering_violation
+    expected_localized_surface: compiler
+    expected_containment_layer: database
+
+  - id: sb-compiler-oldkey-03
+    domain: support_saas
+    principal: beta_analyst
+    request: "Show average resolution hours by plan for last month."
+    policy_version: v7
+    surface_versions: {manifest: v7, grammar: v7, validator: v7, compiler: v5, database: v7, release: v7}
+    mutation: compiler_uses_old_tenant_key
+    semantic_query: {metric: average_resolution_hours, dimensions: [plan], time_range: last_month, grain: month, limit: 100}
+    expected_witness_class: lowering_violation
+    expected_localized_surface: compiler
+    expected_containment_layer: database
+
+  # ---------------------------------------------------------------------
+  # Operator: compiler_swaps_tenant_account_id
+  # Contract reading is genuinely UNCERTAIN on two axes:
+  #   (a) tasks/seeded.yaml has no example of this operator, so the
+  #       compiler: v5 version override below is a guess by analogy with
+  #       the other two tenant-scope compiler operators (v5), not a known
+  #       wiring fact.
+  #   (b) it is unclear from the description alone ("binds the tenant-scope
+  #       obligation to account IDs instead of tenant IDs") whether this
+  #       actually produces cross-tenant row exposure (if account ids are
+  #       filtered to the requesting principal's own accounts, this could
+  #       just be a scoping/undercount bug with no cross-tenant leak at
+  #       all, i.e. arguably semantic_drift rather than lowering_violation)
+  #       or a true tenant-boundary violation. We pick lowering_violation
+  #       because "tenant/account scope confusion" is explicitly listed
+  #       under lowering_violation in docs/failure-taxonomy.md, and we
+  #       keep containment_layer: database by analogy with the other two
+  #       tenant-key compiler bugs, but confidence here is low.
+  # ---------------------------------------------------------------------
+  - id: sb-compiler-swapid-01
+    domain: support_saas
+    principal: acme_analyst
+    request: "Show ticket count by region for last month, after the account-scope refactor."
+    policy_version: v7
+    surface_versions: {manifest: v7, grammar: v7, validator: v7, compiler: v5, database: v7, release: v7}
+    mutation: compiler_swaps_tenant_account_id
+    semantic_query: {metric: ticket_count, dimensions: [region], time_range: last_month, grain: month, limit: 100}
+    expected_witness_class: lowering_violation
+    expected_localized_surface: compiler
+    expected_containment_layer: database  # UNCERTAIN, see comment above
+
+  - id: sb-compiler-swapid-02
+    domain: support_saas
+    principal: acme_analyst
+    request: "Show escalations by plan for last month, after the account-scope refactor."
+    policy_version: v7
+    surface_versions: {manifest: v7, grammar: v7, validator: v7, compiler: v5, database: v7, release: v7}
+    mutation: compiler_swaps_tenant_account_id
+    semantic_query: {metric: escalated_tickets, dimensions: [plan], time_range: last_month, grain: month, limit: 100}
+    expected_witness_class: lowering_violation
+    expected_localized_surface: compiler
+    expected_containment_layer: database  # UNCERTAIN, see comment above
+
+  - id: sb-compiler-swapid-03
+    domain: support_saas
+    principal: beta_analyst
+    request: "Show net revenue by severity for last month, after the account-scope refactor."
+    policy_version: v7
+    surface_versions: {manifest: v7, grammar: v7, validator: v7, compiler: v5, database: v7, release: v7}
+    mutation: compiler_swaps_tenant_account_id
+    semantic_query: {metric: net_revenue, dimensions: [severity], time_range: last_month, grain: month, limit: 100}
+    expected_witness_class: lowering_violation
+    expected_localized_surface: compiler
+    expected_containment_layer: database  # UNCERTAIN, see comment above
+
+  # ---------------------------------------------------------------------
+  # Operator: db_rls_old_ownership_field
+  # Contract reading: this bug lives in the database's own RLS policy (the
+  # layer whose declared responsibility is
+  # "enforce_tenant_isolation_rls"/"contain_cross_tenant_row_access"), not
+  # in something upstream. If the last line of defense is itself broken,
+  # nothing downstream can catch it -- release only withholds based on
+  # authorization_decision, it does not re-derive tenant scope from raw
+  # rows. High confidence.
+  # ---------------------------------------------------------------------
+  - id: sb-db-oldownership-01
+    domain: support_saas
+    principal: acme_analyst
+    request: "Show ticket count by region after the ownership migration."
+    policy_version: v7
+    surface_versions: {manifest: v7, grammar: v7, validator: v7, compiler: v7, database: v5, release: v7}
+    mutation: db_rls_old_ownership_field
+    semantic_query: {metric: ticket_count, dimensions: [region], time_range: last_month, grain: month, limit: 100}
+    expected_witness_class: over_permissive
+    expected_localized_surface: database
+
+  - id: sb-db-oldownership-02
+    domain: support_saas
+    principal: acme_analyst
+    request: "Show escalations by plan after the ownership migration."
+    policy_version: v7
+    surface_versions: {manifest: v7, grammar: v7, validator: v7, compiler: v7, database: v5, release: v7}
+    mutation: db_rls_old_ownership_field
+    semantic_query: {metric: escalated_tickets, dimensions: [plan], time_range: last_month, grain: month, limit: 100}
+    expected_witness_class: over_permissive
+    expected_localized_surface: database
+
+  - id: sb-db-oldownership-03
+    domain: support_saas
+    principal: beta_analyst
+    request: "Show net revenue by severity after the ownership migration."
+    policy_version: v7
+    surface_versions: {manifest: v7, grammar: v7, validator: v7, compiler: v7, database: v5, release: v7}
+    mutation: db_rls_old_ownership_field
+    semantic_query: {metric: net_revenue, dimensions: [severity], time_range: last_month, grain: month, limit: 100}
+    expected_witness_class: over_permissive
+    expected_localized_surface: database
+
+  # ---------------------------------------------------------------------
+  # Operator: gross_net_metric_drift
+  # Contract reading: matches docs/failure-taxonomy.md's semantic_drift row
+  # verbatim ("Gross/net metric confusion"). The query stays executable,
+  # authorization is untouched, so nothing downstream has any signal to
+  # contain a silently-wrong number. High confidence, no containment.
+  # ---------------------------------------------------------------------
+  - id: sb-compiler-grossnet-01
+    domain: support_saas
+    principal: acme_analyst
+    request: "Show net revenue by region for last month."
+    policy_version: v7
+    surface_versions: {manifest: v7, grammar: v7, validator: v7, compiler: v6, database: v7, release: v7}
+    mutation: gross_net_metric_drift
+    semantic_query: {metric: net_revenue, dimensions: [region], time_range: last_month, grain: month, limit: 100}
+    expected_witness_class: semantic_drift
+    expected_localized_surface: compiler
+
+  - id: sb-compiler-grossnet-02
+    domain: support_saas
+    principal: acme_analyst
+    request: "Show net revenue by plan for the last fiscal month."
+    policy_version: v7
+    surface_versions: {manifest: v7, grammar: v7, validator: v7, compiler: v6, database: v7, release: v7}
+    mutation: gross_net_metric_drift
+    semantic_query: {metric: net_revenue, dimensions: [plan], time_range: last_fiscal_month, grain: month, limit: 100}
+    expected_witness_class: semantic_drift
+    expected_localized_surface: compiler
+
+  - id: sb-compiler-grossnet-03
+    domain: support_saas
+    principal: acme_finance_admin
+    request: "Show net revenue by severity for last month."
+    policy_version: v7
+    surface_versions: {manifest: v7, grammar: v7, validator: v7, compiler: v6, database: v7, release: v7}
+    mutation: gross_net_metric_drift
+    semantic_query: {metric: net_revenue, dimensions: [severity], time_range: last_month, grain: month, limit: 100}
+    expected_witness_class: semantic_drift
+    expected_localized_surface: compiler
+    # control variant: principal is finance_admin, who is *also* authorized
+    # to see gross_revenue directly. We expect the same classification
+    # regardless of principal, since this is a metric-lowering bug, not an
+    # authorization bug -- flagged as a mild check on that assumption.
+
+  # ---------------------------------------------------------------------
+  # Operator: fanout_join_drift
+  # Contract reading: matches the semantic_drift row's "join-grain fanout"
+  # example. SemanticQuery has no explicit join-path field, so we can only
+  # request net_revenue with a dimension and hope the simulator's fanout
+  # scenario for this operator triggers regardless of which dimension is
+  # requested. Mild uncertainty flagged on whether request phrasing alone
+  # is sufficient to select this behavior.
+  # ---------------------------------------------------------------------
+  - id: sb-compiler-fanout-01
+    domain: support_saas
+    principal: acme_analyst
+    request: "Show net revenue by region with ticket-event context for last month."
+    policy_version: v7
+    surface_versions: {manifest: v7, grammar: v7, validator: v7, compiler: v6, database: v7, release: v7}
+    mutation: fanout_join_drift
+    semantic_query: {metric: net_revenue, dimensions: [region], time_range: last_month, grain: month, limit: 100}
+    expected_witness_class: semantic_drift
+    expected_localized_surface: compiler
+
+  - id: sb-compiler-fanout-02
+    domain: support_saas
+    principal: acme_analyst
+    request: "Show net revenue by severity with ticket-event context for last month."
+    policy_version: v7
+    surface_versions: {manifest: v7, grammar: v7, validator: v7, compiler: v6, database: v7, release: v7}
+    mutation: fanout_join_drift
+    semantic_query: {metric: net_revenue, dimensions: [severity], time_range: last_month, grain: month, limit: 100}
+    expected_witness_class: semantic_drift
+    expected_localized_surface: compiler
+
+  - id: sb-compiler-fanout-03
+    domain: support_saas
+    principal: acme_finance_admin
+    request: "Show net revenue by plan with ticket-event context for last month."
+    policy_version: v7
+    surface_versions: {manifest: v7, grammar: v7, validator: v7, compiler: v6, database: v7, release: v7}
+    mutation: fanout_join_drift
+    semantic_query: {metric: net_revenue, dimensions: [plan], time_range: last_month, grain: month, limit: 100}
+    expected_witness_class: semantic_drift
+    expected_localized_surface: compiler
+
+  # ---------------------------------------------------------------------
+  # Operator: compiler_removes_distinct
+  # Contract reading: only ticket_count and escalated_tickets use
+  # count(distinct ...) per policy.yaml's metric expressions, so this
+  # operator is scoped to those two metrics. tasks/seeded.yaml has no
+  # example of this operator, so the compiler: v6 override (grouped with
+  # the other non-tenant compiler bugs, all semantic_drift) is a guess,
+  # flagged uncertain.
+  # ---------------------------------------------------------------------
+  - id: sb-compiler-distinct-01
+    domain: support_saas
+    principal: acme_analyst
+    request: "Show ticket count by region for last month."
+    policy_version: v7
+    surface_versions: {manifest: v7, grammar: v7, validator: v7, compiler: v6, database: v7, release: v7}
+    mutation: compiler_removes_distinct
+    semantic_query: {metric: ticket_count, dimensions: [region], time_range: last_month, grain: month, limit: 100}
+    expected_witness_class: semantic_drift
+    expected_localized_surface: compiler
+    # UNCERTAIN: compiler version override guessed by analogy, not observed
+
+  - id: sb-compiler-distinct-02
+    domain: support_saas
+    principal: acme_analyst
+    request: "Show escalations by severity for last month."
+    policy_version: v7
+    surface_versions: {manifest: v7, grammar: v7, validator: v7, compiler: v6, database: v7, release: v7}
+    mutation: compiler_removes_distinct
+    semantic_query: {metric: escalated_tickets, dimensions: [severity], time_range: last_month, grain: month, limit: 100}
+    expected_witness_class: semantic_drift
+    expected_localized_surface: compiler
+    # UNCERTAIN: compiler version override guessed by analogy, not observed
+
+  - id: sb-compiler-distinct-03
+    domain: support_saas
+    principal: acme_finance_admin
+    request: "Show ticket count by plan for the last fiscal month."
+    policy_version: v7
+    surface_versions: {manifest: v7, grammar: v7, validator: v7, compiler: v6, database: v7, release: v7}
+    mutation: compiler_removes_distinct
+    semantic_query: {metric: ticket_count, dimensions: [plan], time_range: last_fiscal_month, grain: month, limit: 100}
+    expected_witness_class: semantic_drift
+    expected_localized_surface: compiler
+    # UNCERTAIN: compiler version override guessed by analogy, not observed
+
+  # ---------------------------------------------------------------------
+  # Operator: compiler_inner_join_drops_rows
+  # Contract reading: HIGH UNCERTAINTY. The only nullable/optional
+  # relationship visible in schema.sql is
+  # support_tickets.assigned_agent_id -> agents(id), but policy.yaml
+  # exposes no agent-related dimension, so we cannot point at a
+  # policy-exposed "optional join" the way we can for the other operators.
+  # Our best guess is that the `plan` dimension (accounts -> subscriptions)
+  # is the most plausible optional-join point in this schema/policy pair,
+  # but we are not confident this is what the operator actually targets,
+  # nor that the compiler: v6 version guess is correct. This is exactly
+  # the kind of task the exercise asked us to flag rather than paper over.
+  # ---------------------------------------------------------------------
+  - id: sb-compiler-innerjoin-01
+    domain: support_saas
+    principal: acme_analyst
+    request: "Show ticket count by plan for last month."
+    policy_version: v7
+    surface_versions: {manifest: v7, grammar: v7, validator: v7, compiler: v6, database: v7, release: v7}
+    mutation: compiler_inner_join_drops_rows
+    semantic_query: {metric: ticket_count, dimensions: [plan], time_range: last_month, grain: month, limit: 100}
+    expected_witness_class: semantic_drift
+    expected_localized_surface: compiler
+    # HIGH UNCERTAINTY: no policy-exposed dimension clearly maps to a
+    # nullable/optional join in this schema; both the query shape and the
+    # version guess are speculative
+
+  - id: sb-compiler-innerjoin-02
+    domain: support_saas
+    principal: acme_analyst
+    request: "Show escalations by plan for the last fiscal month."
+    policy_version: v7
+    surface_versions: {manifest: v7, grammar: v7, validator: v7, compiler: v6, database: v7, release: v7}
+    mutation: compiler_inner_join_drops_rows
+    semantic_query: {metric: escalated_tickets, dimensions: [plan], time_range: last_fiscal_month, grain: month, limit: 100}
+    expected_witness_class: semantic_drift
+    expected_localized_surface: compiler
+    # HIGH UNCERTAINTY: see sb-compiler-innerjoin-01
+
+  - id: sb-compiler-innerjoin-03
+    domain: support_saas
+    principal: acme_finance_admin
+    request: "Show net revenue by plan for last month."
+    policy_version: v7
+    surface_versions: {manifest: v7, grammar: v7, validator: v7, compiler: v6, database: v7, release: v7}
+    mutation: compiler_inner_join_drops_rows
+    semantic_query: {metric: net_revenue, dimensions: [plan], time_range: last_month, grain: month, limit: 100}
+    expected_witness_class: semantic_drift
+    expected_localized_surface: compiler
+    # HIGH UNCERTAINTY: see sb-compiler-innerjoin-01
+
+  # ---------------------------------------------------------------------
+  # Operator: fiscal_calendar_mismatch
+  # Contract reading: matches the semantic_drift row's "fiscal/calendar
+  # time drift" example directly, and last_fiscal_month is a real
+  # allowed_time_range in policy.yaml. High confidence for the
+  # last_fiscal_month variants. The third variant tries fiscal_ytd (a
+  # finance_admin-only time range not demonstrated in seeded.yaml for this
+  # operator) -- flagged mildly uncertain whether the same drift applies
+  # to a year-to-date fiscal window rather than only a fiscal month.
+  # ---------------------------------------------------------------------
+  - id: sb-compiler-fiscal-01
+    domain: support_saas
+    principal: acme_analyst
+    request: "Show net revenue by plan for the last fiscal month."
+    policy_version: v7
+    surface_versions: {manifest: v7, grammar: v7, validator: v7, compiler: v6, database: v7, release: v7}
+    mutation: fiscal_calendar_mismatch
+    semantic_query: {metric: net_revenue, dimensions: [plan], time_range: last_fiscal_month, grain: month, limit: 100}
+    expected_witness_class: semantic_drift
+    expected_localized_surface: compiler
+
+  - id: sb-compiler-fiscal-02
+    domain: support_saas
+    principal: acme_analyst
+    request: "Show ticket count by region for the last fiscal month."
+    policy_version: v7
+    surface_versions: {manifest: v7, grammar: v7, validator: v7, compiler: v6, database: v7, release: v7}
+    mutation: fiscal_calendar_mismatch
+    semantic_query: {metric: ticket_count, dimensions: [region], time_range: last_fiscal_month, grain: month, limit: 100}
+    expected_witness_class: semantic_drift
+    expected_localized_surface: compiler
+
+  - id: sb-compiler-fiscal-03
+    domain: support_saas
+    principal: acme_finance_admin
+    request: "Show net revenue by severity for fiscal year to date."
+    policy_version: v7
+    surface_versions: {manifest: v7, grammar: v7, validator: v7, compiler: v6, database: v7, release: v7}
+    mutation: fiscal_calendar_mismatch
+    semantic_query: {metric: net_revenue, dimensions: [severity], time_range: fiscal_ytd, grain: month, limit: 100}
+    expected_witness_class: semantic_drift
+    expected_localized_surface: compiler
+    # mildly uncertain: fiscal_ytd is a different time range than the
+    # last_fiscal_month case seeded.yaml demonstrates for this operator
+
+  # ---------------------------------------------------------------------
+  # Operator: cost_estimate_ignores_expansion
+  # Contract reading: docs/failure-taxonomy.md files "cost-budget bypass"
+  # under over_permissive, surface compiler. HIGH UNCERTAINTY: the actual
+  # cost formula (how metric cost + dimension costs + any fan-out
+  # multiplier combine against a role's max_cost) is not documented in the
+  # contract files we're allowed to read -- policy.yaml only gives
+  # per-metric/per-dimension cost weights and a role-level max_cost
+  # ceiling, with no stated combination rule or fan-out multiplier. We
+  # picked wide multi-dimension breakdowns as the most plausible trigger,
+  # but cannot verify from the spec alone whether these numbers actually
+  # approach or exceed an analyst's max_cost=80 budget.
+  # ---------------------------------------------------------------------
+  - id: sb-compiler-costexpand-01
+    domain: support_saas
+    principal: acme_analyst
+    request: "Show a wide revenue breakdown by region, plan, severity, and month for last month."
+    policy_version: v7
+    surface_versions: {manifest: v7, grammar: v7, validator: v7, compiler: v6, database: v7, release: v7}
+    mutation: cost_estimate_ignores_expansion
+    semantic_query: {metric: net_revenue, dimensions: [region, plan, severity, month], time_range: last_month, grain: month, limit: 1000}
+    expected_witness_class: over_permissive
+    expected_localized_surface: compiler
+    # HIGH UNCERTAINTY: cost combination formula is not in the contract docs
+
+  - id: sb-compiler-costexpand-02
+    domain: support_saas
+    principal: acme_analyst
+    request: "Show a wide escalation breakdown by region, plan, severity, and month for last month."
+    policy_version: v7
+    surface_versions: {manifest: v7, grammar: v7, validator: v7, compiler: v6, database: v7, release: v7}
+    mutation: cost_estimate_ignores_expansion
+    semantic_query: {metric: escalated_tickets, dimensions: [region, plan, severity, month], time_range: last_month, grain: month, limit: 1000}
+    expected_witness_class: over_permissive
+    expected_localized_surface: compiler
+    # HIGH UNCERTAINTY: cost combination formula is not in the contract docs
+
+  - id: sb-compiler-costexpand-03
+    domain: support_saas
+    principal: acme_analyst
+    request: "Show revenue by region and plan for the last fiscal month."
+    policy_version: v7
+    surface_versions: {manifest: v7, grammar: v7, validator: v7, compiler: v6, database: v7, release: v7}
+    mutation: cost_estimate_ignores_expansion
+    semantic_query: {metric: net_revenue, dimensions: [region, plan], time_range: last_fiscal_month, grain: month, limit: 500}
+    expected_witness_class: over_permissive
+    expected_localized_surface: compiler
+    # HIGH UNCERTAINTY: smaller-combo control variant, same formula gap
+
+  # ---------------------------------------------------------------------
+  # Operator: app_deny_missing_db_policy
+  # Contract reading: gross_revenue is finance_admin-only per policy.yaml,
+  # so an analyst request for it should be denied by the validator's
+  # canonical authorization. This operator's description says the deny
+  # "was not propagated into the database policy" -- database RLS in
+  # schema.sql only implements tenant isolation, never metric/column-level
+  # authorization, so there is no database-level backstop for a
+  # metric-authorization gap the way there is for tenant scope. If this
+  # gap is exploitable, the database is the surface with the gap and
+  # nothing downstream is positioned to contain a metric-level (as opposed
+  # to row-level) authorization failure. High confidence.
+  # ---------------------------------------------------------------------
+  - id: sb-db-appdeny-01
+    domain: support_saas
+    principal: acme_analyst
+    request: "Show gross bookings for my tenant by region, last month."
+    policy_version: v7
+    surface_versions: {manifest: v7, grammar: v7, validator: v7, compiler: v7, database: v6, release: v7}
+    mutation: app_deny_missing_db_policy
+    semantic_query: {metric: gross_revenue, dimensions: [region], time_range: last_month, grain: month, limit: 100}
+    expected_witness_class: over_permissive
+    expected_localized_surface: database
+
+  - id: sb-db-appdeny-02
+    domain: support_saas
+    principal: acme_analyst
+    request: "Show gross bookings by plan for last month."
+    policy_version: v7
+    surface_versions: {manifest: v7, grammar: v7, validator: v7, compiler: v7, database: v6, release: v7}
+    mutation: app_deny_missing_db_policy
+    semantic_query: {metric: gross_revenue, dimensions: [plan], time_range: last_month, grain: month, limit: 100}
+    expected_witness_class: over_permissive
+    expected_localized_surface: database
+
+  - id: sb-db-appdeny-03
+    domain: support_saas
+    principal: beta_analyst
+    request: "Show gross bookings by severity for the last fiscal month."
+    policy_version: v7
+    surface_versions: {manifest: v7, grammar: v7, validator: v7, compiler: v7, database: v6, release: v7}
+    mutation: app_deny_missing_db_policy
+    semantic_query: {metric: gross_revenue, dimensions: [severity], time_range: last_fiscal_month, grain: month, limit: 100}
+    expected_witness_class: over_permissive
+    expected_localized_surface: database

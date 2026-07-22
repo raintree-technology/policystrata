@@ -1,0 +1,547 @@
+suite: reconstructed
+policy_version: v1
+surface_versions:
+  manifest: v1
+  grammar: v1
+  validator: v1
+  compiler: v1
+  database: v1
+  release: v1
+
+# Each task id is the fault id from the source review's real-faults.json ledger, so a task can be
+# traced back to its citation by id alone. See ../MAPPING.md for the full fault -> operator table
+# and justification, and docs/incident-reconstruction-results.md for the run results. Every task's
+# `request` field carries the id, source_url, and a one-line fault summary; suite_metadata.notes
+# repeats them so metadata.json alone (without the YAML) still carries the citation trail.
+suite_metadata:
+  provenance: incident_reconstruction
+  evidence_level: deterministic_fixture
+  detector_frozen: false
+  authored_after_detector_freeze: false
+  notes:
+    - "This suite reconstructs 19 of 25 real, citation-backed cross-layer policy faults from"
+    - "scratchpad/real-faults.json onto PolicyStrata's existing 21 mutation operators (see"
+    - "src/policystrata/mutations.py). No new operators were added. Recall reported for this suite"
+    - "means 'the detector kills fixtures grounded in real incidents', not production recall over"
+    - "unknown faults; see docs/incident-reconstruction-results.md and MAPPING.md for the honest"
+    - "framing, including the 6 faults dropped as non-reconstructable with this operator set."
+    - "pg-cve-2019-10130-selectivity-rls: https://www.postgresql.org/support/security/CVE-2019-10130 -- planner selectivity estimators read pg_statistic sampled values without honoring row security."
+    - "pg-cve-2023-2455-rls-inlining: https://www.postgresql.org/support/security/CVE-2023-2455 -- row security policies disregarded a role change after function inlining."
+    - "pg-cve-2024-10976-rls-subquery: https://www.postgresql.org/support/security/CVE-2024-10976 -- incomplete RLS-table tracking through subqueries/CTEs/views/functions let a reused plan apply the wrong role's policy."
+    - "pg-cve-2021-3393-partition-error-leak: https://www.postgresql.org/support/security/CVE-2021-3393 -- partition constraint-violation error messages leaked column values the user lacked SELECT privilege on."
+    - "pg-cve-2016-2193-plancache-rls-role: https://www.postgresql.org/support/security/CVE-2016-2193 -- a cached query plan could be reused across a role change without re-evaluating row-security policies."
+    - "pg-cve-2017-7484-selectivity-column-priv: https://www.postgresql.org/support/security/CVE-2017-7484 -- selectivity estimator functions used pg_statistic data without checking column SELECT privileges."
+    - "pg-cve-2014-8161-constraint-error-column-leak: https://www.postgresql.org/support/security/CVE-2014-8161 -- constraint-violation error messages revealed values from columns the user could not SELECT."
+    - "pg-cve-2024-10978-setrole-wrong-userid: https://www.postgresql.org/support/security/CVE-2024-10978 -- SET ROLE / SET SESSION AUTHORIZATION could apply the wrong user ID for part of a query, defeating RLS/session-variable checks."
+    - "supabase-cve-2025-48757-missing-rls-anon-read: https://mattpalmer.io/posts/2025/05/CVE-2025-48757/ -- Lovable-generated Supabase apps shipped tables with RLS never enabled, so the public anon key read/wrote arbitrary rows."
+    - "supabase-security-definer-view-bypass: https://supabase.com/docs/guides/database/database-advisors?lint=0010_security_definer_view -- default SECURITY DEFINER views run as their creator, bypassing the querying user's RLS."
+    - "clickhouse-issue-21084-mv-vs-base-rowpolicy: https://github.com/ClickHouse/ClickHouse/issues/21084 -- a materialized view does not re-apply a row policy created later on its source table."
+    - "clickhouse-issue-12544-malformed-policy-failopen: https://github.com/ClickHouse/ClickHouse/issues/12544 -- one malformed row policy in config halted parsing of all subsequent policies, leaving their tables unprotected."
+    - "cube-cve-2022-23510-sqlrunner-rls-bypass: https://github.com/cube-js/cube/security/advisories/GHSA-6jqm-3c9g-pch7 -- a /v1/sql-runner endpoint let any authenticated user bypass modeling-layer RLS (queryRewrite) entirely."
+    - "looker-access-filter-pitfalls: https://cloud.google.com/looker/docs/reference/param-explore-access-filter -- an Explore missing access_filter is not row-restricted at all."
+    - "metricflow-issue-1489-timefilter-dropped: https://github.com/dbt-labs/metricflow/issues/1489 -- a declared metric_time filter was not re-applied to the time-spine table under join_to_time_spine."
+    - "metabase-cve-2024-55951-sandbox-filter-cache: https://github.com/metabase/metabase/security/advisories/GHSA-rhjf-q2qw-rvx3 -- cached field-filter values from one sandboxed user were shown to another sandboxed user."
+    - "superset-cve-2025-48912-rls-sqli: https://github.com/advisories/GHSA-8w7f-8pr9-xgwj -- a sub-query injected into a Row Level Security sqlExpression neutralized the intended filter."
+    - "hasura-cve-2022-46792-updatemany-rowauth: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2022-46792 -- the Update Many API mishandled row-level authorization that normal mutations enforced."
+    - "langchain-cve-2024-8309-graphcypherqachain: https://github.com/advisories/GHSA-45pg-36p6-83v9 -- unneutralized prompt input let GraphCypherQAChain execute injected queries, including cross-tenant data access."
+
+tasks:
+  - id: pg-cve-2019-10130-selectivity-rls
+    principal: acme_analyst
+    request: >-
+      [pg-cve-2019-10130-selectivity-rls | https://www.postgresql.org/support/security/CVE-2019-10130]
+      PostgreSQL's planner consulted column statistics (pg_statistic sampled values) with
+      non-leakproof operators before row-level security was applied, letting a crafted leaky
+      operator read sampled values from RLS-restricted rows (fixed 11.3/10.8/9.6.13/9.5.17).
+      Reconstructed as a database-layer RLS policy that no longer actually restricts the rows it
+      claims to. Show escalated tickets by region for my tenant.
+    mutation: db_rls_old_ownership_field
+    semantic_query:
+      metric: escalated_tickets
+      dimensions: [region]
+      time_range: last_month
+      grain: month
+      limit: 100
+    expected_witness_class: over_permissive
+    expected_localized_surface: database
+    surface_versions:
+      manifest: v1
+      grammar: v1
+      validator: v1
+      compiler: v1
+      database: v0
+      release: v1
+
+  - id: pg-cve-2023-2455-rls-inlining
+    principal: acme_analyst
+    request: >-
+      [pg-cve-2023-2455-rls-inlining | https://www.postgresql.org/support/security/CVE-2023-2455]
+      Row security policies disregarded a user-ID change after function inlining, so a query
+      planned under one role and executed under another could apply the wrong role's RLS policy
+      (fixed 15.3/14.8/13.11/12.15/11.20). Reconstructed as a compiler that binds the tenant-scope
+      obligation to a stale identity key instead of the executing principal's current one. Show
+      ticket count by plan for my tenant.
+    mutation: compiler_uses_old_tenant_key
+    semantic_query:
+      metric: ticket_count
+      dimensions: [plan]
+      time_range: last_month
+      grain: month
+      limit: 100
+    expected_witness_class: lowering_violation
+    expected_localized_surface: compiler
+    expected_containment_layer: database
+    surface_versions:
+      manifest: v1
+      grammar: v1
+      validator: v1
+      compiler: v0
+      database: v1
+      release: v1
+
+  - id: pg-cve-2024-10976-rls-subquery
+    principal: acme_analyst
+    request: >-
+      [pg-cve-2024-10976-rls-subquery | https://www.postgresql.org/support/security/CVE-2024-10976]
+      Incomplete tracking of RLS-bearing tables reached via a subquery, CTE, security-invoker view,
+      or SQL function let a reused plan apply a different role's policy than the one executing it
+      (fixed 17.1/16.5/15.9/14.14/13.17/12.21). Reconstructed as a compiler that swaps which
+      identity column anchors the tenant-scope predicate. Show net revenue by month for my tenant.
+    mutation: compiler_swaps_tenant_account_id
+    semantic_query:
+      metric: net_revenue
+      dimensions: [month]
+      time_range: last_month
+      grain: month
+      limit: 100
+    expected_witness_class: lowering_violation
+    expected_localized_surface: compiler
+    expected_containment_layer: database
+    surface_versions:
+      manifest: v1
+      grammar: v1
+      validator: v1
+      compiler: v0
+      database: v1
+      release: v1
+
+  - id: pg-cve-2021-3393-partition-error-leak
+    principal: acme_analyst
+    request: >-
+      [pg-cve-2021-3393-partition-error-leak | https://www.postgresql.org/support/security/CVE-2021-3393]
+      A user with UPDATE but not SELECT on certain columns of a partitioned table could read those
+      forbidden values from partition constraint-violation error messages (fixed 13.2/12.6/11.11).
+      Reconstructed as a release layer that discloses restricted values through an output channel
+      the column-privilege boundary does not cover. Show ticket count by severity for my tenant.
+    mutation: aggregate_small_cohort_release
+    semantic_query:
+      metric: ticket_count
+      dimensions: [severity]
+      time_range: last_month
+      grain: month
+      limit: 100
+    expected_witness_class: unsafe_release
+    expected_localized_surface: release
+    surface_versions:
+      manifest: v1
+      grammar: v1
+      validator: v1
+      compiler: v1
+      database: v1
+      release: v0
+
+  - id: pg-cve-2016-2193-plancache-rls-role
+    principal: acme_analyst
+    request: >-
+      [pg-cve-2016-2193-plancache-rls-role | https://www.postgresql.org/support/security/CVE-2016-2193]
+      A cached query plan could be reused across a change of role without re-evaluating row-security
+      policies for the new role (fixed 9.5.2). Reconstructed as a compiler that reuses a lowering
+      which never carried the tenant-scope predicate forward for the new execution context, so the
+      database has nothing to contain the query with. Show escalations by plan for my tenant.
+    mutation: compiler_drops_tenant_predicate
+    semantic_query:
+      metric: escalated_tickets
+      dimensions: [plan]
+      time_range: last_month
+      grain: month
+      limit: 100
+    expected_witness_class: lowering_violation
+    expected_localized_surface: compiler
+    expected_containment_layer: database
+    surface_versions:
+      manifest: v1
+      grammar: v1
+      validator: v1
+      compiler: v0
+      database: v1
+      release: v1
+
+  - id: pg-cve-2017-7484-selectivity-column-priv
+    principal: acme_analyst
+    request: >-
+      [pg-cve-2017-7484-selectivity-column-priv | https://www.postgresql.org/support/security/CVE-2017-7484]
+      Selectivity-estimator functions did not check column SELECT privileges before consulting
+      pg_statistic, letting a crafted leaky operator read sampled values from columns a user lacked
+      privilege on (fixed 9.6.3/9.5.7/9.4.12/9.3.17/9.2.21) -- the column-privilege analogue of
+      CVE-2019-10130. Reconstructed the same way: a database RLS policy that no longer restricts
+      the rows it claims to. Show average resolution hours by plan for my tenant.
+    mutation: db_rls_old_ownership_field
+    semantic_query:
+      metric: average_resolution_hours
+      dimensions: [plan]
+      time_range: last_month
+      grain: month
+      limit: 100
+    expected_witness_class: over_permissive
+    expected_localized_surface: database
+    surface_versions:
+      manifest: v1
+      grammar: v1
+      validator: v1
+      compiler: v1
+      database: v0
+      release: v1
+
+  - id: pg-cve-2014-8161-constraint-error-column-leak
+    principal: acme_analyst
+    request: >-
+      [pg-cve-2014-8161-constraint-error-column-leak | https://www.postgresql.org/support/security/CVE-2014-8161]
+      Constraint-violation error messages could reveal values from columns a user lacked SELECT
+      privilege on, by provoking a UNIQUE-style violation (fixed 9.4.1/9.3.6/9.2.10/9.1.15/9.0.19).
+      Reconstructed as a release layer that discloses a restricted value through an output channel,
+      the predecessor pattern to CVE-2021-3393. Show average resolution hours by region for my
+      tenant.
+    mutation: sample_clause_release_drift
+    semantic_query:
+      metric: average_resolution_hours
+      dimensions: [region]
+      time_range: last_month
+      grain: month
+      limit: 100
+    expected_witness_class: unsafe_release
+    expected_localized_surface: release
+    surface_versions:
+      manifest: v1
+      grammar: v1
+      validator: v1
+      compiler: v1
+      database: v1
+      release: v0
+
+  - id: pg-cve-2024-10978-setrole-wrong-userid
+    principal: acme_finance_admin
+    request: >-
+      [pg-cve-2024-10978-setrole-wrong-userid | https://www.postgresql.org/support/security/CVE-2024-10978]
+      SET ROLE / SET SESSION AUTHORIZATION could apply the wrong user ID for part of a query, so
+      RLS and session-variable-based access checks ran under an identity that disagreed with the
+      one the application intended (fixed 17.1/16.5/15.9/14.14/13.17/12.21). Reconstructed as a
+      database RLS policy that ends up checking the wrong identity value. Show net revenue by
+      region for my tenant.
+    mutation: db_rls_old_ownership_field
+    semantic_query:
+      metric: net_revenue
+      dimensions: [region]
+      time_range: last_month
+      grain: month
+      limit: 100
+    expected_witness_class: over_permissive
+    expected_localized_surface: database
+    surface_versions:
+      manifest: v1
+      grammar: v1
+      validator: v1
+      compiler: v1
+      database: v0
+      release: v1
+
+  - id: supabase-cve-2025-48757-missing-rls-anon-read
+    principal: acme_analyst
+    request: >-
+      [supabase-cve-2025-48757-missing-rls-anon-read | https://mattpalmer.io/posts/2025/05/CVE-2025-48757/]
+      AI-generated Lovable apps deployed Supabase tables with RLS never enabled, so the embedded
+      public anon key let unauthenticated callers read (and sometimes write) arbitrary tables --
+      303 endpoints across 170 projects, ~13,000 exposed users (CVE-2025-48757). Reconstructed as
+      an application-declared access rule that never made it into the enforced database policy.
+      Show ticket count by region for my tenant.
+    mutation: app_deny_missing_db_policy
+    semantic_query:
+      metric: ticket_count
+      dimensions: [region]
+      time_range: last_month
+      grain: month
+      limit: 100
+    expected_witness_class: over_permissive
+    expected_localized_surface: database
+    surface_versions:
+      manifest: v1
+      grammar: v1
+      validator: v1
+      compiler: v1
+      database: v0
+      release: v1
+
+  - id: supabase-security-definer-view-bypass
+    principal: acme_analyst
+    request: >-
+      [supabase-security-definer-view-bypass | https://supabase.com/docs/guides/database/database-advisors?lint=0010_security_definer_view]
+      Postgres views default to SECURITY DEFINER and are typically owned by a privileged role, so
+      querying a view over an RLS-protected table enforces the view creator's policy, not the
+      querying user's (Supabase lint 0010; fix is security_invoker = true on PG15+). Reconstructed
+      as a database row-policy assumption (which identity/context the policy is evaluated under)
+      that is invalidated by the view's execution context. Show escalations by plan for my tenant.
+    mutation: clickhouse_row_policy_readonly_assumption_violation
+    semantic_query:
+      metric: escalated_tickets
+      dimensions: [plan]
+      time_range: last_month
+      grain: month
+      limit: 100
+    expected_witness_class: over_permissive
+    expected_localized_surface: database
+    surface_versions:
+      manifest: v1
+      grammar: v1
+      validator: v1
+      compiler: v1
+      database: v0
+      release: v1
+
+  - id: clickhouse-issue-21084-mv-vs-base-rowpolicy
+    principal: acme_analyst
+    request: >-
+      [clickhouse-issue-21084-mv-vs-base-rowpolicy | https://github.com/ClickHouse/ClickHouse/issues/21084]
+      A ClickHouse materialized view stores its own copy of data and does not re-apply a row policy
+      created later on its source table: querying the base table honors the policy while querying
+      the materialized view returns all rows (reported 21.3.1, labeled unexpected-behaviour /
+      not-planned). Reconstructed as an alternate read path over the same data that bypasses the
+      base table's row policy. Show ticket count by plan for my tenant.
+    mutation: distributed_table_policy_gap
+    semantic_query:
+      metric: ticket_count
+      dimensions: [plan]
+      time_range: last_month
+      grain: month
+      limit: 100
+    expected_witness_class: over_permissive
+    expected_localized_surface: database
+    surface_versions:
+      manifest: v1
+      grammar: v1
+      validator: v1
+      compiler: v1
+      database: v0
+      release: v1
+
+  - id: clickhouse-issue-12544-malformed-policy-failopen
+    principal: acme_analyst
+    request: >-
+      [clickhouse-issue-12544-malformed-policy-failopen | https://github.com/ClickHouse/ClickHouse/issues/12544]
+      A single malformed row policy in ClickHouse config (dotted table name or missing filter)
+      threw an exception that halted parsing of all subsequent row policies, leaving their tables
+      unprotected (reported 20.5.2/20.3.11, closed as invalid). Reconstructed as a declared
+      database policy that never gets enforced because it was never loaded. Show escalations by
+      region for my tenant.
+    mutation: app_deny_missing_db_policy
+    semantic_query:
+      metric: escalated_tickets
+      dimensions: [region]
+      time_range: last_month
+      grain: month
+      limit: 100
+    expected_witness_class: over_permissive
+    expected_localized_surface: database
+    surface_versions:
+      manifest: v1
+      grammar: v1
+      validator: v1
+      compiler: v1
+      database: v0
+      release: v1
+
+  - id: cube-cve-2022-23510-sqlrunner-rls-bypass
+    principal: acme_analyst
+    request: >-
+      [cube-cve-2022-23510-sqlrunner-rls-bypass | https://github.com/cube-js/cube/security/advisories/GHSA-6jqm-3c9g-pch7]
+      A /v1/sql-runner endpoint introduced in Cube Core 0.31.23 let any authenticated user submit
+      raw queries that completely bypassed the modeling layer's row-level security (queryRewrite),
+      reverted in 0.31.24 (CVE-2022-23510, CVSS 7.7). Reconstructed as a validator that omits the
+      authorization/scoping obligation it should enforce for this request path. Show ticket count
+      by customer email for my tenant.
+    mutation: validator_omits_sensitive_column
+    semantic_query:
+      metric: ticket_count
+      dimensions: [customer_email]
+      time_range: last_month
+      grain: month
+      limit: 100
+    expected_witness_class: over_permissive
+    expected_localized_surface: validator
+    surface_versions:
+      manifest: v1
+      grammar: v1
+      validator: v0
+      compiler: v1
+      database: v1
+      release: v1
+
+  - id: looker-access-filter-pitfalls
+    principal: acme_analyst
+    request: >-
+      [looker-access-filter-pitfalls | https://cloud.google.com/looker/docs/reference/param-explore-access-filter]
+      Looker's access_filter is an application-layer row filter; Looker's own docs warn that an
+      Explore missing access_filter is not restricted at all, and admins commonly work around
+      missing user-attribute values with wildcard '%, NULL' filters that grant unrestricted rows.
+      Reconstructed as a manifest that still exposes a capability (a metric alias) that should have
+      been scoped out for this role. Show bookings by plan for my tenant.
+    mutation: stale_metric_alias_manifest
+    semantic_query:
+      metric: bookings
+      dimensions: [plan]
+      time_range: last_month
+      grain: month
+      limit: 100
+    expected_witness_class: over_permissive
+    expected_localized_surface: manifest
+    surface_versions:
+      manifest: v0
+      grammar: v1
+      validator: v1
+      compiler: v1
+      database: v1
+      release: v1
+
+  - id: metricflow-issue-1489-timefilter-dropped
+    principal: acme_analyst
+    request: >-
+      [metricflow-issue-1489-timefilter-dropped | https://github.com/dbt-labs/metricflow/issues/1489]
+      With join_to_time_spine = true, dbt MetricFlow did not re-apply a declared metric_time filter
+      to the time-spine table after aggregation, returning rows outside the requested time window
+      -- a correctness/row-visibility drift from the compiler silently dropping a declared filter,
+      not a security bug. Reconstructed as a compiler that uses the wrong compiled time bounds for
+      a declared time-scoped query. Show average resolution hours by severity for the last fiscal
+      month.
+    mutation: fiscal_calendar_mismatch
+    semantic_query:
+      metric: average_resolution_hours
+      dimensions: [severity]
+      time_range: last_fiscal_month
+      grain: month
+      limit: 100
+    expected_witness_class: semantic_drift
+    expected_localized_surface: compiler
+    surface_versions:
+      manifest: v1
+      grammar: v1
+      validator: v1
+      compiler: v0
+      database: v1
+      release: v1
+
+  - id: metabase-cve-2024-55951-sandbox-filter-cache
+    principal: acme_analyst
+    request: >-
+      [metabase-cve-2024-55951-sandbox-filter-cache | https://github.com/metabase/metabase/security/advisories/GHSA-rhjf-q2qw-rvx3]
+      Metabase Enterprise 1.52.0-1.52.2.4 cached field-filter dropdown values without keying on the
+      sandboxed user, so values populated for one sandboxed user were served to another sandboxed
+      user (fixed 1.52.2.5, CVE-2024-55951 -- reproduction needs the caching layer, so
+      reconstructable: partial). Reconstructed here as the release-layer outcome the advisory
+      documents: a value disclosed across a sandbox boundary at the output stage. Show escalations
+      by plan for my tenant.
+    mutation: aggregate_small_cohort_release
+    semantic_query:
+      metric: escalated_tickets
+      dimensions: [plan]
+      time_range: last_month
+      grain: month
+      limit: 100
+    expected_witness_class: unsafe_release
+    expected_localized_surface: release
+    surface_versions:
+      manifest: v1
+      grammar: v1
+      validator: v1
+      compiler: v1
+      database: v1
+      release: v0
+
+  - id: superset-cve-2025-48912-rls-sqli
+    principal: acme_analyst
+    request: >-
+      [superset-cve-2025-48912-rls-sqli | https://github.com/advisories/GHSA-8w7f-8pr9-xgwj]
+      An authenticated Apache Superset user could inject a sub-query into a Row Level Security
+      sqlExpression field, neutralizing the intended restricting predicate and gaining access to
+      restricted data (fixed 4.1.2, CVE-2025-48912, CVSS 7.1). Reconstructed as a compiler that
+      drops the tenant-scope predicate during SQL lowering, the direct visibility consequence of
+      the injection. Show average resolution hours by region for my tenant.
+    mutation: compiler_drops_tenant_predicate
+    semantic_query:
+      metric: average_resolution_hours
+      dimensions: [region]
+      time_range: last_month
+      grain: month
+      limit: 100
+    expected_witness_class: lowering_violation
+    expected_localized_surface: compiler
+    expected_containment_layer: database
+    surface_versions:
+      manifest: v1
+      grammar: v1
+      validator: v1
+      compiler: v0
+      database: v1
+      release: v1
+
+  - id: hasura-cve-2022-46792-updatemany-rowauth
+    principal: acme_analyst
+    request: >-
+      [hasura-cve-2022-46792-updatemany-rowauth | https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2022-46792]
+      Hasura GraphQL Engine before 2.15.2 mishandled row-level authorization on the Update Many API
+      (introduced 2.10.0) for Postgres backends: the row-permission predicate enforced on normal
+      mutations was not applied on that path (fixed 2.15.2, CVE-2022-46792, CVSS 8.8 --
+      reproduction needs Hasura internals, so reconstructable: partial). Reconstructed as a database
+      policy rule that was never propagated to this operation path. Show ticket count by region for
+      my tenant.
+    mutation: app_deny_missing_db_policy
+    semantic_query:
+      metric: ticket_count
+      dimensions: [region]
+      time_range: last_month
+      grain: month
+      limit: 100
+    expected_witness_class: over_permissive
+    expected_localized_surface: database
+    surface_versions:
+      manifest: v1
+      grammar: v1
+      validator: v1
+      compiler: v1
+      database: v0
+      release: v1
+
+  - id: langchain-cve-2024-8309-graphcypherqachain
+    principal: beta_analyst
+    request: >-
+      [langchain-cve-2024-8309-graphcypherqachain | https://github.com/advisories/GHSA-45pg-36p6-83v9]
+      LangChain's GraphCypherQAChain failed to neutralize prompt input before generating and
+      executing queries, allowing prompt-injection-driven query injection including cross-tenant
+      data access (affects langchain < 0.2.0 and langchain-community >= 0.2.0 < 0.2.19, fixed
+      0.2.0/0.2.19, CVE-2024-8309 -- exact trigger needs LLM-chain internals, so reconstructable:
+      partial). Reconstructed as the visibility consequence the advisory documents: the tenant-scope
+      predicate is dropped from the executed query. Show ticket count by region for my tenant.
+    mutation: compiler_drops_tenant_predicate
+    semantic_query:
+      metric: ticket_count
+      dimensions: [region]
+      time_range: last_month
+      grain: month
+      limit: 100
+    expected_witness_class: lowering_violation
+    expected_localized_surface: compiler
+    expected_containment_layer: database
+    surface_versions:
+      manifest: v1
+      grammar: v1
+      validator: v1
+      compiler: v0
+      database: v1
+      release: v1
