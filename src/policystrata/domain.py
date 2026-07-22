@@ -13,6 +13,12 @@ from typing import Any
 
 import yaml
 
+from policystrata.adversarial_controls import (
+    ADVERSARIAL_CLEAN_CONTROLS_SUITE,
+    DEFAULT_ADVERSARIAL_CLEAN_COUNT,
+    DEFAULT_ADVERSARIAL_CLEAN_SEED,
+    generate_adversarial_clean_control_tasks,
+)
 from policystrata.generator import (
     CLEAN_CONTROLS_SUITE,
     DEFAULT_CLEAN_CONTROL_COUNT,
@@ -114,6 +120,12 @@ def load_tasks(
         count = DEFAULT_CLEAN_CONTROL_COUNT if generated_count is None else generated_count
         seed = DEFAULT_CLEAN_CONTROL_SEED if generated_seed is None else generated_seed
         return generate_clean_control_tasks(domain, policy, surfaces, count=count, seed=seed)
+    if suite == ADVERSARIAL_CLEAN_CONTROLS_SUITE:
+        policy = load_policy(domain, base_path)
+        surfaces = load_surfaces(domain, base_path)
+        count = DEFAULT_ADVERSARIAL_CLEAN_COUNT if generated_count is None else generated_count
+        seed = DEFAULT_ADVERSARIAL_CLEAN_SEED if generated_seed is None else generated_seed
+        return generate_adversarial_clean_control_tasks(domain, policy, surfaces, count=count, seed=seed)
 
     raw = load_suite_yaml(domain, suite, base_path)
     defaults = {
@@ -161,6 +173,17 @@ def load_suite_metadata(
             evidence_level="blinded_suite",
             authored_after_detector_freeze=True,
             notes=["clean-control suite for false-positive accounting"],
+        )
+    if suite == ADVERSARIAL_CLEAN_CONTROLS_SUITE:
+        return SuiteMetadata(
+            provenance="secondary_generated",
+            evidence_level="blinded_suite",
+            authored_after_detector_freeze=True,
+            notes=[
+                "adversarial clean-control suite (staged rollout, feature flag, boundary budget, "
+                "service-account ambient authority, legitimately-denied requests) for a larger "
+                "false-positive denominator"
+            ],
         )
 
     raw = load_suite_yaml(domain, suite, base_path)
