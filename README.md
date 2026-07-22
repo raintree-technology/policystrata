@@ -62,8 +62,12 @@ Reproduce the paper-facing artifact run:
 POLICYSTRATA_RUN_ROOT=/tmp/policystrata-final ./scripts/reproduce-final.sh
 ```
 
-The paper reports deterministic artifact-suite coverage: 1720/1720 non-clean injected cases and
-0 false positives on 80 clean controls. This is not a production-recall claim and not an
+The paper's central evidence is the defense-in-depth gap: a layered stack of conventional
+controls (validator, SQL snapshot, database/RLS, final-answer checks) misses 159 of 1720
+injected cross-layer faults that PolicyStrata's responsibility-scoped contracts catch and
+attribute to the first violating surface. The deterministic artifact-suite coverage figures
+(1720/1720 non-clean injected cases, 0 false positives on 80 clean controls) are a consistency
+check over PolicyStrata's own operator taxonomy, not a production-recall claim, and not an
 authorization boundary.
 
 ## Quick Start
