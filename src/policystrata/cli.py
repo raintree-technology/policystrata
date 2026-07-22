@@ -22,6 +22,8 @@ from policystrata.clearance import (
     upload_clearance_payload,
     write_clearance_contract_outputs,
 )
+from policystrata.compound import run_compound_study
+from policystrata.counterfactual import run_counterfactual_study
 from policystrata.demo import run_demo
 from policystrata.doctor import (
     environment_doctor,
@@ -41,6 +43,7 @@ from policystrata.integrations.native import (
     NativeIntegrationConnection,
     native_evidence_runtime_payload,
 )
+from policystrata.minimization import minimization_report
 from policystrata.minimize import minimize_witness_file
 from policystrata.runner import run_suite
 from policystrata.runtime import (
@@ -174,6 +177,14 @@ def build_parser() -> argparse.ArgumentParser:
     minimize_parser = subparsers.add_parser("minimize", help="Minimize a trace or witness JSON file.")
     minimize_parser.add_argument("--witness", type=Path, required=True)
 
+    minimization_parser = subparsers.add_parser(
+        "minimization-report",
+        help="Quantify witness minimization (reduction ratios, 1-minimality) for a run.",
+    )
+    minimization_parser.add_argument("run_dir", type=Path)
+    minimization_parser.add_argument("--domain-path", type=Path, default=None)
+    minimization_parser.add_argument("--out", type=Path, default=None)
+
     summarize_parser = subparsers.add_parser("summarize", help="Summarize a run directory.")
     summarize_parser.add_argument("run_dir", type=Path)
 
@@ -186,6 +197,46 @@ def build_parser() -> argparse.ArgumentParser:
     ablations_parser.add_argument("run_dirs", type=Path, nargs="+")
     ablations_parser.add_argument("--format", choices=["json"], default="json")
     ablations_parser.add_argument("--out", type=Path, default=None)
+
+    compound_parser = subparsers.add_parser(
+        "compound",
+        help="Run the higher-order (compound) mutation study for a domain.",
+        description=(
+            "Compose multiple simultaneous single-surface skews per case and report detection and\n"
+            "first-transition attribution accuracy under composition.\n\n"
+            "Examples:\n"
+            "  policystrata compound --domain support_saas --out runs/compound.json\n"
+            "  policystrata compound --domain finance_saas --orders 2,3 --per-order 40"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    compound_parser.add_argument("--domain", default=BUILTIN_DOMAIN, choices=BUILTIN_DOMAINS)
+    compound_parser.add_argument("--domain-path", type=Path, default=None)
+    compound_parser.add_argument(
+        "--orders",
+        default="2,3",
+        help="Comma-separated compound orders (skews per case). Defaults to 2,3.",
+    )
+    compound_parser.add_argument("--per-order", type=int, default=60)
+    compound_parser.add_argument("--out", type=Path, default=None)
+
+    counterfactual_parser = subparsers.add_parser(
+        "counterfactual",
+        help="Validate first-transition attribution by counterfactual repair.",
+        description=(
+            "Interventionally validate attribution: repair the attributed layer and confirm the\n"
+            "witness disappears (sufficiency); repair another layer and confirm attribution persists\n"
+            "(necessity). Runs over compound cases.\n\n"
+            "Examples:\n"
+            "  policystrata counterfactual --domain support_saas --out runs/counterfactual.json"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    counterfactual_parser.add_argument("--domain", default=BUILTIN_DOMAIN, choices=BUILTIN_DOMAINS)
+    counterfactual_parser.add_argument("--domain-path", type=Path, default=None)
+    counterfactual_parser.add_argument("--orders", default="2,3")
+    counterfactual_parser.add_argument("--per-order", type=int, default=60)
+    counterfactual_parser.add_argument("--out", type=Path, default=None)
 
     export_parser = subparsers.add_parser("export", help="Export a run through an evidence or eval adapter.")
     export_parser.add_argument("run_dir", type=Path)
@@ -450,6 +501,16 @@ def run_command(args: argparse.Namespace) -> int:
         print(json.dumps(minimize_witness_file(args.witness), indent=2, sort_keys=True))
         return 0
 
+    if args.command == "minimization-report":
+        report = minimization_report(args.run_dir, args.domain_path)
+        payload = report.model_dump(mode="json")
+        if args.out is not None:
+            args.out.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            print(json.dumps({"out": str(args.out)}, sort_keys=True))
+        else:
+            print(json.dumps(payload, indent=2, sort_keys=True))
+        return 0
+
     if args.command == "summarize":
         print(summarize_run(args.run_dir).model_dump_json(indent=2))
         return 0
@@ -459,6 +520,32 @@ def run_command(args: argparse.Namespace) -> int:
 
     if args.command == "ablations":
         return write_json_result(evaluate_ablation_runs(args.run_dirs), args.out)
+
+    if args.command == "compound":
+        orders = parse_compound_orders(args.orders)
+        compound = run_compound_study(args.domain, orders, args.per_order, args.domain_path)
+        compound_payload = compound.model_dump(mode="json")
+        if args.out is not None:
+            args.out.write_text(
+                json.dumps(compound_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+            )
+            print(json.dumps({"out": str(args.out)}, sort_keys=True))
+        else:
+            print(json.dumps(compound_payload, indent=2, sort_keys=True))
+        return 0
+
+    if args.command == "counterfactual":
+        orders = parse_compound_orders(args.orders)
+        cf_report = run_counterfactual_study(args.domain, orders, args.per_order, args.domain_path)
+        cf_payload = cf_report.model_dump(mode="json")
+        if args.out is not None:
+            args.out.write_text(
+                json.dumps(cf_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+            )
+            print(json.dumps({"out": str(args.out)}, sort_keys=True))
+        else:
+            print(json.dumps(cf_payload, indent=2, sort_keys=True))
+        return 0
 
     if args.command == "export":
         print(json.dumps(export_run(args.run_dir, args.format, args.out), sort_keys=True))
@@ -743,6 +830,24 @@ def run_command(args: argparse.Namespace) -> int:
         return exit_code
 
     raise ValueError(f"unknown command: {args.command}")
+
+
+def parse_compound_orders(raw: str) -> list[int]:
+    orders: list[int] = []
+    for part in raw.split(","):
+        token = part.strip()
+        if not token:
+            continue
+        try:
+            order = int(token)
+        except ValueError as exc:
+            raise ValueError(f"compound orders must be integers: {raw}") from exc
+        if order < 2:
+            raise ValueError(f"compound order must be at least 2: {order}")
+        orders.append(order)
+    if not orders:
+        raise ValueError("at least one compound order is required")
+    return orders
 
 
 def write_json_result(result: object, out_path: Path | None) -> int:
