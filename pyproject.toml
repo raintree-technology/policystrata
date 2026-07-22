@@ -100,5 +100,5 @@ testpaths = ["tests"]
 pythonpath = ["src"]
 addopts = ["-ra", "--showlocals"]
 markers = [
-    "integration: tests requiring Dockerized PostgreSQL",
+    "integration: tests requiring Dockerized services (PostgreSQL or ClickHouse)",
 ]
