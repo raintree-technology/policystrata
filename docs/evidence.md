@@ -1,5 +1,12 @@
 # Evidence Snapshot
 
+The headline result is the defense-in-depth gap, not the kill count. A layered stack of
+conventional point controls (validator, SQL snapshot, database/RLS, final-answer checks) still
+misses 159 of 1720 injected cross-layer faults (`defense_in_depth_stack`, 0.91 catch rate).
+PolicyStrata's responsibility-scoped contracts catch all 1720 and attribute each to the first
+violating surface. Read the 1720/1720 figure as a consistency check over PolicyStrata's own
+operator taxonomy — 100% by construction — not as a discovery or recall result.
+
 These numbers measure coverage over PolicyStrata's current deterministic mutation operators and
 fixtures. They do not imply recall on unknown production incidents. See
 [`docs/methodology.md`](methodology.md) for definitions and limitations.
@@ -78,11 +85,47 @@ What this does not prove:
 | random_data_generation | 1246/1720 | 0.72 |
 | naive_surface_equality | 573/1720 | 0.33 |
 | defense_in_depth_stack | 1561/1720 | 0.91 |
+| conventional_test_suite | 1579/1720 | 0.92 |
+| property_differential | 899/1720 | 0.52 |
 
 `defense_in_depth_stack` approximates a layered production control stack by taking the union of
 validator-only, SQL-snapshot, database/RLS, and final-answer checks. The remaining 159 misses are
 the clearest paper examples for why cross-layer responsibility contracts and witness localization
 matter beyond stacked point controls.
+
+`conventional_test_suite` is the stronger, deployable comparator the earlier baselines lacked: six
+fixed checks a competent engineer would derive from the contract documents alone (tenant predicate
+present, denied metric/dimension rejected, row limit enforced, release blocked on canonical denial,
+golden metric values), each traced to a spec clause and not tuned against the operator list. It
+catches 1579/1720; its 141 misses are semantic drift on non-golden metrics (70), unsafe releases of
+canonically allowed queries (38), and database-containment failures invisible in released values
+(33) — the faults that need cross-layer responsibility contracts rather than more point assertions.
+`property_differential` is a Cedar-style pairwise differential over surface decisions; it catches
+899/1720 and by construction misses drift where every layer agrees on the allow/deny outcome but the
+pipeline drifts semantically (613 of its misses are compiler-localized semantic drift). Both flag
+0/80 clean controls.
+
+## Extended Studies
+
+These address external-validity and depth gaps beyond the deterministic kill count. Each has its own
+doc and a reproduction script; all are deterministic and need no LLM API key unless noted.
+
+| Study | Headline | Doc |
+| --- | --- | --- |
+| Reconstructed real-fault suite | 19 real public faults (CVEs, RLS incidents) reconstructed and killed; 6 honestly dropped | [incident-reconstruction-results.md](incident-reconstruction-results.md) |
+| Spec-blind mutant suite | 42 spec-authored mutants; detector agrees on 39/42, 3 misses expose a real contract ambiguity | [spec-blind-results.md](spec-blind-results.md) |
+| Brownfield scans (real OSS) | 0 new real bugs across 4 stacks; ~1.4% real-input FP; true-positive demo on cube's own broken fixtures; 5 scanner gaps | [brownfield-results.md](brownfield-results.md) |
+| Counterfactual-repair attribution | attribution is causally validated (sufficiency + necessity), not label-matched; teeth-checked | [counterfactual-repair.md](counterfactual-repair.md) |
+| Higher-order / compound mutants | first-transition attribution is stable under distinct-surface composition | [compound-mutants.md](compound-mutants.md) |
+| Minimization metrics | per-witness reduction ratios, 1-minimality (100% on standard suites, not guaranteed) | [minimization-metrics.md](minimization-metrics.md) |
+| Adversarial clean controls | 0/1000 detector false positives; naive denial-flagging is 285/1000 | [adversarial-clean-controls.md](adversarial-clean-controls.md) |
+| Soundness + completeness | witness ⇒ contract violation (property-tested + exhaustive); per-class completeness | [soundness-completeness.md](soundness-completeness.md) |
+| Scalability + covering arrays | pairwise covering array cuts cases ~90%; flat per-case cost | [scalability.md](scalability.md) |
+| TCB adapter mutation testing | 16 of 18 adapter mutations silently corrupt scan output today | [tcb-analysis.md](tcb-analysis.md) |
+| LLM reachability harness | build-only; manifest-skew changes emitted plans (stub); no model runs yet | [reachability.md](reachability.md) |
+| Real ClickHouse row-policy check | real row-policy containment evidence (verified against ClickHouse 25.6) | [clickhouse.md](clickhouse.md) |
+| Write-action model (v2) | write containment with its own first-transition detector; 48/48 killed, 0 FP | [write-actions.md](write-actions.md) |
+| Benchmark release + difficulty tiers | difficulty tiers from the baseline matrix; freeze/verify + adapters | [benchmark-release.md](benchmark-release.md) |
 
 ## Known Limitations
 
