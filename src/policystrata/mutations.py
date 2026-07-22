@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-from policystrata.models import MutationSpec, WitnessClass
+from collections.abc import Sequence
+from dataclasses import dataclass
+
+from policystrata.detection import SURFACE_ORDER
+from policystrata.models import MutationSpec, SurfaceName, WitnessClass
 
 NO_MUTATION_ID = "none"
 CLEAN_MUTATION = MutationSpec(
@@ -184,3 +188,61 @@ def get_mutation(mutation_id: str) -> MutationSpec:
         return MUTATIONS[mutation_id]
     except KeyError as exc:
         raise ValueError(f"unknown mutation: {mutation_id}") from exc
+
+
+@dataclass(frozen=True)
+class CompoundExpectation:
+    """Expected labels for a task under one or more simultaneous mutations.
+
+    First-transition semantics: the expected localized surface is the earliest
+    affected surface in SURFACE_ORDER, and the expected witness class is that
+    mutation's class. A declared containment layer only holds if the containment
+    layer itself is not among the affected surfaces.
+    """
+
+    specs: tuple[MutationSpec, ...]
+    witness_class: WitnessClass
+    localized_surface: SurfaceName
+    containment_layer: SurfaceName | None
+    affected_surfaces: frozenset[SurfaceName]
+
+
+def surface_position(surface: str) -> int:
+    return SURFACE_ORDER.index(surface)  # type: ignore[arg-type]
+
+
+def order_mutation_specs(specs: Sequence[MutationSpec]) -> tuple[MutationSpec, ...]:
+    return tuple(sorted(specs, key=lambda spec: surface_position(spec.affected_surface)))
+
+
+def compound_expectations(specs: Sequence[MutationSpec]) -> CompoundExpectation:
+    if not specs:
+        raise ValueError("compound expectations require at least one mutation spec")
+    ordered = order_mutation_specs(specs)
+    non_clean = tuple(spec for spec in ordered if spec.witness_class != WitnessClass.CLEAN)
+    if not non_clean:
+        return CompoundExpectation(
+            specs=ordered,
+            witness_class=WitnessClass.CLEAN,
+            localized_surface="release",
+            containment_layer=None,
+            affected_surfaces=frozenset(),
+        )
+    affected = frozenset(spec.affected_surface for spec in non_clean)
+    primary = non_clean[0]
+    containment: SurfaceName | None = None
+    for spec in non_clean:
+        if (
+            spec.requires_db_containment
+            and spec.containment_layer is not None
+            and spec.containment_layer not in affected
+        ):
+            containment = spec.containment_layer
+            break
+    return CompoundExpectation(
+        specs=non_clean,
+        witness_class=primary.witness_class,
+        localized_surface=primary.affected_surface,
+        containment_layer=containment,
+        affected_surfaces=affected,
+    )
