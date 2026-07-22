@@ -1,0 +1,1 @@
+{"id":"clean_cte_scope","principal":"acme_analyst","tenant_ids":["acme"],"source":"tcb_fixture","sql":"with scoped_tickets as (select support_tickets.id as ticket_id from accounts left join support_tickets on support_tickets.account_id = accounts.id where accounts.tenant_id in ('acme')) select count(distinct scoped_tickets.ticket_id) as value from scoped_tickets limit 100"}
