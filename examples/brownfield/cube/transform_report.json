@@ -1,0 +1,22 @@
+{
+  "canonical_row_level_predicate": "orders.status = 'completed'",
+  "fixture_resolutions": {
+    "correct": {
+      "member": "status",
+      "reason": null,
+      "resolved": true
+    },
+    "incorrect_acl": {
+      "member": "{CUBE}.order_users.name",
+      "reason": "Paths aren't allowed in the accessPolicy policy but 'order_users.name' provided as a filter member reference for orders (matches cube's own compiler error in schema.test.ts)",
+      "resolved": false
+    },
+    "nonexist_acl": {
+      "member": "{CUBE}.other.path.created_at",
+      "reason": "orders.other cannot be resolved. There's no such member or cube (matches cube's own compiler error in schema.test.ts)",
+      "resolved": false
+    }
+  },
+  "traces_clean_config": 1,
+  "traces_main_config": 3
+}

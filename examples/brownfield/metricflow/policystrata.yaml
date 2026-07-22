@@ -1,0 +1,18 @@
+version: 1
+domain: brownfield_metricflow
+domain_path: domain
+output: scan-out
+dbt:
+  files:
+    - semantic_models.yml
+sql_traces:
+  required: true
+  files:
+    - traces.jsonl
+fuzz:
+  enabled: true
+  seed: 1729
+  max_cases_per_trace: 8
+gate:
+  fail_on_high_confidence: true
+  required_inputs: [dbt, sql_traces]
