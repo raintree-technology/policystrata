@@ -10,7 +10,7 @@ Clearance auth, private networking, or a specific cloud account.
 FROM node:24-bookworm-slim
 
 WORKDIR /app
-RUN npm install -g @policystrata/agent-trust-gateway@0.1.1
+RUN npm install -g @policystrata/agent-trust-gateway@0.1.2
 
 COPY runtime-manifest.json /app/runtime-manifest.json
 

@@ -103,8 +103,8 @@ ecosystems. If they are released together from one tag, the release notes should
 versions explicitly, for example:
 
 - PyPI: `policystrata==1.0.5`
-- npm runtime: `policystrata@0.1.3`
-- npm gateway: `@policystrata/agent-trust-gateway@0.1.1`
+- npm runtime: `policystrata@0.1.4`
+- npm gateway: `@policystrata/agent-trust-gateway@0.1.2`
 
 If the Node runtime becomes a committed stable SDK at the same maturity level as the scanner, revisit
 whether the npm version should align with the Python package version.
