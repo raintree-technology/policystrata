@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-07-22
+
+- Publish the review-response hardening work from the immutable `v1.1.0`
+  source line after integrating the current protected `main` branch.
+- Keep the Node runtime and Agent Trust Gateway packages unchanged; this is a
+  Python-package release.
+
 ## [1.1.0] - 2026-07-21
 
 Responds to the external review of the artifact. PyPI package only; the npm
