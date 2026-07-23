@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Publish the reviewed Node runtime changes as `policystrata@0.1.4` and the
+  Agent Trust Gateway changes as `@policystrata/agent-trust-gateway@0.1.2`.
+
 ## [1.1.1] - 2026-07-22
 
 - Publish the review-response hardening work from the immutable `v1.1.0`

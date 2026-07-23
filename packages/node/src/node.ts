@@ -4,7 +4,7 @@ import { appendFileSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 
 export type PolicyStrataToolKind = "read" | "write" | "memory" | "external";
-export const POLICYSTRATA_NODE_SDK_VERSION = "0.1.3";
+export const POLICYSTRATA_NODE_SDK_VERSION = "0.1.4";
 
 export interface PolicyStrataRedactionConfig {
   hashIds?: boolean;
