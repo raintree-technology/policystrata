@@ -82,3 +82,16 @@ def test_fixture_emails_use_reserved_example_domains() -> None:
                     findings.append(f"{path}: {match.group(0)}")
 
     assert findings == []
+
+
+def test_publish_workflow_routes_release_artifacts_and_supports_safe_retries() -> None:
+    workflow = Path(".github/workflows/publish.yml").read_text(encoding="utf-8")
+    smoke = Path("scripts/release-smoke.mjs").read_text(encoding="utf-8")
+
+    assert "!contains(github.ref_name, '-npm.')" in workflow
+    assert "github.event_name == 'push' || inputs.publish_pypi" in workflow
+    assert "github.event_name == 'push' || inputs.publish_npm" in workflow
+    assert "github.event_name == 'push' || inputs.publish_gateway_npm" in workflow
+    assert workflow.count("id: npm-version") == 2
+    assert workflow.count("steps.npm-version.outputs.published != 'true'") == 2
+    assert 'POLICYSTRATA_RELEASE_SMOKE_RETRIES || "10"' in smoke
