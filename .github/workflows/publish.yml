@@ -35,6 +35,7 @@ concurrency:
 jobs:
   build-python:
     name: Build Python distribution
+    if: ${{ !contains(github.ref_name, '-npm.') && (github.event_name == 'push' || inputs.publish_pypi) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
 
@@ -113,6 +114,7 @@ jobs:
 
   build-node:
     name: Build Node distribution
+    if: ${{ github.event_name == 'push' || inputs.publish_npm }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
 
@@ -155,6 +157,7 @@ jobs:
 
   build-gateway:
     name: Build Gateway distribution
+    if: ${{ github.event_name == 'push' || inputs.publish_gateway_npm }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
 
@@ -289,15 +292,19 @@ jobs:
         run: mise x node@24.18.0 bun@1.3.11 -- bun pm pack --dry-run
 
       - name: Check Node package version is unpublished
+        id: npm-version
         run: |
           package_name="$(mise x node@24.18.0 bun@1.3.11 -- node -p "require('./packages/node/package.json').name")"
           package_version="$(mise x node@24.18.0 bun@1.3.11 -- node -p "require('./packages/node/package.json').version")"
           if mise x node@24.18.0 bun@1.3.11 -- npm view "${package_name}@${package_version}" version >/dev/null 2>&1; then
-            echo "${package_name}@${package_version} already exists on npm" >&2
-            exit 1
+            echo "${package_name}@${package_version} already exists on npm; skipping publish"
+            echo "published=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Publish Node package to npm
+        if: ${{ steps.npm-version.outputs.published != 'true' }}
         working-directory: packages/node
         run: mise x node@24.18.0 bun@1.3.11 -- npm publish --provenance
 
@@ -342,15 +349,19 @@ jobs:
         run: mise x node@24.18.0 bun@1.3.11 -- bun pm pack --dry-run
 
       - name: Check Gateway package version is unpublished
+        id: npm-version
         run: |
           package_name="$(mise x node@24.18.0 bun@1.3.11 -- node -p "require('./packages/gateway/package.json').name")"
           package_version="$(mise x node@24.18.0 bun@1.3.11 -- node -p "require('./packages/gateway/package.json').version")"
           if mise x node@24.18.0 bun@1.3.11 -- npm view "${package_name}@${package_version}" version >/dev/null 2>&1; then
-            echo "${package_name}@${package_version} already exists on npm" >&2
-            exit 1
+            echo "${package_name}@${package_version} already exists on npm; skipping publish"
+            echo "published=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Publish Gateway package to npm
+        if: ${{ steps.npm-version.outputs.published != 'true' }}
         working-directory: packages/gateway
         run: mise x node@24.18.0 bun@1.3.11 -- npm publish --provenance --access public
 

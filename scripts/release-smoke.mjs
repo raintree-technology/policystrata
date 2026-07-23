@@ -21,6 +21,7 @@ Environment overrides:
   POLICYSTRATA_PYPI_VERSION
   POLICYSTRATA_NPM_VERSION
   POLICYSTRATA_GATEWAY_VERSION
+  POLICYSTRATA_RELEASE_SMOKE_RETRIES
 `);
   process.exit(flags.has("--help") ? 0 : 2);
 }
@@ -340,7 +341,7 @@ function packPackage(directory) {
 }
 
 function retry(operation) {
-  const attempts = Number(process.env.POLICYSTRATA_RELEASE_SMOKE_RETRIES || "6");
+  const attempts = Number(process.env.POLICYSTRATA_RELEASE_SMOKE_RETRIES || "10");
   let lastError;
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     try {
