@@ -73,6 +73,7 @@ runs/
 tmp/
 output/
 .clearance/
+paper/build/
 
 # Generated public-site artifacts
 feed.xml

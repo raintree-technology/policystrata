@@ -1,0 +1,39 @@
+\section{Operator Accounting}
+\label{app:operator-accounting}
+
+The table lists the full v1 read-only mutation registry and its frequency in the 1720 non-clean cases. Counts combine all seeded and generated suites; unequal domain sizes explain why operators are not globally balanced.
+
+\begin{center}
+\scriptsize
+\setlength{\tabcolsep}{2pt}
+\begin{tabular}{@{}L{0.49\columnwidth}llr@{}}
+\toprule
+Operator family & Surface & Class & N \\
+\midrule
+stale metric alias & manifest & over-perm. & 121 \\
+forbidden dimension admitted & grammar & over-perm. & 121 \\
+sensitive column omitted & validator & over-perm. & 121 \\
+dropped tenant predicate & compiler & lowering & 111 \\
+old tenant key & compiler & lowering & 109 \\
+tenant/account id swap & compiler & lowering & 106 \\
+old RLS ownership field & database & over-perm. & 109 \\
+gross/net metric skew & compiler & semantic & 111 \\
+fan-out join & compiler & semantic & 109 \\
+removed distinct & compiler & semantic & 106 \\
+inner join drops rows & compiler & semantic & 104 \\
+fiscal/calendar mismatch & compiler & semantic & 108 \\
+cost expansion ignored & compiler & over-perm. & 104 \\
+app deny absent in DB & database & over-perm. & 106 \\
+missing project filter & database & over-perm. & 25 \\
+read-only assumption broken & database & over-perm. & 23 \\
+small cohort released & release & unsafe & 25 \\
+materialized-view lineage loss & compiler & semantic & 25 \\
+timezone bucket skew & compiler & semantic & 25 \\
+unique/count skew & compiler & semantic & 25 \\
+sampled result released & release & unsafe & 13 \\
+distributed-table policy gap & database & over-perm. & 13 \\
+\midrule
+Total & & & 1720 \\
+\bottomrule
+\end{tabular}
+\end{center}

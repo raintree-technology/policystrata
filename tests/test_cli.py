@@ -24,6 +24,11 @@ def test_cli_demo_runs_built_in_demo(tmp_path, capsys) -> None:
     assert "over_permissive=26" in output
     assert "lowering_violation=10" in output
     assert "semantic_drift=14" in output
+    assert "Worked example: stale tenant-key lowering" in output
+    assert "Version vector: manifest=v7" in output
+    assert "First violated transition: compiler (lowering_violation)" in output
+    assert "Containment: database" in output
+    assert "Release: blocked" in output
     assert (out_dir / "traces.jsonl").exists()
     assert (out_dir / "summary.json").exists()
     assert any((out_dir / "witnesses").glob("*.json"))

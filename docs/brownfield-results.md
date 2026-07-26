@@ -27,8 +27,9 @@ document summarizes and cross-references.
    used, not just in a caveats section.
 3. Ran `uv run policystrata scan --config examples/brownfield/<repo>/policystrata.yaml --out
    runs/brownfield-<repo>` for each target and iterated on the config/transform until it reached a
-   real exit 0 or a legitimate findings-based exit 1 (never a config/parse error). All four
-   currently exit 1 for reasons explained per-target below -- none is a config error.
+   real exit 0 or a legitimate findings-based exit 1 (never a config/parse error). MetricFlow's
+   source-frozen rerun exits 0 with warnings after the custom-domain tenancy fix; the other
+   recorded scans exit 1 for the target-specific reasons below.
 4. Classified every finding as **(a)** a real, newly-discovered potential upstream issue in the
    scanned repo, **(b)** an artifact of the synthesis/transform bridge (not a discovery about the
    target), or **(c)** a PolicyStrata scanner/adapter limitation. See "Scanner gaps" below for the
@@ -41,7 +42,7 @@ the pre-existing shallow clones. No new Python dependencies.
 
 | Repo | dbt/semantic input | SQL traces | Tenancy signal | `scan` exit | Total findings | Gate-failing (HIGH/HIGH+) | Warnings | Class (a) | Class (b) | Class (c) |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| [metricflow](#metricflow) | 12 models / 110 metrics, native+merged | 68, 100% native `check_query` SQL | synthesized (compiler has none) | 1 | 163 | 68 | 95 | 0 | 3 finding-families | 3 finding-families |
+| [metricflow](#metricflow) | 12 models / 110 metrics, native+merged | 68, 100% native `check_query` SQL | synthesized (compiler has none) | 0 | 95 | 0 | 95 | 0 | 3 finding-families | 2 finding-families |
 | [midday](#midday) | none (no semantic layer) | 5, hand-transcribed from cited real TS | native RLS column (`team_id`) | 1 | 2 | 1 | 1 | 0 | 0 | 2 |
 | [WrenAI](#wrenai) | 3 models, native+mapped | 2 (1 native-condition, 1 labeled hypothetical) | mechanically rendered from real MDL RLAC condition | 1 | 11 | 1 | 10 | 0 | 0 | 1 (recurs, see below) |
 | [cube](#cube) *(bonus)* | 1 model, native+mapped | 3 main + 1 clean-config | mechanically rendered from real accessPolicy filter | 1 (both configs) | 2 main / 1 clean | 2 main / 1 clean | 0 | 0 | 0 | 1 (recurs, see below) |
@@ -62,12 +63,12 @@ YAML → PolicyStrata's plural `semantic_models:` list) was implemented and work
 semantic models and 110 metrics merged, native field values throughout. 68 of 266 real
 `tests_metricflow/integration/test_cases/itest_*.yaml` cases were selected as traces (single-metric,
 `SIMPLE_MODEL`-targeted, renderable without reimplementing test-harness-only Jinja macros); every
-trace's `sql` is metricflow's own, real, hand-authored `check_query` text. 68/68 traces authorized
-cleanly against a domain policy auto-derived from the same manifest (108/110 metrics matched with
-zero expression conflict). All 163 findings are explained: 68 are one structural, config-fallback
-issue (not per-trace judgment calls -- see Scanner gaps), 95 are non-gating WARNINGs from
-comparing a synthetic bridging role against the demo manifest's full surface, or from two dbt
-measures that omit `expr:` per metricflow's own implicit-default convention.
+trace's `sql` is metricflow's own, real, hand-authored `check_query` text. The source-frozen rerun
+uses upstream commit `45dce78641bbdd7e182aa57132fc11a23b24dde5`; the transformed input hashes
+are recorded in `benchmarks/external_source/metricflow-freeze.json`. All 68 traces authorize
+against a policy derived from the same manifest. The scan emits 95 non-gating warnings from the
+synthetic bridge role and remaining adapter gaps, including two dbt measures that omit `expr:`
+under MetricFlow's implicit-default convention.
 
 ### midday
 
@@ -135,27 +136,9 @@ fix, metricflow drops from 163 to 95 findings (0 `tenant_scope_missing`, gate fa
 clean config drops to 0 findings, while cube's broken fixtures are still caught (2) and the built-in
 `support_saas` examples are unchanged.
 
-Original report follows.
-
-### 1. Custom-domain tenant-column fallback is misleading (recurs on 3 of 4 targets)
-
-`src/policystrata/compiler.py::tenant_column()` hardcodes a fallback tenant column
-(`"accounts.tenant_id"`) for **any** `domain` string other than the literal built-ins
-`finance_saas`/`analytics_clickhouse` -- including every custom `domain_path` domain built in this
-pass. When `tenancy.canonical_predicates`/`tenant_columns` are left unconfigured (the honest choice
-for a target that has no tenancy concept, or where the intended concept can't be safely declared),
-`tenant_columns_for_scope_check()` silently falls back to that built-in-domain column name instead
-of erroring ("tenancy not configured for this domain") or skipping the check. This produced:
-
-- 68/68 mechanical `tenant_scope_missing` findings on metricflow (a compiler with no tenancy
-  concept at all -- `examples/brownfield/metricflow/README.md`),
-- the one finding in `examples/brownfield/cube/policystrata_clean.yaml`'s scan (a group that is
-  intentionally `allowAll: true` and has no predicate to declare).
-
-Recommended fix: make the fallback for non-built-in domains either raise an explicit
-"tenancy not configured" condition, or omit the tenant-scope check entirely when no tenancy config
-is present, rather than silently reusing an unrelated built-in column name in the failure-reason
-text.
+The original result was 68/68 `tenant_scope_missing` findings on MetricFlow and one on Cube's
+`allowAll` fixture because the scanner substituted `accounts.tenant_id`. Those historical counts
+are retained here only to explain the fix; they are not current evaluation results.
 
 ### 2. Tenancy config is one global column list, no per-table/per-trace override — FIXED
 
@@ -277,7 +260,7 @@ inflation this pass was asked to avoid.
 uv run python examples/brownfield/metricflow/scripts/brownfield-transform-metricflow.py \
   --source <metricflow-clone> --out examples/brownfield/metricflow
 uv run policystrata scan --config examples/brownfield/metricflow/policystrata.yaml \
-  --out runs/brownfield-metricflow   # exit 1
+  --out runs/brownfield-metricflow   # exit 0, gate warn
 
 # midday
 uv run python examples/brownfield/midday/scripts/brownfield-transform-midday.py \

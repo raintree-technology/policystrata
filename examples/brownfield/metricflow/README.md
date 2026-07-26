@@ -1,7 +1,8 @@
 # Brownfield target: dbt-labs/metricflow
 
-Source: shallow clone (`--depth 1`) of `dbt-labs/metricflow` at
-`/private/tmp/claude-501/-Users-mb1-Code-raintree-oss-policystrata/3e286431-07a6-4558-8ba2-1af21b7c3c90/scratchpad/brownfield/metricflow`.
+Source: shallow clone (`--depth 1`) of `dbt-labs/metricflow` at commit
+`45dce78641bbdd7e182aa57132fc11a23b24dde5`. The freeze manifest is
+`benchmarks/external_source/metricflow-freeze.json`.
 Static inspection only; no metricflow code was executed. All content below was produced by
 `scripts/brownfield-transform-metricflow.py` (stdlib + PyYAML only) reading that clone.
 
@@ -15,9 +16,9 @@ uv run policystrata scan --config examples/brownfield/metricflow/policystrata.ya
   --out runs/brownfield-metricflow
 ```
 
-Result: **exit 1**, a legitimate findings-based gate failure (163 findings, gate `fail`), not a
-config error. See classification below for why every trace fails one particular check by
-construction.
+Current result: **exit 0**, with 95 warning-level findings and gate `warn`; no high-confidence
+finding fails the gate. Earlier results in this document predated the custom-domain tenancy fix.
+The frozen rerun is authoritative for the revision and hashes named above.
 
 ## What is native, transformed, and synthesized
 
@@ -57,29 +58,12 @@ construction.
 
 ## Findings, classified
 
-Full scan output: `runs/brownfield-metricflow/`. 163 findings, gate `fail` (exit 1). None of
-these are a real metricflow defect (metricflow is a compiler with no tenancy or authorization
-surface to have a defect in); all fall into the synthesis-artifact or scanner-limitation buckets.
-
-### (c) Scanner limitation -- 68x `tenant_scope_missing` (HIGH/HIGH, gate-failing)
-
-Every one of the 68 traces fails
-`sql_preserves_tenant_scope`/`tenant_columns_for_scope_check`. Cause:
-`src/policystrata/compiler.py::tenant_column()` hardcodes a fallback tenant column
-(`"accounts.tenant_id"`) for **any** `domain` string that is not the literal built-ins
-`finance_saas`/`analytics_clickhouse`, including custom `domain_path` domains with their own
-`policy.yaml`. We left `tenancy.canonical_predicates`/`tenant_columns` unset in
-`policystrata.yaml` because there is no honest tenant column to declare -- metricflow has no
-tenancy concept -- and there is no config knob to say "this domain has no tenancy, skip the
-check." The result: every trace is checked against `accounts.tenant_id`, a column name from
-PolicyStrata's own built-in support_saas fixture domain that has nothing to do with metricflow,
-and the failure-reason text names that irrelevant column, which would be confusing to a real user
-debugging this scan. **This is the reason the gate fails (exit 1) and is a legitimate,
-reproducible finding about the scanner, not about metricflow.** Recommended scanner fix (not
-applied -- out of scope, `src/policystrata/**` is off limits for this task): make the
-custom-domain fallback either error explicitly ("tenancy not configured for domain_path domain")
-or skip the check when no tenancy config is present, instead of silently reusing a built-in-domain
-column name.
+The source-frozen rerun produces 95 warnings, no high-confidence failure, and gate `warn`
+(exit 0). None is a MetricFlow defect: MetricFlow is a compiler with no native PolicyStrata
+principal, tenancy, authorization, or release surface. The former 68
+`tenant_scope_missing` failures disappeared after PolicyStrata stopped applying a built-in tenant
+column to custom domains with no configured tenancy basis. The remaining warnings are adapter or
+synthesis effects listed below.
 
 ### (b) Synthesis artifact -- 15x `missing_policy_dimension` (dbt adapter, WARNING)
 

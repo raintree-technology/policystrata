@@ -20,7 +20,7 @@ suite_metadata:
   authored_after_detector_freeze: false
   notes:
     - "This suite reconstructs 19 of 25 real, citation-backed cross-layer policy faults from"
-    - "scratchpad/real-faults.json onto PolicyStrata's existing 21 mutation operators (see"
+    - "scratchpad/real-faults.json onto PolicyStrata's existing 22 mutation operators (see"
     - "src/policystrata/mutations.py). No new operators were added. Recall reported for this suite"
     - "means 'the detector kills fixtures grounded in real incidents', not production recall over"
     - "unknown faults; see docs/incident-reconstruction-results.md and MAPPING.md for the honest"

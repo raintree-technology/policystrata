@@ -1,0 +1,50 @@
+\appendix
+
+\section{Contract Formalization}
+\label{app:formalization}
+
+The formalization fixes terminology for the implemented contracts rather than providing a soundness theorem for arbitrary data-agent deployments.
+
+Let $p$ be a principal and $c$ be runtime context containing request metadata, session state, and deployment versions. Let $X_i$ be the object language at surface $i$, and let $\gamma_i(x)$ interpret object $x \in X_i$ as the concrete operations, data dependencies, or observations it may induce. Let $A_P(p,a,c)$ mean operation or dependency $a$ is authorized by $P^t_{\mathsf{auth}}$. Let $\mathsf{Expose}_i$, $\mathsf{Accept}_i$, and $\mathsf{Release}$ describe actual implementation behavior. Let $E_i(p,x,c)$ be the declared support envelope for surface $i$, and let $L_i:X_i\rightharpoonup X_{i+1}$ be a partial lowering.
+
+\paragraph{Exposure soundness.}
+\[
+\mathsf{Expose}_i(p,x,c) \Rightarrow \forall a \in \gamma_i(x), A_P(p,a,c)
+\]
+
+\paragraph{Declared completeness.}
+\[
+E_i(p,x,c) \wedge \forall a \in \gamma_i(x), A_P(p,a,c) \Rightarrow \mathsf{Accept}_i(p,x,c)
+\]
+
+\paragraph{Authorization-preserving lowering.}
+\[
+\mathsf{Accept}_i(p,x,c) \wedge L_i(x)=y
+\Rightarrow
+\forall a \in \gamma_{i+1}(y), A_P(p,a,c)
+\]
+
+\paragraph{Semantic translation validation.}
+\[
+\exists D: \mathsf{Obs}(\mathsf{Exec}(L_i(x),D)) \not\approx \mathsf{SpecEval}(x,D)
+\]
+
+\paragraph{Release conformance.}
+\[
+\mathsf{Release}(p,y,\ell,c) \Rightarrow R_P(p,y,\ell,c)
+\]
+
+\paragraph{Checked detector invariant.}
+Let $\mathsf{Fail}_i(T)$ mean that the implemented contract decision for surface $i$ rejects trace $T$, and let $\mathsf{UnauthorizedRelease}(T)$ mean the release decision allows an observation rejected by the canonical policy. The implementation checks
+\[
+\mathsf{Witness}(T)\Rightarrow
+\left(\bigvee_i\mathsf{Fail}_i(T)\right)
+\vee \mathsf{UnauthorizedRelease}(T).
+\]
+This invariant is executable and tested, not proved for arbitrary adapters or implementations.
+
+\paragraph{Why the implementation satisfies the implication.}
+The detector first searches the ordered contract-decision map. If it returns surface $i$, then by construction $\mathsf{Fail}_i(T)$ is true, so the right side holds. If no surface contract fails, the only branch that emits a non-clean witness checks that release is allowed while the canonical decision denies it. Otherwise the detector returns \textsc{clean}. Classification into over-permissive, lowering, semantic, or release subclasses happens only after one of these two guards. This is a proof sketch over the detector control flow, while the property and finite exhaustive tests check that trace construction supplies the premises as expected.
+
+\paragraph{Completeness boundary.}
+The 22 operators cover three lowering violations at the compiler, nine over-permissive faults across manifest, grammar, validator, compiler, and database, eight compiler semantic drifts, and two unsafe releases. Completeness is asserted only for well-formed cases instantiated by these operators. No global converse to the checked invariant is claimed.

@@ -1,0 +1,50 @@
+\documentclass[10pt,twocolumn]{article}
+\input{preamble}
+
+\title{\policystrata: Responsibility-Scoped Testing for Cross-Layer Policy Drift in LLM Data Agents}
+\author{Zachary Roth\\Raintree Technology\\\texttt{zacharyroth@pm.me}}
+\date{June 2026; revised July 2026}
+\hypersetup{
+  pdftitle={PolicyStrata: Responsibility-Scoped Testing for Cross-Layer Policy Drift in LLM Data Agents},
+  pdfauthor={Zachary Roth},
+  pdfsubject={Responsibility-scoped testing for cross-layer policy drift in LLM data agents},
+  pdfkeywords={PolicyStrata, LLM data agents, policy drift, regression testing}
+}
+
+\begin{document}
+\twocolumn[
+\begin{@twocolumnfalse}
+\maketitle
+\vspace{-1.5em}
+\begin{abstract}
+LLM data agents copy policy obligations across a model-visible manifest, grammar, validator, query compiler, database controls, and result-release logic. Each component can be locally correct while a version or semantic mismatch between components exposes the wrong capability, lowers an authorized plan into unauthorized SQL, or releases a disallowed result.
+
+We present \policystrata, a deterministic regression tester for this cross-layer policy drift. A structured policy and surface contract define which obligations each transition must preserve. \policystrata{} replays or generates a principal, semantic query, database state, and surface-version vector; checks the transitions in execution order; and emits a replayable witness for the first violated contract. Its v1 benchmark contains 22 mutation operators over three synthetic analytics domains. The 1720/1720 injected-fault result is a construction-consistency check over that taxonomy, not production recall. More discriminating results are that a specification-derived conventional test suite misses 141/1720 cases, a stacked set of common point controls misses 159/1720, and a spec-blind suite agrees with \policystrata{} on 39/42 cases. Static retargeting to four independently maintained open-source stacks measured one content-level false positive among 74 real-SQL traces and exposed five adapter gaps. A source-frozen MetricFlow run reproduced 68 upstream-authored expected-SQL cases, while a deployment-linked BetterOff pilot bound the adapter to the exact production revision and passed 33 live denial-boundary probes; three authenticated probes remained unavailable. Source-contract replay reproduced three historical BetterOff pre-fix revisions, two mapping to v1 and one outside it. These results establish reproducible fault-model coverage and a concrete retargeting path; they do not establish field recall or independently operated deployment effectiveness.
+\end{abstract}
+\vspace{0.8em}
+\end{@twocolumnfalse}
+]
+
+\input{sections/01-introduction}
+\input{sections/02-related-work}
+\input{sections/03-problem-definition}
+\input{sections/04-system-design}
+\input{sections/05-implementation}
+\input{sections/06-benchmark}
+\input{sections/07-results}
+\input{sections/08-methodology}
+\input{sections/09-availability}
+\input{sections/10-future-work}
+\input{sections/11-threats}
+\input{sections/12-conclusion}
+\input{sections/appendix-contracts}
+\input{sections/appendix-operator-accounting}
+
+\balance
+\begingroup
+\footnotesize
+\bibliographystyle{plainnat}
+\bibliography{references}
+\endgroup
+
+\end{document}

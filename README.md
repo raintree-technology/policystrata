@@ -43,17 +43,19 @@ scaffolding, exit codes, artifact refs, and metadata-boundary checks.
 
 ## Paper And Artifact
 
+- Editable paper source: [`paper/main.tex`](paper/main.tex)
+- Paper editing and publication guide: [`paper/README.md`](paper/README.md)
 - Paper PDF: <https://raintree.technology/papers/PolicyStrata.pdf>
 - Release note: <https://raintree.technology/blog/policystrata-release>
 - GitHub release: <https://github.com/raintree-technology/policystrata/releases/tag/policystrata-paper-2026-06-26>
 - Artifact zip: <https://github.com/raintree-technology/policystrata/releases/download/policystrata-paper-2026-06-26/policystrata-submission-kit-2026-06-26.zip>
 - Website mirror: <https://raintree.technology/artifacts/policystrata/policystrata-submission-kit-2026-06-26.zip>
 
-SHA256:
+Build and check the editable paper:
 
-```text
-9a4da81d78c37fd81e9ab6b36f094756e61e6b88cfcd74dcab51cfdd8e5bbcd9  PolicyStrata.pdf
-961778c1e8affc04f76e27ce7958572d904e69d7701494e0047e4f7bffbc466d  policystrata-submission-kit-2026-06-26.zip
+```bash
+bun run paper:build
+bun run paper:check
 ```
 
 Reproduce the paper-facing artifact run:
@@ -87,7 +89,9 @@ uv run policystrata demo
 ```
 
 The demo runs the built-in `support_saas` fixture, writes traces and minimized witnesses to
-`runs/demo`, and prints the drift classes it found. Use `--out` to choose another output directory:
+`runs/demo`, and then walks one stale-tenant-key case through its version vector, first failed
+contract, distinguishing result, database containment, release decision, and witness path. Use
+`--out` to choose another output directory:
 
 ```bash
 uv run policystrata demo --out runs/demo
@@ -451,6 +455,8 @@ CLI/scanner and does not make `policystrata/runtime` importable to Node.
 - [docs/js-distribution-decision.md](docs/js-distribution-decision.md): JavaScript package
   dry-run/publishing decision.
 - [docs/evidence.md](docs/evidence.md): current evidence snapshot and reproduction commands.
+- [docs/production-pilot.md](docs/production-pilot.md): BetterOff deployment binding, live
+  read-only probe results, data-handling boundary, and remaining authenticated checks.
 - [docs/methodology.md](docs/methodology.md): claims, limitations, mutant definitions, and witness
   minimization.
 - [EVAL_CARD.md](EVAL_CARD.md): benchmark provenance, evidence levels, and eval boundaries.

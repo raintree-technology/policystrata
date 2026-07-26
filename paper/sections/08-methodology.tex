@@ -1,0 +1,15 @@
+\section{Evaluation Protocol}
+
+Every study is deterministic and reports raw counts because the standard suites are enumerated artifacts rather than samples from a defined production distribution. We do not attach confidence intervals to 1720 operator-generated cases.
+
+\paragraph{Scoring.}
+A non-clean case is killed only when the detector emits a non-clean witness. Survived, equivalent, and invalid cases remain in the denominator accounting rather than being discarded. Clean controls are scored separately. Expected class and expected surface are fixture labels; agreement with them is a regression check, not independent validation. Counterfactual repair is used when making the stronger attribution claim.
+
+\paragraph{Information access.}
+All comparators receive the same traces but only the fields implied by their design. The conventional suite reads specification-derived properties and selected golden values. The pairwise differential reads surface decisions but not mutation labels, first-transition labels, or witnesses. Point-control ablations inspect only their named surface. \policystrata{} alone evaluates the declared transition contracts; this asymmetry is the feature being tested and is stated rather than hidden.
+
+\paragraph{Provenance separation.}
+Reports keep five evidence kinds separate: hand-authored synthetic fixtures, operator-generated fixtures, detector-frozen generated fixtures, spec-blind hand-authored fixtures, and public-fault reconstructions. Imported real traces and real-database observations are scanner evidence, not automatically benchmark evidence. A freeze manifest proves source identity, not independence.
+
+\paragraph{Reproducibility.}
+The final script runs the suites, verifies freeze manifests, emits comparator and ablation reports, and records package and Git versions. Individual scripts reproduce the public-fault, spec-blind, counterfactual, minimization, scalability, clean-control, and adapter studies. No reported study needs an LLM API key. The model-reachability harness has not been run with a model and is excluded from all results.

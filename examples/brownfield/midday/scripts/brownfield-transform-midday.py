@@ -42,6 +42,7 @@ def main() -> None:
 
     source_root: Path = args.source.resolve()
     out_root: Path = args.out.resolve()
+    out_root.mkdir(parents=True, exist_ok=True)
     migrations_dir = source_root / "packages/db/migrations"
 
     migration_files = sorted(migrations_dir.glob("*.sql"))

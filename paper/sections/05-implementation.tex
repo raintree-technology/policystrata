@@ -1,0 +1,46 @@
+\section{Retargeting \policystrata}
+
+\policystrata{} is a Python package and command-line tool. The deterministic paper path needs no LLM API key and runs with \texttt{scripts/reproduce-final.sh}. It writes materialized tasks, JSONL traces, summaries, witnesses, comparator results, ablations, and benchmark manifests. Optional PostgreSQL and ClickHouse services exercise database-policy fixtures but are not included in the 1720-case score.
+
+\paragraph{What a new target must provide.}
+Retargeting is a specification and adapter task, not automatic source-code analysis. The minimum domain package contains:
+
+\begin{enumerate}
+  \item a canonical policy mapping real principals or roles to allowed metrics, dimensions, time ranges, row and cost limits, and tenant scopes;
+  \item a surface contract naming the policy-pipeline versions and the obligations each available surface accepts and emits;
+  \item representative semantic queries or imported traces with principal identity, SQL or semantic IR, and release outcome;
+  \item adapters or configuration that connect real names, tenant columns, semantic-model fields, database roles, and release boundaries to those declarations.
+\end{enumerate}
+
+Database-backed checking additionally needs a sanitized schema and seed state, or a read-only connection to a representative fixture. Real-DB assertions can constrain row counts, columns, allowed values, and forbidden values. A target without a semantic model, RLS, or release observer may omit that input, but the resulting report must mark the surface unobserved rather than infer conformance.
+
+\paragraph{Specification effort.}
+The effort depends on how much policy is already machine-readable. A stack with a dbt-style semantic model, explicit tenant columns, structured tool traces, and RLS DDL can transform much of the input mechanically. A stack whose policy lives in prose requires a human to choose a canonical interpretation before testing begins. The tool cannot infer that interpretation without changing the claim from conformance testing to policy discovery. The artifact therefore reports each input as native, mechanically transformed, or synthesized.
+
+The four brownfield targets give a concrete lower bound on this work:
+
+\begin{center}
+\scriptsize
+\setlength{\tabcolsep}{2pt}
+\begin{tabular}{@{}L{0.21\columnwidth}r r L{0.43\columnwidth}@{}}
+\toprule
+Target & Script lines & Traces & Main manual boundary \\
+\midrule
+MetricFlow & 378 & 68 & synthetic identity; no native tenancy \\
+Midday & 57 & 5 & ORM SQL transcribed; no semantic IR \\
+WrenAI & 222 & 2 & one rule mapped; synthetic role and bypass \\
+Cube & 389 & 4 & two missing-filter regressions synthesized \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+``Script lines'' is checked-in transform-script length, not person-hours or an optimized adapter estimate. MetricFlow additionally scans 19 test files and selects 68 of 266 test documents; it skips 43 multi-metric cases, 33 cases outside the chosen model, and 122 macro-dependent cases rather than inventing unsupported IR. Midday concatenates 39 native migrations and transcribes five cited ORM queries. WrenAI maps one required session-property rule. Cube maps one accepted policy and two already-rejected policy fixtures. These measurements show that retargeting is feasible but not push-button: each target requires an explicit decision about what cannot be represented.
+
+\paragraph{Freeze and provenance.}
+\texttt{freeze-benchmark} hashes detector source, generator source, all mutation specifications, policy and surface YAML, suite input, materialized tasks, package version, and Git commit. A run verifies those hashes before producing evidence. This prevents silent post-freeze tuning, but it does not make a generated suite independent. The paper uses ``detector-frozen generated'' rather than ``blinded'' for such cases.
+
+\paragraph{Trusted computing base.}
+Reference interpreters and adapters are trusted. An 18-operator adapter mutation study makes this risk concrete: 13 mutations hide or weaken real findings, three invent findings, one fails loudly, and one leaves the gate result unchanged. Thus 16/18 tested adapter faults silently corrupt scan output. The current mitigations are schema checks, adapter tests, source mapping, provenance hashes, and explicit evidence levels; independent canary traces and cross-checked gate computation remain future hardening.
+
+\paragraph{Artifact support commands.}
+The scanner imports SQL and semantic traces, compares dbt-style semantic metadata, optionally executes read-only database checks, and emits gateable findings. The doctor command inventories which policy, trace, database, prompt/tool, release, and CI inputs are wired. Doctor output is a configuration audit, not proof that the application invokes every control correctly.

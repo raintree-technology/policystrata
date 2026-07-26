@@ -156,28 +156,34 @@ def load_suite_metadata(
             provenance="secondary_generated",
             evidence_level="property_generated",
             notes=[
-                "secondary deterministic generated suite; not blinded unless detector-frozen "
-                "metadata is supplied"
+                "secondary deterministic generated suite; a detector freeze can pin it but "
+                "does not make it blinded"
             ],
         )
     if suite == HELDOUT_V1_SUITE:
         return SuiteMetadata(
             provenance="secondary_generated",
-            evidence_level="blinded_suite",
+            evidence_level="detector_frozen_generated",
             authored_after_detector_freeze=True,
-            notes=["deterministic held-out v1 suite generated after detector freeze"],
+            notes=[
+                "deterministic held-out v1 suite generated after detector freeze; "
+                "not independently authored"
+            ],
         )
     if suite == CLEAN_CONTROLS_SUITE:
         return SuiteMetadata(
             provenance="secondary_generated",
-            evidence_level="blinded_suite",
+            evidence_level="detector_frozen_generated",
             authored_after_detector_freeze=True,
-            notes=["clean-control suite for false-positive accounting"],
+            notes=[
+                "deterministic clean-control suite for false-positive accounting; "
+                "not independently authored"
+            ],
         )
     if suite == ADVERSARIAL_CLEAN_CONTROLS_SUITE:
         return SuiteMetadata(
             provenance="secondary_generated",
-            evidence_level="blinded_suite",
+            evidence_level="detector_frozen_generated",
             authored_after_detector_freeze=True,
             notes=[
                 "adversarial clean-control suite (staged rollout, feature flag, boundary budget, "

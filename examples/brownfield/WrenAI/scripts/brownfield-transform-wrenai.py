@@ -182,6 +182,8 @@ def main() -> None:
 
     source_root: Path = args.source.resolve()
     out_root: Path = args.out.resolve()
+    out_root.mkdir(parents=True, exist_ok=True)
+    (out_root / "domain").mkdir(parents=True, exist_ok=True)
     mdl = load_mdl(source_root / MDL_PATH)
 
     rule = find_rule(mdl, TARGET_MODEL, RULE_NAME)

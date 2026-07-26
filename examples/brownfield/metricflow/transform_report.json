@@ -4,6 +4,7 @@
   "metrics_in_policy": 110,
   "metrics_merged": 110,
   "semantic_models_merged": 12,
+  "source_revision": "45dce78641bbdd7e182aa57132fc11a23b24dde5",
   "traces_selected": 68,
   "traces_skipped": {
     "multi_metric_ir_unsupported": 43,

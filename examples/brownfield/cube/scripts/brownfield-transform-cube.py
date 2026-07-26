@@ -287,6 +287,8 @@ def main() -> None:
 
     source_root: Path = args.source.resolve()
     out_root: Path = args.out.resolve()
+    out_root.mkdir(parents=True, exist_ok=True)
+    (out_root / "domain").mkdir(parents=True, exist_ok=True)
     fixtures_dir = source_root / FIXTURE_DIR
 
     cubes = {key: load_cube(fixtures_dir / name) for key, name in FIXTURE_FILES.items()}

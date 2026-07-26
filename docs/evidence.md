@@ -51,18 +51,18 @@ What this does not prove:
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | support_seeded | 50 | 50 | 0 | 0 | 0 | 0 | 0 | 3138 | deterministic_fixture | hand_authored | no |
 | support_generated | 500 | 500 | 0 | 0 | 0 | 0 | 0 | 3227 | property_generated | generated | yes |
-| support_heldout_v1 | 500 | 500 | 0 | 0 | 0 | 0 | 0 | 3227 | blinded_suite | secondary_generated | yes |
+| support_heldout_v1 | 500 | 500 | 0 | 0 | 0 | 0 | 0 | 3227 | detector_frozen_generated | secondary_generated | yes |
 | finance_seeded | 20 | 20 | 0 | 0 | 0 | 0 | 0 | 3253 | deterministic_fixture | hand_authored | no |
-| finance_heldout_v1 | 250 | 250 | 0 | 0 | 0 | 0 | 0 | 3336 | blinded_suite | secondary_generated | yes |
+| finance_heldout_v1 | 250 | 250 | 0 | 0 | 0 | 0 | 0 | 3336 | detector_frozen_generated | secondary_generated | yes |
 | analytics_clickhouse_seeded | 100 | 100 | 0 | 0 | 0 | 0 | 0 | 3427 | deterministic_fixture | hand_authored | no |
 | analytics_clickhouse_generated | 300 | 300 | 0 | 0 | 0 | 0 | 0 | 3423 | property_generated | generated | yes |
-| clean_controls | 80 | 0 | 0 | 0 | 0 | 80 | 0 | 0 | blinded_suite | secondary_generated | yes |
+| clean_controls | 80 | 0 | 0 | 0 | 0 | 80 | 0 | 0 | detector_frozen_generated | secondary_generated | yes |
 
 ## Evidence Provenance
 
 | Evidence level | Suites | Mutants |
 | --- | --- | --- |
-| blinded_suite | 3 | 830 |
+| detector_frozen_generated | 3 | 830 |
 | deterministic_fixture | 3 | 170 |
 | property_generated | 2 | 800 |
 
@@ -115,6 +115,9 @@ doc and a reproduction script; all are deterministic and need no LLM API key unl
 | Reconstructed real-fault suite | 19 real public faults (CVEs, RLS incidents) reconstructed and killed; 6 honestly dropped | [incident-reconstruction-results.md](incident-reconstruction-results.md) |
 | Spec-blind mutant suite | 42 spec-authored mutants; detector agrees on 39/42, 3 misses expose a real contract ambiguity | [spec-blind-results.md](spec-blind-results.md) |
 | Brownfield scans (real OSS) | 0 new real bugs across 4 stacks; ~1.4% real-input FP; true-positive demo on cube's own broken fixtures; 5 scanner gaps | [brownfield-results.md](brownfield-results.md) |
+| Source-frozen MetricFlow | 68 upstream-authored expected-SQL cases reproduced byte-for-byte at an exact Git object; Raintree-authored bridge leaves 68 fuzz mutations surviving | [brownfield-results.md](brownfield-results.md) |
+| BetterOff production pilot | exact deployed revision; 33/36 live read-only probes passed, 3 authenticated skips; no customer reads or production mutations | [production-pilot.md](production-pilot.md) |
+| BetterOff historical replay | 3/3 exact pre/post-fix source contracts reproduced; 2 map to v1 and 1 is outside the taxonomy | [`studies/betteroff-historical-replay.json`](../studies/betteroff-historical-replay.json) |
 | Counterfactual-repair attribution | attribution is causally validated (sufficiency + necessity), not label-matched; teeth-checked | [counterfactual-repair.md](counterfactual-repair.md) |
 | Higher-order / compound mutants | first-transition attribution is stable under distinct-surface composition | [compound-mutants.md](compound-mutants.md) |
 | Minimization metrics | per-witness reduction ratios, 1-minimality (100% on standard suites, not guaranteed) | [minimization-metrics.md](minimization-metrics.md) |
@@ -138,6 +141,11 @@ doc and a reproduction script; all are deterministic and need no LLM API key unl
 - The current witness minimizer is a bounded semantic-IR replay reducer, not a search-based
   delta-debugging reducer.
 - Database effects are simulated in deterministic benchmark runs.
+- The production pilot verifies deployment identity and live denial boundaries, not authenticated
+  cross-tenant behavior; three probes need an isolated smoke principal.
+- MetricFlow cases are upstream-authored, but the adapter and study operation are not external or
+  PolicyStrata-blind.
+- Historical replay verifies source-contract changes without executing the vulnerable services.
 
 ## Optional Real PostgreSQL RLS Check
 

@@ -43,7 +43,7 @@ def main(argv: list[str] | None = None) -> int:
             "principal": [f"p{i}" for i in range(8)],
             "role": [f"r{i}" for i in range(4)],
             "schema_object": [f"s{i}" for i in range(8)],
-            "operator": [f"op{i}" for i in range(21)],
+            "operator": [f"op{i}" for i in range(22)],
         },
         strength=2,
     )

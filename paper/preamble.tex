@@ -1,0 +1,59 @@
+\usepackage[letterpaper,margin=1in]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[protrusion=true,expansion=false]{microtype}
+\usepackage{xcolor}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{array}
+\usepackage{balance}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage[pdfencoding=pdfdoc]{hyperref}
+\usepackage[numbers,sort&compress]{natbib}
+
+\definecolor{linkblue}{RGB}{0,42,120}
+\hypersetup{
+  colorlinks=true,
+  linkcolor=linkblue,
+  citecolor=linkblue,
+  urlcolor=linkblue
+}
+
+\AtBeginDocument{\fontsize{9.55pt}{10.95pt}\selectfont}
+\newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
+\geometry{letterpaper,top=0.72in,bottom=0.82in,left=0.7in,right=0.7in}
+\setlength{\columnsep}{0.24in}
+\setlength{\parskip}{1.2pt}
+\setlength{\parindent}{1em}
+\setlength{\abovedisplayskip}{5pt plus 1pt minus 1pt}
+\setlength{\belowdisplayskip}{5pt plus 1pt minus 1pt}
+\setlength{\abovedisplayshortskip}{3pt plus 1pt minus 1pt}
+\setlength{\belowdisplayshortskip}{4pt plus 1pt minus 1pt}
+\setlength{\tabcolsep}{4pt}
+\renewcommand{\arraystretch}{1.06}
+\setlist[itemize]{leftmargin=1.15em,itemsep=1pt,topsep=2.5pt,parsep=0pt,partopsep=0pt}
+\setlist[enumerate]{leftmargin=1.35em,itemsep=1pt,topsep=2.5pt,parsep=0pt,partopsep=0pt}
+\newlist{facts}{description}{1}
+\setlist[facts]{
+  style=nextline,
+  leftmargin=0pt,
+  labelwidth=0pt,
+  labelsep=0pt,
+  font=\normalfont\bfseries,
+  itemsep=1.5pt,
+  topsep=2pt,
+  parsep=0pt,
+  partopsep=0pt
+}
+\setlength{\emergencystretch}{2em}
+\clubpenalty=10000
+\widowpenalty=10000
+\displaywidowpenalty=10000
+\renewcommand{\bibfont}{\footnotesize}
+\setlength{\bibsep}{1pt plus 0.2ex}
+\raggedbottom
+
+\newcommand{\policystrata}{\mbox{\textsc{PolicyStrata}}}
+\newcommand{\bench}{\textsc{\mbox{DataPolicy}\allowbreak\mbox{DriftBench}}}

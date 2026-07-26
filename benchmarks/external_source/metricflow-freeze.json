@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "suite_id": "metricflow-upstream-expected-sql-2026-07-26",
+  "frozen_at": "2026-07-26T22:43:00Z",
+  "upstream": {
+    "repository": "https://github.com/dbt-labs/metricflow",
+    "revision": "45dce78641bbdd7e182aa57132fc11a23b24dde5",
+    "commit_time": "2026-07-21T11:51:36-05:00"
+  },
+  "authorship": {
+    "external_fields": [
+      "integration-test case identifiers",
+      "requested metrics",
+      "requested group-bys",
+      "hand-authored expected SQL"
+    ],
+    "policystrata_adapter_fields": [
+      "principal",
+      "tenant_ids",
+      "time_range",
+      "grain",
+      "limit",
+      "policy permissions"
+    ],
+    "operated_by_external_party": false,
+    "claim": "externally authored source cases with a Raintree-authored adapter"
+  },
+  "selection": {
+    "files_scanned": 19,
+    "documents_seen": 266,
+    "cases_selected": 68,
+    "skipped_multi_metric": 43,
+    "skipped_other_manifest": 33,
+    "skipped_macro_dependent": 122,
+    "skipped_unusable_sql": 0
+  },
+  "frozen_inputs_sha256": {
+    "examples/brownfield/metricflow/traces.jsonl": "077e26bdf6664b93c875fb93f6a7e7fa20dc58fd5b64ba2b9bac26ea8d8fda57",
+    "examples/brownfield/metricflow/semantic_models.yml": "c94380d6708a28f69cd406683dfa01f2debaf6b0e2898670cf5e7353294faaba",
+    "examples/brownfield/metricflow/domain/policy.yaml": "16a4f101919c9c78d3c4c9150f24a4d4f74a9fc41c9a752c5d79050fba161b1e"
+  },
+  "post_freeze_scan": {
+    "policystrata_version": "1.1.1",
+    "cases_scanned": 68,
+    "total_findings": 95,
+    "high_confidence_failures": 0,
+    "warnings": 95,
+    "gate": "warn",
+    "mutants": {
+      "killed": 68,
+      "survived": 68,
+      "equivalent": 340
+    },
+    "summary_sha256": "3ef3ae6d4053e4721d934784cf77cb18c2d7987dd1bb62a911cabf7415b4fe14"
+  },
+  "claim_boundary": [
+    "The upstream maintainers authored the selected expected SQL, but did not operate this study.",
+    "MetricFlow has no native PolicyStrata principal, role, tenancy, or release model.",
+    "The 95 warnings expose adapter and fuzz-policy mismatches; they are not MetricFlow defects.",
+    "This suite measures behavior on independently authored compiler cases, not deployed-system recall."
+  ]
+}

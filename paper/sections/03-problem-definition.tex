@@ -1,0 +1,88 @@
+\section{Model and Guarantee Boundary}
+
+Let a data-agent pipeline have runtime objects:
+
+\[
+X_0 \to X_1 \to X_2 \to X_3 \to X_4
+\]
+
+The representations may correspond to a model-visible request, a typed semantic plan, a validated executable plan, a SQL query and execution context, and a released analytical result. The surfaces that handle those objects are related but not interchangeable:
+
+\begin{center}
+\vspace{-0.4em}
+\footnotesize
+\renewcommand{\arraystretch}{0.92}
+\begin{tabular}{@{}L{0.92\columnwidth}@{}}
+\toprule
+Request or latent intent \\
+$\downarrow$ \\
+\textbf{Manifest or grammar}: expose only authorized capabilities \\
+$\downarrow$ \\
+\textbf{Semantic-plan validator}: accept supported authorized plans and reject unauthorized plans \\
+$\downarrow$ \\
+\textbf{Compiler or lowering}: preserve tenant, purpose, policy version, lineage, and semantics \\
+$\downarrow$ \\
+\textbf{Database policy and RLS}: contain unauthorized executable operations \\
+$\downarrow$ \\
+\textbf{Release policy}: release only allowed result-lineage pairs \\
+\bottomrule
+\end{tabular}
+\vspace{-0.7em}
+\end{center}
+
+The surface-specific contracts used by \policystrata{} are summarized in Table 1. The formal definitions appear in Appendix~\ref{app:formalization}.
+
+\begin{center}
+\begin{minipage}{\columnwidth}
+\centering
+\footnotesize
+\renewcommand{\arraystretch}{0.96}
+\textbf{Table 1: Policy-bearing surfaces and their responsibility-scoped obligations.}\\[2pt]
+\begin{tabular}{@{}L{0.30\columnwidth}L{0.60\columnwidth}@{}}
+\toprule
+Surface & Responsibility \\
+\midrule
+Manifest or grammar & Do not expose capabilities whose reachable operations are unauthorized; underexposure may be intentional. \\
+Validator & Accept authorized objects inside the declared support envelope and reject unauthorized objects. \\
+Compiler & Preserve principal, tenant, purpose, policy version, lineage, and business semantics during lowering. \\
+Database policy & Contain unauthorized executable operations under the runtime database role. \\
+Release policy & Release only result-lineage pairs allowed to leave the trusted boundary. \\
+\bottomrule
+\end{tabular}
+\end{minipage}
+\end{center}
+
+A grammar is a language recognizer. A validator is a decision procedure. A compiler is a partial lowering function. RLS is an execution-time reference monitor. A manifest is a projection shown to the model. Treating these as one kind of object obscures the bugs we want to find.
+
+At version $t$, the canonical policy separates authorization, semantic, and release specifications: $P^t=(P_{\mathsf{auth}}^t,P_{\mathsf{sem}}^t,P_{\mathsf{rel}}^t)$. The authorization specification defines who may perform operations over rows, columns, metrics, tenants, and purposes. The semantic specification defines the meanings of metrics, dimensions, aliases, grains, joins, filters, and time windows. The release specification defines whether a result and its lineage may leave a trusted boundary. These are intentionally separate: a correct RBAC decision cannot prove that ``net revenue'' used the right denominator, and a semantically correct aggregate may still be unsafe to disclose.
+
+\paragraph{Exposure soundness.}
+A model-visible manifest or grammar is exposure-sound if every operation reachable through an exposed capability is authorized for the principal and context. This does not require every authorized capability to be exposed.
+
+\paragraph{Declared completeness.}
+Over-restrictive behavior is a defect only inside the advertised support envelope. This avoids treating intentional underexposure, feature flags, stricter release suppression, or unsupported-but-authorized requests as bugs.
+
+\paragraph{Authorization-preserving lowering.}
+Lowering must also preserve security-relevant context: principal, tenant, purpose, jurisdiction, policy version, release boundary, and time semantics cannot be silently dropped. This property catches compilers that accept a valid plan but emit SQL that reads the wrong tenant, expands a metric into forbidden columns, or uses stale identity keys.
+
+\paragraph{Semantic translation validation.}
+\policystrata{} searches for admissible database states where the lowered query and the reference semantic plan produce different observations. The comparison must define bag versus set semantics, ordering, floating-point tolerance, NULL and three-valued logic, errors, timestamp and timezone behavior, and nondeterministic functions. Testing finitely many generated states finds distinguishing witnesses; it does not prove general SQL equivalence unless paired with a verifier such as bounded SQL-equivalence checking \citep{verieql,spotit}. Semantic equality is not sufficient for authorization: two queries can return the same visible result while one scans forbidden rows or columns. \policystrata{} therefore checks both denotational behavior and dependency or lineage conformance.
+
+\paragraph{Release conformance.}
+For v1, release is stateless and single-query: a result and its lineage may leave a boundary only if the release policy permits that pair for the principal and context. A release boundary may be the human user, the LLM context, an external model provider, a log, a cache, or another tool. Raw unauthorized rows entering an untrusted model context can be a disclosure even if the final user-facing answer is suppressed.
+
+\paragraph{Witness classes.}
+\policystrata{} reports over-permissive exposure, over-restrictive rejection, lowering violation, semantic drift, and unsafe release. The v1 mutation registry instantiates four of these classes; over-restrictive behavior is supported by the detector but absent from the 22-operator generated benchmark.
+
+\paragraph{Drift witness.}
+A drift witness records the principal, request, semantic IR, version vector, lowered SQL, observed database result, release decision, surface responsibilities, contract decisions, first violated transition, and explanatory reasons. The current emitted witness does not reduce arbitrary source code, policy clauses, database rows, or SQL structure. Its bounded reducer only removes semantic-IR dimensions and filters or resets a non-default limit, replaying after each edit to preserve witness class, localized surface, containment layer, release decision, and relevant semantic or database evidence.
+
+\paragraph{Divergence, drift, and version skew.}
+A static mismatch present from initial deployment is policy divergence. Update-induced drift exists when the pipeline satisfied expected contracts before an update but fails afterward. A version vector is simply the ordered version identifier for each of the six surfaces. It lets a test reproduce partial rollouts and stale caches instead of recording only one application version. \policystrata{} can detect divergence and skew only when the canonical specification or another independent oracle disagrees with the implementation. It cannot detect a common-mode error where every surface faithfully implements a bad canonical policy.
+
+\paragraph{Contract-relative soundness.}
+For an emitted trace $T$, let $\mathsf{Witness}(T)$ mean the detector reports a non-clean class and let $\mathsf{Violation}(T)$ mean at least one modeled surface contract fails or an unauthorized result is released. The checked invariant is
+\[
+\mathsf{Witness}(T)\Rightarrow\mathsf{Violation}(T).
+\]
+The implementation tests this property with 400 property-generated examples and an exhaustive sweep of applicable operator/domain combinations over 25 seeds. No counterexample was found. This is evidence that the detector does not invent a witness relative to its own contracts and simulator. It is not a mechanized proof, does not validate the canonical policy or adapters, and does not imply the converse for faults outside the 22 operators.

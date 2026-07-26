@@ -1,6 +1,6 @@
 import pytest
 
-from policystrata.domain import copy_domain, load_surface_config, load_tasks
+from policystrata.domain import copy_domain, load_suite_metadata, load_surface_config, load_tasks
 from policystrata.generator import MAX_GENERATED_COUNT
 from policystrata.models import MAX_SAFE_IDENTIFIER_LENGTH
 from policystrata.mutations import MUTATIONS
@@ -41,6 +41,14 @@ def test_generated_suite_is_seeded_and_policy_driven() -> None:
     assert [task.id for task in first] == [task.id for task in second]
     assert {task.mutation for task in first}.issubset(set(MUTATIONS))
     assert all(task.id.endswith(tuple(f"{index:04d}" for index in range(1, 13))) for task in first)
+
+
+@pytest.mark.parametrize("suite", ["heldout_v1", "clean_controls", "adversarial_clean_controls"])
+def test_detector_frozen_generated_suites_are_not_labeled_blinded(suite: str) -> None:
+    metadata = load_suite_metadata("support_saas", suite)
+
+    assert metadata.evidence_level == "detector_frozen_generated"
+    assert metadata.provenance == "secondary_generated"
 
 
 @pytest.mark.parametrize("count", [0, -1, MAX_GENERATED_COUNT + 1])

@@ -2,7 +2,7 @@
 
 Source ledger: `real-faults.json` (25 verified, citation-backed cross-layer policy faults; see the
 external review). This directory reconstructs 19 of those 25 as deterministic PolicyStrata tasks
-in `tasks/reconstructed.yaml`, mapped onto PolicyStrata's existing 21 mutation operators in
+in `tasks/reconstructed.yaml`, mapped onto PolicyStrata's existing 22 mutation operators in
 `src/policystrata/mutations.py`. No new operator was added. 6 faults were not reconstructed; see
 "Dropped faults" below.
 
@@ -46,7 +46,7 @@ claim" below.
 
 | Fault ID | Reason not reconstructed |
 |---|---|
-| clickhouse-issue-12373-first-policy-hides-all | The fault's direction is over-restrictive: creating a permissive policy for one user causes every *other* unpolicied user to see zero rows, not more rows. PolicyStrata's 21 operators are all `over_permissive`, `lowering_violation`, `semantic_drift`, or `unsafe_release` -- none produce an `over_restrictive` witness. Forcing this onto a permissive-direction operator would invert what the incident actually did, which the task instructions explicitly rule out. |
+| clickhouse-issue-12373-first-policy-hides-all | The fault's direction is over-restrictive: creating a permissive policy for one user causes every *other* unpolicied user to see zero rows, not more rows. PolicyStrata's 22 operators are all `over_permissive`, `lowering_violation`, `semantic_drift`, or `unsafe_release` -- none produce an `over_restrictive` witness. Forcing this onto a permissive-direction operator would invert what the incident actually did, which the task instructions explicitly rule out. |
 | dbt-core-issue-6238-incremental-revokes-grants | Same reason as above: the documented direction is under-grant (an incremental run leaves narrower privileges than the manifest/DEFAULT PRIVILEGES config intends), which is over-restrictive from the querying principal's perspective, not a leak. No under-grant/over-restrictive operator exists in the taxonomy. (The source itself notes the inverse, over-granting, pattern is also possible, but that is not the documented incident.) |
 | vanna-cve-2024-5565-text2sql-rce | The fault is arbitrary Python code execution via `exec()` on LLM-generated Plotly code, triggered by prompt injection. It has no row/column-visibility shape at all -- there is no query whose result set is over- or under-exposed. PolicyStrata's simulator models metric/dimension/tenant authorization and compiled-SQL predicate correctness, not arbitrary code execution; nothing in the operator taxonomy represents RCE. |
 | langchain-cve-2023-36189-sqldatabasechain | The fault is unchecked execution of LLM-generated SQL, demonstrated with a destructive statement ("Drop Employee table"). This is an integrity/availability fault (data/schema destruction), not a row-visibility fault; no operator represents a compiled statement's type changing from a scoped SELECT to an arbitrary/destructive statement. |

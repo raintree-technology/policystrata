@@ -1,0 +1,80 @@
+\section{Evaluation Results}
+
+We organize the evaluation by the question each evidence source can answer. Deterministic suites measure fault-model coverage; spec-blind, external-source, and historical-revision suites probe taxonomy dependence; brownfield and deployment-linked checks measure retargeting behavior; intervention and adapter studies test diagnostic assumptions.
+
+\paragraph{RQ1: Does the checker cover its declared fault model?}
+All 1720 non-clean cases emit a witness, and 80 no-drift controls emit none. The result includes 170 hand-authored cases and 1550 generated cases. Because expected behavior and generated cases share the mutation registry, 1720/1720 is a regression invariant over the implementation, not an estimate of field recall.
+
+\begin{center}
+\scriptsize
+\setlength{\tabcolsep}{2pt}
+\begin{tabular}{@{}L{0.38\columnwidth}rrrr@{}}
+\toprule
+Suite group & N & Killed & Surv. & FP \\
+\midrule
+support: seeded/generated/frozen & 1050 & 1050 & 0 & -- \\
+finance: seeded/frozen & 270 & 270 & 0 & -- \\
+analytics: seeded/generated & 400 & 400 & 0 & -- \\
+clean controls & 80 & -- & -- & 0 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\paragraph{RQ2: What do transition contracts catch?}
+We retain simple point checks as diagnostic ablations, but do not present them as competitors. The stronger comparison is a conventional specification-derived test suite with six checks: tenant predicate presence, rejected forbidden metric, rejected forbidden dimension, row-limit enforcement, blocked release after canonical denial, and golden values for named headline metrics. It is implemented without access to the mutation list. A second comparator performs pairwise differential checks over adjacent surface decisions, following the model-versus-implementation testing pattern used by authorization engines.
+
+\begin{center}
+\small
+\begin{tabular}{@{}L{0.58\columnwidth}rr@{}}
+\toprule
+Checker & Caught & Missed \\
+\midrule
+\policystrata{} responsibility contracts & 1720 & 0 \\
+Conventional spec-derived tests & 1579 & 141 \\
+Layered point-control stack & 1561 & 159 \\
+Pairwise surface differential & 899 & 821 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The conventional suite's 141 misses comprise 70 semantic drifts on metrics without golden values, 38 unsafe releases of canonically allowed queries, and 33 containment failures invisible in released values. The pairwise differential misses cases where allow/deny decisions agree while compiler semantics drift; 613 of its misses are compiler-localized semantic drift. All three comparators report 0/80 false positives on the standard clean controls. These results show an observability gap under the benchmark model, not superiority to Margrave, VeriEQL, or a production policy engine, which answer different questions and were not reimplemented.
+
+\paragraph{RQ3: Does non-generator evidence expose misses?}
+Yes. A spec-blind pass hand-authored three cases for each of 14 support-domain operators after reading the contract and operator descriptions but not detector, simulator, or generator source. The detector killed 39/42. All three misses target the same cost-expansion operator: the public contract lists component costs and a maximum, but does not define their composition, so the author could not construct a reliably over-budget case. Surface attribution matched 42/42, while six predeclared containment guesses were also wrong. This exercise was performed by a non-independent author in the same development environment and is only a proxy for external authorship.
+
+A separate source ledger screened 25 cited public faults from PostgreSQL, Supabase, ClickHouse, Cube, Looker, dbt/MetricFlow, Metabase, Superset, Hasura, and LangChain. Nineteen were mapped to 12 existing operators and all 19 fixtures were killed; six were dropped because their direction or mechanism was outside the model. Exact Git-object replay over three historical BetterOff fixes also verified that the relevant source contract was absent before and present after each fix. Two missing-RLS revisions map to \texttt{app\_deny\_missing\_db\_policy}; an export-audit omission is reproducible but outside v1. This replays historical source states, not running vulnerable services, and does not show prevention.
+
+\begin{center}
+\scriptsize
+\setlength{\tabcolsep}{2pt}
+\begin{tabular}{@{}L{0.25\columnwidth}rL{0.28\columnwidth}L{0.31\columnwidth}@{}}
+\toprule
+Evidence & N & Independence & What it supports \\
+\midrule
+Generated mutants & 1550 & shared generator/taxonomy & regression coverage only \\
+Seeded mutants & 170 & author-written & named examples only \\
+Spec-blind & 42 & detector source hidden; same author & contract clarity and misses \\
+Public-fault map & 25/19 & external reports; mapped model & taxonomy grounding \\
+Brownfield SQL & 74 & external repositories & adapter behavior and precision cases \\
+MetricFlow freeze & 68 & upstream tests; local adapter & source-case reproducibility and adapter limits \\
+Historical revisions & 3/3 & exact BetterOff Git objects & source-contract reproduction \\
+Production HTTP & 33/36 & exact deployed revision & live public and denial boundaries \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+No row in this table is an independently operated production study. The 68 MetricFlow rows are the frozen subset of the 74 brownfield traces, not an additional denominator. The table prevents calling upstream-authored cases an externally operated blind suite, treating historical source probes as vulnerable-service execution, or treating denial probes as field recall.
+
+\paragraph{RQ4: Can the scanner be retargeted?}
+Static scans targeted MetricFlow, Midday, WrenAI, and Cube. Inputs were labeled native, mechanically transformed, or synthesized. Across 74 traces carrying real SQL content, the initial pass produced one content-level false positive (1.4\%) and no newly discovered upstream defect. It did catch Cube's two already-known broken access-policy fixtures while leaving the valid fixture clean. A fresh MetricFlow checkout at Git object \texttt{45dce78641bb} reproduced all 68 transformed traces byte-for-byte. Its upstream-authored requests and expected SQL are more independent than generated cases, but the policy bridge remains author-written; 68 fuzz mutations survived because the synthetic bridge role permits every dimension.
+
+\paragraph{RQ5: What does a deployment-linked pilot establish?}
+Vercel reported BetterOff production deployment \texttt{dpl\_5MQsJfsc} ready at Git object \texttt{3663f1e475eb}; the primary checkout and adapter matched that revision. Thirty-three of 36 read-only HTTP probes passed and none failed. They cover health, authentication metadata, unauthenticated app/API/export denial, internal-route denial, invalid-webhook rejection, and public pages. Three authenticated reads were skipped because no isolated production session or API token exists; valid webhook probes were excluded because they can enqueue work. On the same revision, doctor found 33 tools, three roles, six runtime events, and no partial wiring; six SQL traces plus four database checks passed against disposable synthetic PostgreSQL. No customer row was read and no production state was mutated. Thus the pilot establishes deployment identity, adapter applicability, and live denial boundaries---not authenticated cross-tenant behavior, customer-data safety, or effectiveness on unknown faults.
+
+\paragraph{RQ6: Are attributions causal?}
+Counterfactual repair was evaluated on 120 compound cases per domain. In all 360 cases, repairing the attributed surface removed or moved that first violation, while repairing another surface left it in place. A forced constant-wrong localizer fails this test. The result validates first-transition attribution within the distinct-surface simulator; it does not establish source-code root-cause accuracy.
+
+The bounded reducer reaches 1-minimality under its three edit types on the standard support suites, but reductions are small because generated plans already contain one dimension and few optional fields. Finally, the 18-case trusted-adapter mutation study finds 16 silent corruptions. This negative result sets a practical limit on every scan result: adapter correctness is part of the claim.
+
+\paragraph{Cost.}
+The frozen artifact run completes in about four seconds on the reported Apple laptop with a prepared environment, producing 1800 traces and 1720 witness files in a 17 MB directory. This is a reproducibility measurement on one machine, not a scaling law.

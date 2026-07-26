@@ -1,0 +1,51 @@
+\section{Checking Procedure}
+
+\policystrata{} separates the reference model, observed surfaces, and labels. The canonical policy is YAML validated into principals, roles, metrics, dimensions, aliases, grains, cost and row bounds, and tenant scopes. A second YAML document declares the six surface versions, each surface's responsibility, and the obligations passed between surfaces. A semantic query is a typed tuple of metric, dimensions, filters, time range, grain, and limit. Static suites or imported JSONL traces supply the remaining test inputs.
+
+\paragraph{Specification language.}
+The language is deliberately a typed data schema rather than a new policy calculus. Authored policy and surface files reject unknown fields. A shortened, valid fragment is:
+
+\begin{center}
+\begin{minipage}{0.94\columnwidth}
+\footnotesize
+\begin{verbatim}
+roles:
+  analyst:
+    allowed_metrics: [ticket_count]
+    allowed_dimensions: [region]
+    max_rows: 1000
+contracts:
+  compiler:
+    mode: sql_lowering
+    accepts_obligations: [tenant_scope]
+    emits_obligations: [sql_semantics]
+\end{verbatim}
+\end{minipage}
+\end{center}
+
+Metric declarations bind a semantic name to an expression, source table, columns, aliases, roles, grain, and estimated cost. Principal declarations bind a role and tenant identifiers. The surface file does not encode executable enforcement; it declares what an adapter must observe and what the checker will hold that transition responsible for. Imported JSONL then supplies an observed principal, SQL, optional semantic IR, tenant bindings, release outcome, source, and regression label. Missing semantic IR disables semantic-oracle checks for that trace rather than synthesizing a meaning.
+
+\paragraph{Reference and implementation paths.}
+The reference interpreter decides whether the semantic query is authorized and computes the intended metric and release conditions. The implementation path simulates or imports manifest exposure, grammar membership, validator output, compiled SQL, database effects, and release output. The reference interpreter does not call the SQL compiler. This separation prevents compiler behavior from defining its own oracle, but a shared error in the policy file or adapters remains possible.
+
+\paragraph{Cross-layer conformance analysis.}
+For each case, the checker performs the following steps:
+
+\begin{enumerate}
+  \item Load principal $p$, query $q$, database state $D$, canonical policy version $t$, and surface-version vector $\vec v$.
+  \item Evaluate $q$ with the reference authorization and semantic interpreters.
+  \item Replay the six surfaces in execution order. Each adapter emits its decision and the obligations it passes downstream.
+  \item Evaluate only the declared contract at each surface. For example, the compiler check compares tenant binding, metric expression, grain, time semantics, cost, and lineage; it does not require its representation to equal the validator's.
+  \item Select the first failing contract in the fixed order manifest, grammar, validator, compiler, database, release. Later enforcement can be recorded as containment without erasing the earlier violation.
+  \item Replay bounded reductions and emit the smallest witness reached under the reducer's move set.
+\end{enumerate}
+
+The selection rule is deterministic. If $F_i(T)$ is the Boolean contract result for surface $i$, localization returns $\min\{i\mid \neg F_i(T)\}$ in pipeline order. Only if no declared contract fails does it compare the final release with the canonical decision. This distinction is why a compiler failure remains attributed to the compiler when the database later contains it.
+
+A mutant is \emph{killed} when this procedure emits a non-clean witness. It \emph{survives} when no modeled contract fails. A mutant is \emph{equivalent} when an injected change produces no policy-observable difference for the chosen principal, query, and state; it is \emph{invalid} (or stillborn) when it cannot form a valid test case. Clean controls contain no injected drift and become false positives if a witness is emitted.
+
+\paragraph{Attribution versus root cause.}
+The reported location is the first observed violated transition, not a source-code root cause. We test this attribution interventionally on compound cases. Repairing the attributed surface must move or eliminate the first violation (sufficiency), while repairing a later, non-attributed surface must leave the earlier attribution intact (necessity). A teeth test that forces a constant wrong attribution fails these checks. This is stronger than matching a fixture label, but it remains relative to the simulator and distinct-surface mutation model.
+
+\paragraph{Witness reduction.}
+The reducer tries one edit at a time: remove a semantic-query dimension, remove a filter, or reset a non-default limit. It accepts an edit only after replay preserves the witness class, first failing surface, containment layer, release decision, the localized failed contract, and any semantic-difference or database-containment fact needed by the original witness. The search stops after 32 attempts or a fixed point. Standard support suites reach 1-minimality under this move set, with median semantic-IR reductions of roughly 2\% for seeded cases and 6\% for generated cases. One-minimal means no single remaining edit in this three-operation neighborhood preserves the witness; it does not mean globally shortest JSON, SQL, policy, or database state. Because generated inputs are already narrow, this is diagnostic compaction, not general delta debugging.

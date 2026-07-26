@@ -46,6 +46,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -338,6 +339,8 @@ def main() -> None:
 
     source_root: Path = args.source.resolve()
     out_root: Path = args.out.resolve()
+    out_root.mkdir(parents=True, exist_ok=True)
+    (out_root / "domain").mkdir(parents=True, exist_ok=True)
     manifest_dir = source_root / "metricflow_semantics/test_helpers/semantic_manifest_yamls/simple_manifest"
     models_dir = manifest_dir / "semantic_models"
     metrics_path = manifest_dir / "metrics.yaml"
@@ -361,6 +364,7 @@ def main() -> None:
     )
 
     report = {
+        "source_revision": source_revision(source_root),
         "semantic_models_merged": len(manifest["semantic_models"]),
         "metrics_merged": len(manifest["metrics"]),
         "itest_files_scanned": len(list(itest_dir.glob("itest_*.yaml"))),
@@ -372,6 +376,16 @@ def main() -> None:
     report_text = json.dumps(report, indent=2, sort_keys=True)
     (out_root / "transform_report.json").write_text(report_text + "\n", encoding="utf-8")
     print(report_text)
+
+
+def source_revision(source_root: Path) -> str | None:
+    result = subprocess.run(
+        ["git", "-C", str(source_root), "rev-parse", "HEAD"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    return result.stdout.strip() if result.returncode == 0 else None
 
 
 if __name__ == "__main__":

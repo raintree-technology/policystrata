@@ -1,0 +1,13 @@
+\section{Threats to Validity}
+
+\paragraph{Construct validity.}
+The operator taxonomy may omit real fault shapes, and the simulator may make represented faults easier to detect. The spec-blind cost misses show that even an implemented operator can be underspecified. Finite database states can expose a semantic difference but cannot prove query equivalence.
+
+\paragraph{Internal validity.}
+Generated inputs, expected labels, and detector behavior share code and concepts. Freeze manifests prevent silent changes but not common design errors. Reference interpreters reduce compiler-oracle coupling, while the adapter mutation study shows that bad normalization can still hide or invent findings.
+
+\paragraph{External validity.}
+All scored benchmark domains are synthetic. Public-fault cases map outcomes, while the three BetterOff historical cases probe exact pre/post-fix source contracts rather than execute vulnerable services. Brownfield work covers four open-source repositories and uses synthesized bridge values. The BetterOff pilot is bound to production but its deep checks use synthetic data, and its authenticated probes were skipped. No customer data or independently operated deployment was evaluated.
+
+\paragraph{Conclusion validity.}
+Counts are exact for checked-in deterministic suites but do not estimate a production fault distribution. Zero false positives on generated controls is weak precision evidence because those controls share the simulator. The one-of-74 brownfield figure and 33 passing live probes are more independent but too small, adapter-dependent, and boundary-focused to generalize.

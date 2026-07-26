@@ -32,7 +32,7 @@ uv run policystrata run \
 | Mutant kill rate | 1.0 |
 | Localization accuracy | 1.0 |
 | Expected-class accuracy | 1.0 |
-| Distinct operators exercised | 12 of 21 |
+| Distinct operators exercised | 12 of 22 |
 | Evidence level | `deterministic_fixture` |
 | Suite provenance | `incident_reconstruction` |
 
@@ -72,7 +72,7 @@ By source system, of the 19 reconstructed:
 - **What it does not mean:** it is not evidence of recall over unknown production faults, and it is
   not a claim that PolicyStrata would have caught any of these 19 incidents in the original
   product. No new detection logic or operator was written for this suite -- every task reuses one
-  of the 21 operators that also produce the 100% kill rates in `docs/evidence.md`. Several of the
+  of the 22 operators that also produce the 100% kill rates in `docs/evidence.md`. Several of the
   underlying real triggers (planner statistics internals, plan-cache role reuse, a caching layer,
   prompt injection into an LLM chain) are not modeled by PolicyStrata's deterministic simulator at
   all; what's reconstructed is the operator's own generic drift shape that best matches each

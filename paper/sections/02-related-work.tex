@@ -1,0 +1,36 @@
+\section{Background and Related Work}
+
+Four research lines touch parts of the policy pipeline, but they answer different questions.
+
+\paragraph{Access-control analysis and mutation testing.}
+Margrave computes semantic differences between two access-control policies and can explain requests whose decisions change \citep{margrave}. XACML mutation work defines policy fault operators, test adequacy, and equivalent-mutant handling \citep{xacml_mutation}. Cedar compares an authorization implementation with an independently specified model through formal and differential testing \citep{cedar_vgd}. These methods can analyze a policy language more deeply than \policystrata{} and may prove or systematically test decision equivalence inside that language. They do not by themselves connect a model-visible metric alias, semantic plan, SQL lowering, runtime database role, and result-release decision. \policystrata{} borrows mutation adequacy and differential-oracle ideas, but makes the unit of analysis a heterogeneous transition in the policy pipeline.
+
+\paragraph{SQL checking and generated databases.}
+Distilled test-suite accuracy constructs databases that distinguish candidate SQL from a reference query \citep{test_suite_accuracy}; VeriEQL and SpotIt+ reason about bounded query equivalence under supported SQL semantics and constraints \citep{verieql,spotit}. Such tools give stronger SQL-level semantic evidence than finite execution alone. They do not decide whether a query was exposed to the right principal, retained tenant identity and policy version, used authorized lineage, or crossed an allowed release boundary. Conversely, \policystrata{} does not prove general SQL equivalence: its database states are finite witnesses, and a supported SQL verifier could replace that one checker.
+
+\paragraph{Database and agent enforcement.}
+Beacon checks consistency within DBMS access-control metadata and behavior \citep{beacon}. Agent enforcement systems place deterministic policy or privilege controls around tool execution \citep{pcas,progent}, while role-conditioned refusal and data-flow work evaluate model or pipeline compliance \citep{role_conditioned_refusals,data_flow_control}. These systems can block behavior at runtime; \policystrata{} tests whether separately maintained enforcement surfaces still agree with their assigned contracts. It can report an upstream compiler violation even when RLS safely contains it.
+
+\paragraph{Generation and task benchmarks.}
+Spider, BIRD, DAB, BEAVER, and DAComp measure SQL or data-task capability \citep{spider,bird,dab,beaver,dacomp}. PICARD and structured decoders reduce malformed outputs \citep{picard,outlines,xgrammar,jsonschemabench}. Correct or grammar-valid SQL can still select the wrong tenant, implement the wrong business metric, or violate release policy. \policystrata{} therefore starts at typed semantic IR; stochastic natural-language-to-plan reachability is reported separately and is not part of its deterministic score.
+
+\begin{center}
+\scriptsize
+\setlength{\tabcolsep}{2pt}
+\begin{tabular}{@{}L{0.24\columnwidth}L{0.31\columnwidth}L{0.35\columnwidth}@{}}
+\toprule
+System or method & Evidence it can provide & Boundary relative to \policystrata{} \\
+\midrule
+Margrave & semantic policy-version difference & one access-control language; no SQL or release path \\
+XACML mutation & test adequacy against policy faults & mutates one policy representation \\
+Cedar VGD & model/engine differential evidence & authorization decisions, not business semantics \\
+Distilled SQL suites & distinguishing database states & query results, not authority or lineage \\
+SQL verifiers & bounded equivalence evidence & supported SQL fragment only \\
+Beacon & DBMS catalog/behavior inconsistency & database internals, not upstream agent surfaces \\
+Runtime monitors & enforcement on observed actions & no first-transition diagnosis by itself \\
+\policystrata{} & cross-representation witness and attribution & contract- and taxonomy-relative; no global proof \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The table is a capability comparison, not an empirical ranking: these systems were not run as drop-in competitors because they accept different languages and prove or test different properties. A fair composition would use Margrave or Cedar as the authorization oracle, VeriEQL as the compiler-semantic checker, and database/runtime monitors as observed surfaces inside \policystrata{}'s transition harness. The novelty boundary is therefore narrow. \policystrata{} is not a new policy logic, SQL verifier, or reference monitor. It composes evidence across versioned, non-equivalent representations and assigns a failed obligation to the first transition responsible for preserving it.

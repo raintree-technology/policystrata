@@ -9,6 +9,7 @@ SurfaceName = Literal["manifest", "grammar", "validator", "compiler", "database"
 EvidenceLevelName = Literal[
     "deterministic_fixture",
     "property_generated",
+    "detector_frozen_generated",
     "imported_trace",
     "real_db",
     "blinded_suite",

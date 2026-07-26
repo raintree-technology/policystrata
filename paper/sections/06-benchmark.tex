@@ -1,0 +1,42 @@
+\section{Benchmark Construction}
+
+\bench{} contains three synthetic domains. \texttt{support\_saas} models tenant-scoped support and revenue analytics; \texttt{finance\_saas} models firm, advisor, household, and sensitive-identifier access; \texttt{analytics\_clickhouse} models project-scoped product analytics, aggregate-only roles, cohort thresholds, timezones, and materialized-view lineage. They vary schema and policy vocabulary but remain author-controlled fixtures.
+
+\paragraph{Mutation registry.}
+The registry contains 22 deterministic operators: 12 compiler, five database, two release, and one each for manifest, grammar, and validator. Nine produce over-permissive behavior, eight semantic drift, three lowering violations, and two unsafe releases. Examples include a stale metric alias, forbidden dimension admitted by the grammar, sensitive-column omission, dropped or stale tenant keys, gross/net or unique/count skew, join fan-out, fiscal/calendar mismatch, stale RLS ownership, missing project filters, materialized-view lineage loss, and unsafe small-cohort or sampled release. These are fault hypotheses, not a census of production incidents.
+
+\paragraph{How the 1720 cases are made.}
+The total combines 170 hand-authored seeded cases and 1550 algorithmic cases:
+
+\begin{center}
+\scriptsize
+\setlength{\tabcolsep}{2pt}
+\begin{tabular}{@{}L{0.37\columnwidth}rrL{0.27\columnwidth}@{}}
+\toprule
+Suite & Cases & Clean & Construction \\
+\midrule
+support seeded & 50 & 0 & hand-authored matrix \\
+support generated & 500 & 0 & seed 1729; frozen run \\
+support \texttt{heldout\_v1} & 500 & 0 & seed 260626; post-freeze \\
+finance seeded & 20 & 0 & hand-authored matrix \\
+finance \texttt{heldout\_v1} & 250 & 0 & seed 260626; post-freeze \\
+analytics seeded & 100 & 0 & hand-authored matrix \\
+analytics generated & 300 & 0 & seed 260626; frozen run \\
+clean controls & 80 & 80 & seed 260627; no drift \\
+\midrule
+Non-clean total & 1720 & 0 & 170 manual + 1550 generated \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Seeded YAML matrices specify an operator, principal, request template, typed query, surface skew, and repetition count. The loader expands each matrix row into static cases. For generated case $j$, the algorithm chooses operator $o_j=O[j\bmod |O|]$ from the domain-applicable registry; selects the first non-admin principal; uses a seeded generator to choose allowed or denied metrics, dimensions, and time ranges needed to activate $o_j$; appends \texttt{-gen} to the affected surface version; creates the typed query; and shuffles all materialized tasks with the same seed. It does not mutate arbitrary application source, generate arbitrary SQL text, or mine production traces.
+
+Cycling is balanced within a generated suite, not across the combined benchmark. Support and finance use 14 applicable operators; analytics uses all 22. Once hand-authored matrices and unequal suite sizes are combined, per-operator counts range from 13 to 121. Appendix~\ref{app:operator-accounting} reports every operator's surface, class, and count so coverage density is auditable rather than implied by the total.
+
+\paragraph{Representativeness and mutant accounting.}
+The registry was authored to cover recurring drift shapes across identity, capability exposure, semantic compilation, database containment, and release. This rationale is tested in two separate ways rather than inferred from 1720/1720. First, 25 cited public faults were screened; 19 could be mapped without reversing their documented direction onto 12 existing operators, while six were excluded as out of scope. These fixtures model the resulting drift shape, not the original vulnerable code path. Second, a spec-blind authoring pass produced 42 cases from contract documents without detector access; \policystrata{} agreed on 39, while three exposed an unspecified cost-combination rule.
+
+The standard generator deliberately emits non-equivalent, well-formed cases, so equivalent and invalid counts are both zero. The runner nevertheless reports killed, survived, equivalent, invalid, clean-control, and false-positive counts separately. This design avoids silently discarding future equivalent or stillborn mutants, but the current zero counts should not be read as evidence that equivalent-mutant selection is solved.
+
+\paragraph{Frozen is not independent.}
+All 1550 generated cases are verified against a freeze manifest in the final reproduction. Of these, the 750 \texttt{heldout\_v1} cases carry post-detector-freeze provenance; the remaining 800 use the ordinary generated suite name but are still hash-pinned for the final run. Every case shares the same operator taxonomy and generator logic. Freezing makes the exact evaluation reproducible and exposes post-hoc changes; it does not provide third-party authorship or statistical generalization.

@@ -14,13 +14,13 @@ combinatorial. A pairwise (2-way) covering array covers all pairs of factor
 values with far fewer cases. `policystrata.scalability.covering_array` implements
 a deterministic greedy generator and verifies coverage.
 
-For 8 principals x 4 roles x 8 schema objects x 21 operators:
+For 8 principals x 4 roles x 8 schema objects x 22 operators:
 
 | Cases | Count |
 | --- | --- |
-| Full cross product | 5376 |
-| Pairwise covering array | 439 |
-| Reduction | 91.8% |
+| Full cross product | 5632 |
+| Pairwise covering array | 452 |
+| Reduction | 92.0% |
 
 Every pair is covered (the test independently reconstructs the pair set and
 checks containment). As the factor space grows, the covering array grows far
@@ -28,9 +28,9 @@ slower than the cross product:
 
 | Principals | Full cross | Covering array | Reduction |
 | --- | --- | --- | --- |
-| 2 | 1344 | 265 | 80.3% |
-| 8 | 5376 | 439 | 91.8% |
-| 32 | 21504 | 1173 | 94.5% |
+| 2 | 1408 | 276 | 80.4% |
+| 8 | 5632 | 452 | 92.0% |
+| 32 | 22528 | 1215 | 94.6% |
 
 The generator is greedy, not optimal: it guarantees full t-way coverage but the
 array is larger than the theoretical lower bound (roughly the product of the two

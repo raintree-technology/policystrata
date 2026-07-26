@@ -116,7 +116,8 @@ Production scan findings report evidence levels instead of universal detection c
 - `property_generated`: generated SQL/IR mutants over configured inputs.
 - `imported_trace`: imported production or representative traces.
 - `real_db`: real PostgreSQL fixture/RLS observations.
-- `blinded_suite`: externally authored or detector-frozen suites when provided.
+- `detector_frozen_generated`: deterministic generated inputs pinned after a detector freeze.
+- `blinded_suite`: spec-blind or externally authored suites when provided.
 
 These levels describe what was exercised. They do not prove recall over unknown production faults.
 

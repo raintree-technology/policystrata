@@ -210,7 +210,7 @@ def factor_scaling(
     principal_counts: Sequence[int] = (2, 4, 8, 16, 32),
     roles: int = 4,
     schema_objects: int = 8,
-    operators: int = 21,
+    operators: int = 22,
     strength: int = 2,
 ) -> list[FactorScalingPoint]:
     """Covering-array size versus the number of principals (and fixed roles,
