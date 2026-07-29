@@ -38,5 +38,39 @@ The registry was authored to cover recurring drift shapes across identity, capab
 
 The standard generator deliberately emits non-equivalent, well-formed cases, so equivalent and invalid counts are both zero. The runner nevertheless reports killed, survived, equivalent, invalid, clean-control, and false-positive counts separately. This design avoids silently discarding future equivalent or stillborn mutants, but the current zero counts should not be read as evidence that equivalent-mutant selection is solved.
 
+\subsection{External Taxonomy Cross-Check}
+\label{sec:external-taxonomy}
+
+The two checks above still use vocabulary we wrote. A third check measures the registry against a fault taxonomy authored by another group: the eight data-agent vulnerabilities of \citet{data_agents_under_attack}, derived from a systematic audit and evaluated on six data agents including two production cloud analytics services. We mapped each of our 22 operators onto that taxonomy or recorded that it has no counterpart there. The mapping is our judgement and is checked in so it can be disputed; the case counts are derived from the materialized traces.
+
+\begin{center}
+\scriptsize
+\setlength{\tabcolsep}{2pt}
+\begin{tabular}{@{}lL{0.40\columnwidth}lr@{}}
+\toprule
+Ext. & External vulnerability & v1 & Cases \\
+\midrule
+V1 & Implicit trust bias & outside & 0 \\
+V2 & No data-source verification & outside & 0 \\
+V3 & Uncontrolled query cost & covered & 104 \\
+V4 & Cross-engine semantic inconsistency & partial & 613 \\
+V5 & Unbounded multi-step chains & outside & 0 \\
+V6 & Policy forgetting under context pressure & outside & 0 \\
+V7 & Over-privileged database connection & covered & 602 \\
+V8 & No compositional leakage control & outside & 0 \\
+\midrule
+--- & no external counterpart & --- & 401 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Two classes are covered and one partially, accounting for 1319 of 1720 cases. V7 is the largest overlap: every operator under it is principal or tenant identity failing to survive a transition, which is the same failure their least-privilege analysis describes. V4 is partial because our semantic oracle compares a reference interpreter against one lowered SQL query, while their case is two backends disagreeing.
+
+The five classes that fall outside each do so because of a v1 boundary stated in Section~3: V1 and V2 precede the typed plan where we start, V5 needs multi-step requests, V6 is a property of the model context rather than of a deployed artifact, and V8 needs cumulative release accounting that v1 declares out of scope. None is a gap discovered after the fact.
+
+The reverse direction is the more interesting one. The remaining 401 cases have no counterpart in that taxonomy because the two threat models differ: their adversary controls the prompt and uploaded data, while our fault needs no adversary at all. A retired alias still advertised to the model, a grammar still admitting a dimension policy has retired, and a validator not yet updated for a newly sensitive column are what an update breaks, not what an attacker induces. Agreement on a fault shape is not evidence that \policystrata{} would detect that fault in the live systems where they observed it.
+
+We therefore cross-check a second independent vocabulary rather than treating one list as a field distribution. LASM organizes 116 surveyed agent-security papers into seven architectural layers and four temporal classes \citep{lasm}. Our operators occupy three layers---Cognitive, Tool Execution, and Governance---and none occupy Foundation, Memory, Multi-Agent Coordination, or Ecosystem. All 1720 cases score an instantaneous single-request consequence; none model session-persistent, cross-session-cumulative, or stack-propagating state. This second mapping, also our unreviewed judgement, confirms the declared start point and exposes the temporal boundary more sharply. Neither cross-check converts 1720/1720 into recall.
+
 \paragraph{Frozen is not independent.}
 All 1550 generated cases are verified against a freeze manifest in the final reproduction. Of these, the 750 \texttt{heldout\_v1} cases carry post-detector-freeze provenance; the remaining 800 use the ordinary generated suite name but are still hash-pinned for the final run. Every case shares the same operator taxonomy and generator logic. Freezing makes the exact evaluation reproducible and exposes post-hoc changes; it does not provide third-party authorship or statistical generalization.

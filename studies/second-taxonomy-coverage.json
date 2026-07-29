@@ -1,0 +1,153 @@
+{
+  "source": {
+    "citation": "Chu, A Systematic Survey of Security Threats and Defenses in LLM-Based AI Agents: A Layered Attack Surface Framework, arXiv:2604.23338",
+    "authored_by": "external",
+    "papers_surveyed": 116,
+    "layers": [
+      "Foundation",
+      "Cognitive",
+      "Memory",
+      "Tool Execution",
+      "Multi-Agent Coordination",
+      "Ecosystem",
+      "Governance"
+    ],
+    "temporal_classes": [
+      "instantaneous",
+      "session-persistent",
+      "cross-session cumulative",
+      "sub-session-stack"
+    ]
+  },
+  "mapping_status": "PolicyStrata-author judgement; LASM author has not reviewed it",
+  "totals": {
+    "benchmark_cases": 1720,
+    "registry_operators": 22,
+    "layers_covered": 3,
+    "layers_outside": 4,
+    "temporal_classes_covered": 1,
+    "temporal_classes_outside": 3
+  },
+  "layers": [
+    {
+      "layer": "Foundation",
+      "coverage": "outside",
+      "operators": [],
+      "operator_count": 0,
+      "cases": 0
+    },
+    {
+      "layer": "Cognitive",
+      "coverage": "covered",
+      "operators": [
+        "grammar_permits_forbidden_dimension",
+        "stale_metric_alias_manifest"
+      ],
+      "operator_count": 2,
+      "cases": 242
+    },
+    {
+      "layer": "Memory",
+      "coverage": "outside",
+      "operators": [],
+      "operator_count": 0,
+      "cases": 0
+    },
+    {
+      "layer": "Tool Execution",
+      "coverage": "covered",
+      "operators": [
+        "compiler_inner_join_drops_rows",
+        "compiler_removes_distinct",
+        "cost_estimate_ignores_expansion",
+        "fanout_join_drift",
+        "fiscal_calendar_mismatch",
+        "gross_net_metric_drift",
+        "materialized_view_lineage_drop",
+        "timezone_bucket_drift",
+        "uniq_to_count_drift",
+        "validator_omits_sensitive_column"
+      ],
+      "operator_count": 10,
+      "cases": 838
+    },
+    {
+      "layer": "Multi-Agent Coordination",
+      "coverage": "outside",
+      "operators": [],
+      "operator_count": 0,
+      "cases": 0
+    },
+    {
+      "layer": "Ecosystem",
+      "coverage": "outside",
+      "operators": [],
+      "operator_count": 0,
+      "cases": 0
+    },
+    {
+      "layer": "Governance",
+      "coverage": "covered",
+      "operators": [
+        "aggregate_small_cohort_release",
+        "app_deny_missing_db_policy",
+        "clickhouse_row_policy_missing_project_filter",
+        "clickhouse_row_policy_readonly_assumption_violation",
+        "compiler_drops_tenant_predicate",
+        "compiler_swaps_tenant_account_id",
+        "compiler_uses_old_tenant_key",
+        "db_rls_old_ownership_field",
+        "distributed_table_policy_gap",
+        "sample_clause_release_drift"
+      ],
+      "operator_count": 10,
+      "cases": 640
+    }
+  ],
+  "temporality": [
+    {
+      "class": "instantaneous",
+      "coverage": "covered",
+      "cases": 1720
+    },
+    {
+      "class": "session-persistent",
+      "coverage": "outside",
+      "cases": 0
+    },
+    {
+      "class": "cross-session cumulative",
+      "coverage": "outside",
+      "cases": 0
+    },
+    {
+      "class": "sub-session-stack",
+      "coverage": "outside",
+      "cases": 0
+    }
+  ],
+  "operator_cases": {
+    "aggregate_small_cohort_release": 25,
+    "app_deny_missing_db_policy": 106,
+    "clickhouse_row_policy_missing_project_filter": 25,
+    "clickhouse_row_policy_readonly_assumption_violation": 23,
+    "compiler_drops_tenant_predicate": 111,
+    "compiler_inner_join_drops_rows": 104,
+    "compiler_removes_distinct": 106,
+    "compiler_swaps_tenant_account_id": 106,
+    "compiler_uses_old_tenant_key": 109,
+    "cost_estimate_ignores_expansion": 104,
+    "db_rls_old_ownership_field": 109,
+    "distributed_table_policy_gap": 13,
+    "fanout_join_drift": 109,
+    "fiscal_calendar_mismatch": 108,
+    "grammar_permits_forbidden_dimension": 121,
+    "gross_net_metric_drift": 111,
+    "materialized_view_lineage_drop": 25,
+    "sample_clause_release_drift": 13,
+    "stale_metric_alias_manifest": 121,
+    "timezone_bucket_drift": 25,
+    "uniq_to_count_drift": 25,
+    "validator_omits_sensitive_column": 121
+  }
+}

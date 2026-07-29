@@ -1,0 +1,155 @@
+{
+  "source": {
+    "citation": "Wang et al., Data Agents Under Attack, arXiv:2606.08661",
+    "authored_by": "external",
+    "systems_evaluated": 6,
+    "vulnerability_count": 8
+  },
+  "totals": {
+    "benchmark_cases": 1720,
+    "registry_operators": 22,
+    "external_vulnerabilities": 8,
+    "vulnerabilities_covered": 2,
+    "vulnerabilities_partial": 1,
+    "vulnerabilities_outside": 5,
+    "cases_mapped_to_external": 1319,
+    "cases_without_external_counterpart": 401
+  },
+  "vulnerabilities": [
+    {
+      "id": "V1",
+      "layer": "interpretation",
+      "name": "Implicit Trust Bias",
+      "coverage": "outside",
+      "rationale": "v1 begins at a typed semantic plan. It models no conflict between data assets and no precedence rule for resolving one.",
+      "operators": [],
+      "operator_count": 0,
+      "cases": 0
+    },
+    {
+      "id": "V2",
+      "layer": "interpretation",
+      "name": "Lack of Data Source Verification",
+      "coverage": "outside",
+      "rationale": "v1 treats database rows as trusted state, not as a channel that can carry instructions, so database-resident prompt injection is unmodelled.",
+      "operators": [],
+      "operator_count": 0,
+      "cases": 0
+    },
+    {
+      "id": "V3",
+      "layer": "execution",
+      "name": "Uncontrolled Query Cost",
+      "coverage": "covered",
+      "rationale": "The canonical policy declares per-role row and cost bounds and the compiler contract checks the lowered query against them. v1 checks a declared static estimate, not measured runtime resource consumption.",
+      "operators": [
+        "cost_estimate_ignores_expansion"
+      ],
+      "operator_count": 1,
+      "cases": 104
+    },
+    {
+      "id": "V4",
+      "layer": "execution",
+      "name": "Cross-Engine Semantic Inconsistency",
+      "coverage": "partial",
+      "rationale": "The semantic oracle compares a reference interpreter against the lowered query under declared NULL, timezone, and tolerance rules, and two operators are date-semantics divergence exactly. v1 models one execution engine, so it finds reference-versus-SQL divergence and not SQL-versus-Python divergence.",
+      "operators": [
+        "compiler_inner_join_drops_rows",
+        "compiler_removes_distinct",
+        "fanout_join_drift",
+        "fiscal_calendar_mismatch",
+        "gross_net_metric_drift",
+        "materialized_view_lineage_drop",
+        "timezone_bucket_drift",
+        "uniq_to_count_drift"
+      ],
+      "operator_count": 8,
+      "cases": 613
+    },
+    {
+      "id": "V5",
+      "layer": "execution",
+      "name": "Unbounded Multi-Step Query Chains",
+      "coverage": "outside",
+      "rationale": "v1 scores single-request, read-only analytics and has no multi-step budget.",
+      "operators": [],
+      "operator_count": 0,
+      "cases": 0
+    },
+    {
+      "id": "V6",
+      "layer": "policy",
+      "name": "Security Policy Forgetting under Context Pressure",
+      "coverage": "outside",
+      "rationale": "This is a property of the model context. v1's manifest operators model stale exposure, which is a deployed artifact being out of date, not policy being evicted from a context window at runtime.",
+      "operators": [],
+      "operator_count": 0,
+      "cases": 0
+    },
+    {
+      "id": "V7",
+      "layer": "policy",
+      "name": "Over-Privileged Database Connection",
+      "coverage": "covered",
+      "rationale": "The largest overlap. Every operator here is principal or tenant identity failing to survive a transition, or a runtime role carrying more privilege than the policy assumed.",
+      "operators": [
+        "app_deny_missing_db_policy",
+        "clickhouse_row_policy_missing_project_filter",
+        "clickhouse_row_policy_readonly_assumption_violation",
+        "compiler_drops_tenant_predicate",
+        "compiler_swaps_tenant_account_id",
+        "compiler_uses_old_tenant_key",
+        "db_rls_old_ownership_field",
+        "distributed_table_policy_gap"
+      ],
+      "operator_count": 8,
+      "cases": 602
+    },
+    {
+      "id": "V8",
+      "layer": "policy",
+      "name": "Lack of Compositional Leakage Control",
+      "coverage": "outside",
+      "rationale": "v1 release is stateless and single-query by declaration. It checks a per-query cohort threshold and sampling disclosure, but tracks no cumulative disclosure across a session, which is what V8 names.",
+      "operators": [],
+      "operator_count": 0,
+      "cases": 0
+    }
+  ],
+  "unmapped": {
+    "operators": [
+      "aggregate_small_cohort_release",
+      "grammar_permits_forbidden_dimension",
+      "sample_clause_release_drift",
+      "stale_metric_alias_manifest",
+      "validator_omits_sensitive_column"
+    ],
+    "cases": 401,
+    "rationale": "The external study fixes an adversary who controls only the user prompt and uploaded data, and treats the policy set as given. These operators model an update desynchronizing a surface with no adversary present: a retired alias still advertised to the model, a grammar still admitting a dimension policy has retired, a validator not yet updated for a newly sensitive column, and two release rules that can themselves drift. They are outside an attack taxonomy by construction, not by oversight."
+  },
+  "operator_cases": {
+    "aggregate_small_cohort_release": 25,
+    "app_deny_missing_db_policy": 106,
+    "clickhouse_row_policy_missing_project_filter": 25,
+    "clickhouse_row_policy_readonly_assumption_violation": 23,
+    "compiler_drops_tenant_predicate": 111,
+    "compiler_inner_join_drops_rows": 104,
+    "compiler_removes_distinct": 106,
+    "compiler_swaps_tenant_account_id": 106,
+    "compiler_uses_old_tenant_key": 109,
+    "cost_estimate_ignores_expansion": 104,
+    "db_rls_old_ownership_field": 109,
+    "distributed_table_policy_gap": 13,
+    "fanout_join_drift": 109,
+    "fiscal_calendar_mismatch": 108,
+    "grammar_permits_forbidden_dimension": 121,
+    "gross_net_metric_drift": 111,
+    "materialized_view_lineage_drop": 25,
+    "sample_clause_release_drift": 13,
+    "stale_metric_alias_manifest": 121,
+    "timezone_bucket_drift": 25,
+    "uniq_to_count_drift": 25,
+    "validator_omits_sensitive_column": 121
+  }
+}

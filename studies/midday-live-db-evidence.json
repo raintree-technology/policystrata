@@ -1,0 +1,157 @@
+{
+  "target": "midday-ai/midday",
+  "native_inputs": [
+    "live_db/schema_scoped.sql"
+  ],
+  "synthesized_inputs": [
+    "live_db/supabase_runtime.sql",
+    "live_db/seed.sql"
+  ],
+  "real_policies_loaded": 20,
+  "runs": {
+    "intact": {
+      "expected_gate": "pass",
+      "observed_gate": "pass",
+      "findings": [],
+      "result": "pass"
+    },
+    "weakened": {
+      "expected_gate": "fail",
+      "observed_gate": "fail",
+      "findings": [
+        {
+          "id": "postgres_rls_check_failed_insights_team_scope_ann",
+          "title": "PostgreSQL RLS check observed rows outside the expected policy scope",
+          "severity": "high",
+          "confidence": "high",
+          "surface": "database",
+          "witness_class": "over_permissive",
+          "evidence_level": "real_db",
+          "reasons": [
+            "expected rows=2, observed rows=4",
+            "expected tenants=['11111111-1111-1111-1111-111111111111'], observed tenants=['11111111-1111-1111-1111-111111111111', '22222222-2222-2222-2222-222222222222']"
+          ],
+          "principal": null,
+          "semantic_ir": null,
+          "sql": "select team_id, period_number from insights order by team_id, period_number",
+          "source": null,
+          "mutation": null,
+          "mutant_status": null,
+          "regression_case": null,
+          "reproducible_command": "policystrata scan --config /Users/mb1/Code/raintree/oss/policystrata/examples/brownfield/midday/policystrata_live_db.yaml",
+          "metadata": {
+            "tenant_id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+            "rows": 4
+          },
+          "witness_path": "witnesses/postgres_rls_check_failed_insights_team_scope_ann.json",
+          "what_changed": "the database layer allowed behavior outside the canonical policy",
+          "owner": "database",
+          "probable_fix": "tighten the database policy check or remove the stale exposed capability",
+          "minimal_repro_trace": "witnesses/postgres_rls_check_failed_insights_team_scope_ann.json",
+          "ci_gate_command": "policystrata scan --config /Users/mb1/Code/raintree/oss/policystrata/examples/brownfield/midday/policystrata_live_db.yaml"
+        },
+        {
+          "id": "postgres_rls_check_failed_insights_team_scope_ben",
+          "title": "PostgreSQL RLS check observed rows outside the expected policy scope",
+          "severity": "high",
+          "confidence": "high",
+          "surface": "database",
+          "witness_class": "over_permissive",
+          "evidence_level": "real_db",
+          "reasons": [
+            "expected rows=2, observed rows=4",
+            "expected tenants=['22222222-2222-2222-2222-222222222222'], observed tenants=['11111111-1111-1111-1111-111111111111', '22222222-2222-2222-2222-222222222222']"
+          ],
+          "principal": null,
+          "semantic_ir": null,
+          "sql": "select team_id, period_number from insights order by team_id, period_number",
+          "source": null,
+          "mutation": null,
+          "mutant_status": null,
+          "regression_case": null,
+          "reproducible_command": "policystrata scan --config /Users/mb1/Code/raintree/oss/policystrata/examples/brownfield/midday/policystrata_live_db.yaml",
+          "metadata": {
+            "tenant_id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+            "rows": 4
+          },
+          "witness_path": "witnesses/postgres_rls_check_failed_insights_team_scope_ben.json",
+          "what_changed": "the database layer allowed behavior outside the canonical policy",
+          "owner": "database",
+          "probable_fix": "tighten the database policy check or remove the stale exposed capability",
+          "minimal_repro_trace": "witnesses/postgres_rls_check_failed_insights_team_scope_ben.json",
+          "ci_gate_command": "policystrata scan --config /Users/mb1/Code/raintree/oss/policystrata/examples/brownfield/midday/policystrata_live_db.yaml"
+        },
+        {
+          "id": "postgres_rls_check_failed_insights_unauthenticated",
+          "title": "PostgreSQL RLS check observed rows outside the expected policy scope",
+          "severity": "high",
+          "confidence": "high",
+          "surface": "database",
+          "witness_class": "over_permissive",
+          "evidence_level": "real_db",
+          "reasons": [
+            "expected rows=0, observed rows=4",
+            "expected tenants=[], observed tenants=['11111111-1111-1111-1111-111111111111', '22222222-2222-2222-2222-222222222222']"
+          ],
+          "principal": null,
+          "semantic_ir": null,
+          "sql": "select team_id, period_number from insights order by team_id, period_number",
+          "source": null,
+          "mutation": null,
+          "mutant_status": null,
+          "regression_case": null,
+          "reproducible_command": "policystrata scan --config /Users/mb1/Code/raintree/oss/policystrata/examples/brownfield/midday/policystrata_live_db.yaml",
+          "metadata": {
+            "tenant_id": null,
+            "rows": 4
+          },
+          "witness_path": "witnesses/postgres_rls_check_failed_insights_unauthenticated.json",
+          "what_changed": "the database layer allowed behavior outside the canonical policy",
+          "owner": "database",
+          "probable_fix": "tighten the database policy check or remove the stale exposed capability",
+          "minimal_repro_trace": "witnesses/postgres_rls_check_failed_insights_unauthenticated.json",
+          "ci_gate_command": "policystrata scan --config /Users/mb1/Code/raintree/oss/policystrata/examples/brownfield/midday/policystrata_live_db.yaml"
+        },
+        {
+          "id": "postgres_state_assertion_failed_insights_exclude_other_team",
+          "title": "PostgreSQL state assertion failed",
+          "severity": "high",
+          "confidence": "high",
+          "surface": "database",
+          "witness_class": "over_permissive",
+          "evidence_level": "real_db",
+          "reasons": [
+            "expected rows=2, observed rows=4",
+            "column team_id contained forbidden values: ['22222222-2222-2222-2222-222222222222', '22222222-2222-2222-2222-222222222222']"
+          ],
+          "principal": null,
+          "semantic_ir": null,
+          "sql": "select team_id, period_number from insights order by team_id, period_number",
+          "source": null,
+          "mutation": null,
+          "mutant_status": null,
+          "regression_case": "pass_to_pass",
+          "reproducible_command": "policystrata scan --config /Users/mb1/Code/raintree/oss/policystrata/examples/brownfield/midday/policystrata_live_db.yaml",
+          "metadata": {
+            "tenant_id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+            "rows": 4,
+            "rows_sample": [
+              "{\"period_number\": 5, \"team_id\": \"11111111-1111-1111-1111-111111111111\"}",
+              "{\"period_number\": 5, \"team_id\": \"22222222-2222-2222-2222-222222222222\"}",
+              "{\"period_number\": 6, \"team_id\": \"11111111-1111-1111-1111-111111111111\"}",
+              "{\"period_number\": 6, \"team_id\": \"22222222-2222-2222-2222-222222222222\"}"
+            ]
+          },
+          "witness_path": "witnesses/postgres_state_assertion_failed_insights_exclude_other_team.json",
+          "what_changed": "the database layer allowed behavior outside the canonical policy",
+          "owner": "database",
+          "probable_fix": "tighten the database policy check or remove the stale exposed capability",
+          "minimal_repro_trace": "witnesses/postgres_state_assertion_failed_insights_exclude_other_team.json",
+          "ci_gate_command": "policystrata scan --config /Users/mb1/Code/raintree/oss/policystrata/examples/brownfield/midday/policystrata_live_db.yaml"
+        }
+      ],
+      "result": "pass"
+    }
+  },
+  "all_passed": true
+}

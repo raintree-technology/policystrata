@@ -44,20 +44,54 @@ Benchmark Construction now states:
 - per-operator frequencies range from 13 to 121 and are listed in Appendix B.
 
 Representativeness is no longer inferred from 1,720/1,720. It is discussed through the public-fault,
-spec-blind, and brownfield studies, with their limits.
+spec-blind, and brownfield studies, with their limits, and a new section measures the registry
+against a fault vocabulary nobody here wrote — see A5a below.
+
+### A5a - How representative is the operator registry?
+
+**Status: addressed with a new external cross-check.**
+
+Benchmark Construction now contains an External Taxonomy Cross-Check against the eight data-agent
+vulnerabilities of Wang et al. (arXiv:2606.08661), derived independently and evaluated on six data
+agents including two production cloud analytics services. The mapping is a human judgement and is
+checked into `scripts/external-taxonomy-study.py` so it can be disputed; the case counts are
+derived from the materialized traces.
+
+Two of eight classes are covered and one partially, accounting for 1,319 of 1,720 cases. The five
+that fall outside each do so because of a v1 boundary the paper already declared — V1 and V2
+precede the typed plan, V5 needs multi-step requests, V6 is a property of the model context, V8
+needs cumulative release accounting.
+
+The reverse direction is the more useful result and we report it rather than burying it: 401 cases
+have no counterpart in that taxonomy at all, because the two threat models differ. Their adversary
+controls the prompt and uploaded data; our fault needs no adversary. A retired alias still
+advertised to the model is what an update breaks, not what an attacker induces. Neither taxonomy
+subsumes the other.
 
 ### A3 - Related work is thin and has too few references
 
 **Status: addressed.**
 
-The related-work section now compares Margrave, XACML mutation testing, Cedar’s
-verification-guided differential testing, distilled SQL test suites, VeriEQL/SpotIt+, Beacon,
-runtime monitors, constrained generation, and data-agent benchmarks. The comparison states both
-directions:
+The reference list is now 32 entries, every one of them cited in the text. Related Work covers
+five lines rather than four, and the comparison states both directions throughout: what those
+methods prove or test more strongly than PolicyStrata, what cross-representation transition
+PolicyStrata observes that they do not, and why the paper claims no empirical win over tools that
+accept different input languages.
 
-- what those methods can prove or test more strongly than PolicyStrata;
-- what cross-representation transition PolicyStrata observes that they do not;
-- why the paper does not claim an empirical win against tools with different input languages.
+Two additions matter more than the count:
+
+- **The lineage the compiler contract descends from.** PolicyStrata's compiler check is an
+  instance of translation validation (Pnueli et al.), and "authorization-preserving lowering" is
+  the property-class form of what secure-compilation work calls robust property preservation
+  (Abate et al.). Naming that lineage makes the novelty boundary sharper, not weaker: the
+  contribution is not a preservation technique but the observation that a data agent runs several
+  such lowerings between separately versioned representations.
+- **The 2026 agent-conformance neighbours.** Constraint drift argues the same thesis at
+  multi-agent granularity, and PolicyStrata is a narrow executable instance of it. AgentRFC shares
+  the extract-check-replay shape but targets protocol conformance between agents. TDAD applies
+  mutation testing to agent specifications. AgentRaft, Cordon, and C-Trace bound what PolicyStrata
+  does not do: tool-flow taint, transactional containment of irreversible effects, and runtime
+  regulatory enforcement.
 
 ### A4 - No external use or adoption
 
@@ -86,9 +120,34 @@ database/runtime monitors as observed surfaces inside PolicyStrata’s transitio
 
 ### A7 - Test a real deployed system
 
-**Status: partial; deployment-linked read-only pilot complete.**
+**Status: partial; real policy code now executes, and a deployment-linked read-only pilot is
+complete.**
 
-The study binds the BetterOff adapter to production Git object
+The clearest answer to "the BetterOff fixture uses synthetic data" is a target whose real
+authorization code we can run. Midday commits real PostgreSQL row-level security, so all 20
+`CREATE POLICY` statements across the six policy-bearing tables in its frozen migrations are now
+loaded verbatim into PostgreSQL 18.4 and executed. Thirteen checks connect as a non-owner,
+non-superuser role, because a table owner or superuser bypasses RLS silently and the fixture would
+report safety it never tested.
+
+| Fixture | Expected gate | Observed gate | Findings |
+| --- | --- | --- | --- |
+| midday policies intact | pass | pass | 0 |
+| one real predicate weakened to `USING (true)` | fail | fail | 4, all on `insights` |
+
+The second row is the load-bearing one. A checker that passes the first and also passes the second
+is checking nothing. Weakening one real predicate — the `db_rls_old_ownership_field` drift shape
+applied to real policy text — fails three RLS checks and one state assertion, including a read
+that becomes available unauthenticated, while the five tables whose policies were untouched stay
+clean.
+
+Boundaries, stated in the paper and in `examples/brownfield/midday/live_db/README.md`: this is not
+a Midday defect (its committed predicate is correct), not Midday's deployed Supabase runtime (the
+roles and `auth.uid()` are a Raintree-authored bridge, because Midday does not commit them), not
+real data, or Midday's full deployed schema. It does cover every policy committed in the frozen
+migration corpus; Supabase-managed base-schema policies remain unavailable.
+
+The BetterOff study additionally binds the adapter to production Git object
 `3663f1e475eb2ba452dc887a10b052689455a4f4` and Vercel deployment
 `dpl_5MQsJfscJaALxGU8nBh2srXBWQNr`. Thirty-three live probes passed, none failed, and three
 authenticated reads were skipped because no isolated smoke session or API token exists. The
@@ -214,6 +273,10 @@ containment does not move attribution away from an earlier compiler failure.
 
 **Status: addressed in the artifact; external hosting remains optional.**
 
+Verified properties of the current build: 204.4 s (3:24), 1920x1080 H.264, AAC narration, an
+embedded `mov_text` subtitle stream, and a sidecar `PolicyStrata-demo.en.vtt` with eight caption
+cues. The build is reproducible from source and records its own duration and SHA-256.
+
 The built-in CLI demo now prints a step-by-step stale-tenant-key case: request, principal, version
 vector, canonical decision, first violated transition, contract reason, distinguishing result,
 containment, release, and witness path. `paper/DEMO_SCRIPT.md` provides a timed 3:30 narration,
@@ -229,7 +292,9 @@ published with the paper artifact and linked from the website.
 
 The revision reports exact taxonomy dependence, 25 screened public faults with six exclusions, 42
 spec-blind cases with three misses, 68 source-frozen upstream cases, three historical revision
-replays, and a deployment-linked pilot. It does not convert these into a field-recall claim.
+replays, an executed real-RLS pass with a negative control, and a deployment-linked pilot. It also
+now measures the registry against an independently authored eight-class data-agent vulnerability
+taxonomy (A5a). It does not convert any of these into a field-recall claim.
 
 ### C6 - Comparisons are ablations, not real competitors
 
@@ -245,7 +310,15 @@ not run as interchangeable binaries, and what a future composed evaluation would
 
 ## Remaining actions requiring external work
 
-1. Configure an isolated BetterOff production smoke principal and run the three authenticated probes.
-2. Obtain a PolicyStrata-blind suite authored by an external party after detector freeze.
-3. Run an independently operated deployment/adoption study.
+Each of these needs a person or a credential the authors do not have. None is blocked on writing,
+and the paper says so rather than implying the evidence exists.
+
+1. Configure an isolated BetterOff production smoke principal and run the three authenticated
+   probes. Needs a provisioned production credential; the pilot holds no such token today.
+2. Obtain a PolicyStrata-blind suite authored by an external party after detector freeze. Needs an
+   external author.
+3. Run an independently operated deployment/adoption study. Needs an external team.
 4. Advance historical replay from exact source-contract probes to executable vulnerable services.
+   Needs period-accurate dependency and data fixtures.
+5. Re-run the full 20-policy executed-policy pass against a runtime its maintainers operate rather
+   than the reconstructed Supabase bridge. Needs an external team or an exported runtime fixture.

@@ -3,10 +3,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from policystrata.database import PostgresAdapter
+from policystrata.database import DEFAULT_APP_DATABASE_URL, PostgresAdapter
 from policystrata.evidence import markdown_table
 
-APP_DATABASE_URL = "postgresql://policystrata_app:policystrata_app@localhost:55432/support_saas"
+# Both URLs come from policystrata.database, so POLICYSTRATA_DATABASE_URL and
+# POLICYSTRATA_APP_DATABASE_URL point this script at a non-default host or port. Hardcoding the
+# app URL here made the admin side follow the environment while the app side did not.
+APP_DATABASE_URL = DEFAULT_APP_DATABASE_URL
 DOMAIN_ROOT = Path("src/policystrata/domains/support_saas")
 
 

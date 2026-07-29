@@ -114,7 +114,10 @@ doc and a reproduction script; all are deterministic and need no LLM API key unl
 | --- | --- | --- |
 | Reconstructed real-fault suite | 19 real public faults (CVEs, RLS incidents) reconstructed and killed; 6 honestly dropped | [incident-reconstruction-results.md](incident-reconstruction-results.md) |
 | Spec-blind mutant suite | 42 spec-authored mutants; detector agrees on 39/42, 3 misses expose a real contract ambiguity | [spec-blind-results.md](spec-blind-results.md) |
-| Brownfield scans (real OSS) | 0 new real bugs across 4 stacks; ~1.4% real-input FP; true-positive demo on cube's own broken fixtures; 5 scanner gaps | [brownfield-results.md](brownfield-results.md) |
+| Brownfield scans (real OSS) | 0 new real bugs across 4 stacks; ~1.4% real-input FP; true-positive demo on cube's own broken fixtures; 5 scanner gaps found, all 5 now fixed (metricflow adapter warnings 27 → 4) | [brownfield-results.md](brownfield-results.md) |
+| Executed real RLS (midday) | all 20 `CREATE POLICY` statements in the frozen migrations loaded verbatim across 6 tables; 13/13 live checks pass intact, weakening one real predicate fails exactly the 4 checks covering it | [brownfield-results.md](brownfield-results.md#live-database-pass-midday) |
+| External fault-taxonomy coverage | v1 registry vs an independently authored 8-class data-agent vulnerability taxonomy: 2 covered, 1 partial, 5 outside; 401/1720 cases have no counterpart there | [external-taxonomy-coverage.md](external-taxonomy-coverage.md) |
+| Second taxonomy cross-check | LASM's 116-paper vocabulary: v1 occupies 3/7 architectural layers and 1/4 temporal classes | [second-taxonomy-coverage.md](second-taxonomy-coverage.md) |
 | Source-frozen MetricFlow | 68 upstream-authored expected-SQL cases reproduced byte-for-byte at an exact Git object; Raintree-authored bridge leaves 68 fuzz mutations surviving | [brownfield-results.md](brownfield-results.md) |
 | BetterOff production pilot | exact deployed revision; 33/36 live read-only probes passed, 3 authenticated skips; no customer reads or production mutations | [production-pilot.md](production-pilot.md) |
 | BetterOff historical replay | 3/3 exact pre/post-fix source contracts reproduced; 2 map to v1 and 1 is outside the taxonomy | [`studies/betteroff-historical-replay.json`](../studies/betteroff-historical-replay.json) |
@@ -146,6 +149,11 @@ doc and a reproduction script; all are deterministic and need no LLM API key unl
 - MetricFlow cases are upstream-authored, but the adapter and study operation are not external or
   PolicyStrata-blind.
 - Historical replay verifies source-contract changes without executing the vulnerable services.
+- The executed-RLS pass covers all 20 policies across the 6 policy-bearing tables in the frozen
+  migrations, but runs them under a Raintree-authored Supabase bridge rather than Midday's
+  deployed runtime.
+- Both external taxonomy mappings are our reading of another group's classes; their authors did
+  not review them, and neither taxonomy is a field distribution.
 
 ## Optional Real PostgreSQL RLS Check
 
@@ -156,6 +164,17 @@ table against Dockerized PostgreSQL through the Python adapter:
 docker compose up -d postgres
 uv run python scripts/postgres-rls-evidence.py
 ```
+
+Against a PostgreSQL you already run, set both URLs instead of starting the compose service:
+
+```bash
+POLICYSTRATA_DATABASE_URL=postgresql://user:pw@host:5432/support_saas \
+POLICYSTRATA_APP_DATABASE_URL=postgresql://app:pw@host:5432/support_saas \
+  uv run python scripts/postgres-rls-evidence.py
+```
+
+The app role must be a non-owner, non-superuser login role, or row-level security is bypassed and
+every check passes without testing anything.
 
 Expected table shape:
 

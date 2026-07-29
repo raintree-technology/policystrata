@@ -35,14 +35,14 @@ document summarizes and cross-references.
    target), or **(c)** a PolicyStrata scanner/adapter limitation. See "Scanner gaps" below for the
    (c) findings, several of which recurred across independent targets.
 
-No file under `src/policystrata/**` was modified. No commits were made. No network access beyond
-the pre-existing shallow clones. No new Python dependencies.
+The original scan pass modified no file under `src/policystrata/**`; the follow-up fixes described
+below do modify the scanner. No new Python dependencies were added.
 
 ## Summary table
 
 | Repo | dbt/semantic input | SQL traces | Tenancy signal | `scan` exit | Total findings | Gate-failing (HIGH/HIGH+) | Warnings | Class (a) | Class (b) | Class (c) |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| [metricflow](#metricflow) | 12 models / 110 metrics, native+merged | 68, 100% native `check_query` SQL | synthesized (compiler has none) | 0 | 95 | 0 | 95 | 0 | 3 finding-families | 2 finding-families |
+| [metricflow](#metricflow) | 12 models / 110 metrics, native+merged | 68, 100% native `check_query` SQL | synthesized (compiler has none) | 0 | 72 | 0 | 72 | 0 | 1 finding-family (bridge fuzz) | 0 (gaps 3-5 fixed) |
 | [midday](#midday) | none (no semantic layer) | 5, hand-transcribed from cited real TS | native RLS column (`team_id`) | 1 | 2 | 1 | 1 | 0 | 0 | 2 |
 | [WrenAI](#wrenai) | 3 models, native+mapped | 2 (1 native-condition, 1 labeled hypothetical) | mechanically rendered from real MDL RLAC condition | 1 | 11 | 1 | 10 | 0 | 0 | 1 (recurs, see below) |
 | [cube](#cube) *(bonus)* | 1 model, native+mapped | 3 main + 1 clean-config | mechanically rendered from real accessPolicy filter | 1 (both configs) | 2 main / 1 clean | 2 main / 1 clean | 0 | 0 | 0 | 1 (recurs, see below) |
@@ -66,9 +66,10 @@ semantic models and 110 metrics merged, native field values throughout. 68 of 26
 trace's `sql` is metricflow's own, real, hand-authored `check_query` text. The source-frozen rerun
 uses upstream commit `45dce78641bbdd7e182aa57132fc11a23b24dde5`; the transformed input hashes
 are recorded in `benchmarks/external_source/metricflow-freeze.json`. All 68 traces authorize
-against a policy derived from the same manifest. The scan emits 95 non-gating warnings from the
-synthetic bridge role and remaining adapter gaps, including two dbt measures that omit `expr:`
-under MetricFlow's implicit-default convention.
+against a policy derived from the same manifest. The scan emits 72 non-gating warnings, of which 68
+come from the synthetic bridge role permitting every dimension and 4 are adapter findings that are
+correct. Before gaps 3-5 were closed it emitted 95, with 23 of the extra 27 attributable to the
+adapter rather than to metricflow.
 
 ### midday
 
@@ -123,8 +124,23 @@ gap documented for metricflow and midday.
 
 ## Scanner gaps identified (class c)
 
-Each gap is cited with the exact recommended change. Gaps 1 and 2 have since been **fixed** (see the
-notes below and `tests/test_scanner_tenancy_fallback.py`); gaps 3–5 remain open.
+Each gap is cited with the exact recommended change. **All five have since been fixed.** Gaps 1 and
+2 were closed earlier (see `tests/test_scanner_tenancy_fallback.py`); gaps 3, 4, and 5 were closed
+in `src/policystrata/integrations/dbt_semantic.py`.
+
+Effect on the metricflow scan, which is the target that surfaced all three:
+
+| Warning kind | Before | After | Why the remainder is correct |
+| --- | ---: | ---: | --- |
+| `dbt_missing_policy_dimension` | 15 | 0 | entity-qualified and entity names now resolve |
+| `dbt_stale_metric` | 9 | 3 | the 3 left declare `create_metric: true`, so they are governable and genuinely uncovered by the scoped policy |
+| `dbt_expression_mismatch` | 2 | 0 | an omitted `expr:` is resolved to its implicit default |
+| `dbt_sensitive_metadata` | 1 | 1 | real: policy marks `company_name` sensitive, the manifest does not |
+| fuzz survivals (bridge, not adapter) | 68 | 68 | unchanged; the synthetic bridge role permits every dimension |
+| **total** | **95** | **72** | |
+
+Adapter warnings on real input drop from 27 to 4, and each of the 4 is a finding the adapter should
+report.
 
 ### 1. Custom-domain tenant-column fallback is misleading (recurs on 3 of 4 targets) — FIXED
 
@@ -155,7 +171,17 @@ way to declare "table X uses column Y," so a config correctly scoped for the dom
 necessarily misjudges the minority one. See `examples/brownfield/midday/README.md`'s finding
 detail for the concrete example and recommended fix (per-table/per-trace tenancy declarations).
 
-### 3. dbt adapter does plain name-string matching with no entity-join resolution
+### 3. dbt adapter does plain name-string matching with no entity-join resolution — FIXED
+
+**Fixed.** The inventory now records each model's entities and builds `dimension_aliases` and
+`entity_aliases`: every dimension resolves under its local name and under `entity__dimension` for
+the entities declared on *its own* model, every entity resolves on its own and through another
+entity on the same model (so a mapping model with `{listing, lux_listing}` serves
+`listing__lux_listing`), and `metric_time` is recognized as a semantic-layer built-in.
+`missing_policy_dimensions` is computed against that resolvable set, while `stale_dbt_dimensions`
+stays computed against declared local names — a policy may reference a qualified name, but
+staleness should be judged on what the manifest actually declares. metricflow's 15 false
+`missing_policy_dimension` warnings drop to 0. Original report follows.
 
 metricflow declares dimensions with local names (`is_instant`) but its own query interface
 references them via entity-qualified dunder names (`booking__is_instant`) that never appear
@@ -164,7 +190,16 @@ verbatim in the manifest YAML. `src/policystrata/integrations/dbt_semantic.py`'s
 dbt-Semantic-Layer-style systems) declared-name vs. referenced-name split will produce this class
 of warning. See `examples/brownfield/metricflow/README.md`.
 
-### 4. `metrics ∪ measures` comparison pool conflates private measures with public metrics
+### 4. `metrics ∪ measures` comparison pool conflates private measures with public metrics — FIXED
+
+**Fixed.** The single pool is split, and the split is asymmetric on purpose.
+`missing_policy_metrics` still compares against `metrics ∪ measures`, so a policy metric backed by
+a private measure is not reported missing. `stale_dbt_metrics` compares against
+`governable_metric_names()` — metrics with their own document, plus measures the manifest promotes
+with `create_metric: true`. A measure without it is a private building block that policy is not
+expected to name. metricflow's 9 stale-metric warnings drop to 3, and those 3 all declare
+`create_metric: true`, so they are correctly reported as governable-but-uncovered. Original report
+follows.
 
 Also in `dbt_semantic.py`: `dbt_metric_names` is `metrics ∪ measures`. metricflow measures marked
 `create_metric: true` with no separate literal `metric:` document (relying on metricflow's own
@@ -172,7 +207,13 @@ name-equals-measure-name auto-promotion convention) land in that pool with no po
 and are flagged "stale," even though they were never meant to be individually governed the same
 way as an explicit metric. See `examples/brownfield/metricflow/README.md`.
 
-### 5. `expression_mismatches` doesn't know omitted `expr:` has an implicit default
+### 5. `expression_mismatches` doesn't know omitted `expr:` has an implicit default — FIXED
+
+**Fixed.** An omitted `expr:` now resolves to the measure's own name before comparison, which is
+what dbt and MetricFlow do, and the resolved expression is judged like any other. The empty-string
+special case that reported "dbt measure expression is empty" is gone; a measure whose implicit
+default genuinely does not match the policy column is still reported. metricflow's 2
+expression-mismatch warnings drop to 0. Original report follows.
 
 metricflow measures may omit `expr:` (it implicitly defaults to the measure's own name). dbt
 adapter's `expression_matches_policy` treats an empty `expr` string as an automatic mismatch
@@ -208,6 +249,36 @@ correctly distinguish an enforced query from an unenforced one, on real SQL) is 
 everywhere it was tested: cube (2/2 broken caught, 0/1 correct flagged), WrenAI (1/1 hypothetical
 bypass caught, 0/1 real-consistent flagged), and midday (0/4 real team-scoped traces flagged).
 
+## Live-database pass (midday)
+
+Every result above is static. That leaves the question a static scan cannot answer: would these
+checks notice if a real policy stopped working? `examples/brownfield/midday/live_db/` answers it
+for the one target with real, committed Postgres RLS. midday's 20 real `CREATE POLICY`
+statements across all six policy-bearing tables in the frozen migrations are loaded verbatim into
+PostgreSQL 18.4 and executed, with a Raintree-authored bridge supplying the Supabase roles,
+`auth.uid()`, `private.get_teams_for_authenticated_user()`, and base tables that midday's
+migrations assume but do not commit. Checks connect as a non-owner, non-superuser role, so RLS
+applies. Full provenance is in `examples/brownfield/midday/live_db/README.md`.
+
+| Fixture | Expected gate | Observed gate | Findings | Which |
+| --- | --- | --- | --- | --- |
+| midday policies intact | pass | pass | 0 | - |
+| one predicate weakened to `USING (true)` | fail | fail | 4 | 3 RLS checks + 1 state assertion, all on `insights` |
+
+The intact run exercises 13 real-DB evidence items (7 `rls_checks`, 6 `state_assertions`) alongside
+the 5 imported traces, and gates clean. The weakened run replaces midday's real `insights`
+predicate with `USING (true)` — the `db_rls_old_ownership_field` drift shape applied to real policy
+text — and PolicyStrata reports the cross-team read and the now-unauthenticated read, while
+`invoice_recurring` and `insight_user_status` stay clean because their policies were untouched.
+
+This is a synthesized regression against real policy text, in the same spirit as the cube target.
+It is not a midday defect: midday's committed predicate is correct. It is also not midday's
+deployed Supabase runtime, which we have never observed.
+
+```bash
+uv run python scripts/midday-live-db-evidence.py
+```
+
 ## Draft upstream issues
 
 **None.** No class-(a) finding (a real, newly-discovered potential issue in a scanned repo) came
@@ -230,11 +301,11 @@ inflation this pass was asked to avoid.
 - **vanna** (ranked weakest target in the inventory: no semantic models, no SQL fixtures, no
   schema, no tenancy vocabulary -- "almost everything must be authored from scratch") was not
   attempted in this pass, consistent with the task's priority order and budget guidance.
-- No live PostgreSQL comparison (`database.rls_checks`/`state_assertions`/real-DB semantic-drift
-  detection) was run for any target. midday's `schema.sql` is produced and wired into its config
-  (`required: false`) specifically so this is honestly represented as "not exercised" rather than
-  silently absent, but standing up a seeded Postgres fixture for any target was out of this pass's
-  scope.
+- ~~No live PostgreSQL comparison was run for any target.~~ **Closed for midday** (see
+  [Live-database pass](#live-database-pass-midday) below). Still open for metricflow, WrenAI, and
+  cube: metricflow and cube have no tenancy concept to enforce, and WrenAI's RLAC is applied by
+  its own Rust planner rather than by database policy, so a Postgres fixture would not exercise
+  the real mechanism in any of the three.
 - metricflow: `SCD_MODEL`/`EXTENDED_DATE_MODEL`/multi-hop-join manifests (33 of 266 itest cases),
   multi-metric traces (43 cases -- PolicyStrata's `SemanticQuery` IR models exactly one metric per
   query, which metricflow's real multi-metric-per-query capability can't be represented in without

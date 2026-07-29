@@ -121,6 +121,9 @@ jobs:
           --config examples/postgres_dbt/policystrata_real_db_clean.yaml
           --out runs/scan-real-db-clean
 
+      - name: Run midday live-policy evidence
+        run: mise x python@3.12.13 -- uv run python scripts/midday-live-db-evidence.py
+
   clickhouse-integration:
     name: ClickHouse integration
     runs-on: ubuntu-24.04

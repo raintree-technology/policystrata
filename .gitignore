@@ -75,6 +75,11 @@ output/
 .clearance/
 paper/build/
 
+# Venue-targeting notes stay local. This repository is public and the paper links to it, so a
+# committed file naming a submission target would disclose it alongside the public preprint.
+# Double-anonymous venues ask authors not to specify where a manuscript was submitted.
+paper/submissions/
+
 # Generated public-site artifacts
 feed.xml
 llms.txt

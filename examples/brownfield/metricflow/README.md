@@ -16,9 +16,9 @@ uv run policystrata scan --config examples/brownfield/metricflow/policystrata.ya
   --out runs/brownfield-metricflow
 ```
 
-Current result: **exit 0**, with 95 warning-level findings and gate `warn`; no high-confidence
-finding fails the gate. Earlier results in this document predated the custom-domain tenancy fix.
-The frozen rerun is authoritative for the revision and hashes named above.
+Current result: **exit 0**, with 72 warning-level findings and gate `warn`; no high-confidence
+finding fails the gate. Earlier results in this document predated the custom-domain tenancy and
+dbt-adapter fixes. The frozen rerun is authoritative for the revision and hashes named above.
 
 ## What is native, transformed, and synthesized
 
@@ -58,43 +58,34 @@ The frozen rerun is authoritative for the revision and hashes named above.
 
 ## Findings, classified
 
-The source-frozen rerun produces 95 warnings, no high-confidence failure, and gate `warn`
+The source-frozen rerun produces 72 warnings, no high-confidence failure, and gate `warn`
 (exit 0). None is a MetricFlow defect: MetricFlow is a compiler with no native PolicyStrata
 principal, tenancy, authorization, or release surface. The former 68
 `tenant_scope_missing` failures disappeared after PolicyStrata stopped applying a built-in tenant
-column to custom domains with no configured tenancy basis. The remaining warnings are adapter or
-synthesis effects listed below.
+column to custom domains with no configured tenancy basis. The remaining warnings are synthesis
+effects or correct adapter findings listed below.
 
-### (b) Synthesis artifact -- 15x `missing_policy_dimension` (dbt adapter, WARNING)
+### Closed adapter gap -- 15 → 0 `missing_policy_dimension`
 
 `domain/policy.yaml` registers the entity-qualified query-time dimension tokens (e.g.
 `booking__is_instant`, `user__company_name`, `metric_time`) so the 68 traces authorize cleanly.
 Those tokens never appear verbatim in any semantic model's `dimensions:` list (metricflow
-declares `is_instant`; queries reference it via the entity join as `booking__is_instant`), so
-`inspect_dbt_semantic_model`'s plain name-string diff flags all 15 of them as present in the
-policy but "missing" from dbt. This is expected given how we bridged authorization, and also
-illustrates a real adapter gap worth naming: PolicyStrata's dbt adapter does plain 1:1 name
-matching with no entity-join/dunder resolution, so any tool that (like metricflow) declares
-dimensions locally but references them join-qualified at query time will systematically produce
-this class of warning. Non-gating (WARNING/MEDIUM).
+declares `is_instant`; queries reference it via the entity join as `booking__is_instant`).
+The adapter now resolves per-model entity-qualified names, entity names, and `metric_time`, so
+these 15 false warnings are gone.
 
-### (c) Scanner/adapter design nuance -- 9x `stale_dbt_metric` (WARNING)
+### Correct adapter finding -- 3x `stale_dbt_metric` (WARNING)
 
-`inspect_dbt_semantic_model` unions `metrics` and `measures` into one "dbt metric names" pool
-before diffing against the policy. 9 measures (e.g. `new_users`, `archived_users`) are declared
-with `create_metric: true` and no separate literal `metric:` document -- metricflow's own
-convention auto-promotes them to metrics elsewhere, but our transform only merges literal
-`metric:` documents. Those 9 measure names land in the "dbt" pool with no matching policy metric
-and are flagged stale. Non-gating.
+The adapter now excludes private measures from the stale-name comparison. Three measures
+(`archived_users`, `new_users`, and `total_account_balance_first_day_of_month`) remain because
+they declare `create_metric: true`; they are governable metrics that the scoped policy does not
+cover, so these warnings are correct.
 
-### (b) Synthesis artifact -- 2x `dbt_expression_mismatch` (WARNING)
+### Closed adapter gap -- 2 → 0 `dbt_expression_mismatch`
 
 `account_balance` and `booking_value` measures omit `expr:` in their native YAML (metricflow
 convention: an omitted `expr` implicitly defaults to the measure's own name). PolicyStrata's
-`expression_mismatches` check treats an empty `expr` string as an automatic mismatch, without
-knowing about metricflow's implicit-default convention. The underlying policy expression is
-correct; this is a real, minor scanner/adapter gap surfaced by real (if terse) native YAML.
-Non-gating.
+adapter now resolves the omitted expression to the measure name, so both false warnings are gone.
 
 ### (b) Synthesis artifact -- 1x `dbt_sensitive_metadata_missing` (WARNING)
 
@@ -114,13 +105,11 @@ sensitive-data exposure problem.
 
 ### Clean signal worth naming
 
-Despite the two `dbt_expression_mismatch` cases above, **108/110 native dbt metrics matched the
-auto-derived policy with zero `missing_policy_metrics` and the `sql_mentions_policy_metric` static
-check passed for essentially all 68 real traces** (only the 2 measures above triggered a mismatch,
-and that was on the dbt-adapter's separate `expr`-string check, not the trace-vs-SQL check). That
-is a genuine "trace-ready" capability demonstration: PolicyStrata's SQL-trace metric-expression
-matching works against 100% real, unmodified metricflow-compiler SQL when the policy's metric
-vocabulary is derived from the same manifest.
+All 110 native dbt metrics now match the auto-derived policy with zero
+`missing_policy_metrics` or expression mismatches, and the `sql_mentions_policy_metric` static
+check passes for the 68 real traces. That is a genuine "trace-ready" capability demonstration:
+PolicyStrata's SQL-trace metric-expression matching works against 100% real, unmodified
+metricflow-compiler SQL when the policy's metric vocabulary is derived from the same manifest.
 
 ## Not attempted
 

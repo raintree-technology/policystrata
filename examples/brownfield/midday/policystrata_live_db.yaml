@@ -1,0 +1,155 @@
+version: 1
+domain: brownfield_midday
+domain_path: domain
+output: scan-live-db-out
+# Live-database variant of policystrata.yaml. The static pass could only read midday's SQL; this
+# one loads midday's real CREATE POLICY statements into PostgreSQL and asks the database what a
+# team-scoped principal can actually see.
+#
+# Provenance, restated here so it is visible at the point of use:
+#   live_db/schema_scoped.sql   NATIVE      midday's own SQL, verbatim (6 tables, 20 real policies)
+#   live_db/supabase_runtime.sql SYNTHESIZED Raintree-authored Supabase bridge (roles, auth.uid,
+#                                            private.get_teams_for_authenticated_user, base tables)
+#   live_db/seed.sql             SYNTHESIZED Raintree-authored two-team fixture
+#
+# The bridge means auth.uid() reads app.tenant_id, which PolicyStrata sets per check. The checks
+# below therefore pass a *user* UUID as tenant_id, and midday's unmodified predicates resolve it
+# to teams themselves.
+sql_traces:
+  required: true
+  files:
+    - traces.jsonl
+tenancy:
+  tenant_columns:
+    - team_id
+  # insight_user_status is scoped by user, not team, in midday's real policy. Declaring the
+  # override here is what scanner gap #2 (docs/brownfield-results.md) was fixed to allow.
+  table_tenant_columns:
+    insight_user_status:
+      - user_id
+database:
+  required: true
+  # schema/seed are deliberately not declared here. scripts/midday-live-db-evidence.py loads
+  # live_db/supabase_runtime.sql, live_db/schema_scoped.sql, and live_db/seed.sql in that fixed
+  # order before scanning, because midday's real SQL is not idempotent and the bridge has to be
+  # in place before its policies will parse. Run that script rather than this config alone.
+  # Checks connect as midday_app: a non-owner, non-superuser login role. A table owner or a
+  # superuser would bypass every policy below and the whole fixture would report false safety.
+  # URLs intentionally come from POLICYSTRATA_DATABASE_URL and
+  # POLICYSTRATA_APP_DATABASE_URL. scripts/midday-live-db-evidence.py derives both from its
+  # --admin-url, whose default matches the repository's docker-compose.yml fixture.
+  # midday's traces are parameterized ORM SQL with $1 placeholders; executing them verbatim is
+  # not meaningful. The rls_checks and state_assertions below carry the live evidence.
+  execute_imported_sql: false
+  rls_checks:
+    - id: insights_team_scope_ann
+      sql: "select team_id, period_number from insights order by team_id, period_number"
+      tenant_id: aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa
+      tenant_column: team_id
+      expected_rows: 2
+      expected_tenant_ids: ["11111111-1111-1111-1111-111111111111"]
+      required: true
+    - id: insights_team_scope_ben
+      sql: "select team_id, period_number from insights order by team_id, period_number"
+      tenant_id: bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb
+      tenant_column: team_id
+      expected_rows: 2
+      expected_tenant_ids: ["22222222-2222-2222-2222-222222222222"]
+      required: true
+    - id: insights_unauthenticated
+      sql: "select team_id, period_number from insights order by team_id, period_number"
+      tenant_column: team_id
+      expected_rows: 0
+      required: true
+    - id: invoice_recurring_team_scope_ann
+      sql: "select team_id, currency from invoice_recurring order by team_id"
+      tenant_id: aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa
+      tenant_column: team_id
+      expected_rows: 1
+      expected_tenant_ids: ["11111111-1111-1111-1111-111111111111"]
+      required: true
+    - id: platform_identities_team_scope_ann
+      sql: "select team_id, external_user_id from platform_identities order by team_id"
+      tenant_id: aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa
+      tenant_column: team_id
+      expected_rows: 1
+      expected_tenant_ids: ["11111111-1111-1111-1111-111111111111"]
+      required: true
+    - id: platform_link_tokens_team_scope_ann
+      sql: "select team_id, code from platform_link_tokens order by team_id"
+      tenant_id: aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa
+      tenant_column: team_id
+      expected_rows: 1
+      expected_tenant_ids: ["11111111-1111-1111-1111-111111111111"]
+      required: true
+    - id: provider_notification_batches_team_scope_ann
+      sql: "select team_id, batch_key from provider_notification_batches order by team_id"
+      tenant_id: aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa
+      tenant_column: team_id
+      expected_rows: 1
+      expected_tenant_ids: ["11111111-1111-1111-1111-111111111111"]
+      required: true
+  state_assertions:
+    # The point of each assertion is the forbidden value: the other team's row is present in the
+    # table and must not appear in the result.
+    - id: insights_exclude_other_team
+      sql: "select team_id, period_number from insights order by team_id, period_number"
+      tenant_id: aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa
+      expected_rows: 2
+      require_columns: [team_id, period_number]
+      forbidden_values:
+        team_id: ["22222222-2222-2222-2222-222222222222"]
+      required: true
+      regression_case: pass_to_pass
+    # insight_user_status uses user_id = auth.uid(), a different dimension from every other
+    # policy in the fixture. Ann must see her row and not Ben's.
+    - id: insight_user_status_user_scope
+      sql: "select user_id, insight_id from insight_user_status order by user_id"
+      tenant_id: aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa
+      expected_rows: 1
+      require_columns: [user_id]
+      forbidden_values:
+        user_id: ["bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"]
+      required: true
+      regression_case: pass_to_pass
+    - id: invoice_recurring_exclude_other_team
+      sql: "select team_id, currency from invoice_recurring order by team_id"
+      tenant_id: bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb
+      expected_rows: 1
+      require_columns: [team_id]
+      forbidden_values:
+        team_id: ["11111111-1111-1111-1111-111111111111"]
+      required: true
+      regression_case: pass_to_pass
+    - id: platform_identities_exclude_other_team
+      sql: "select team_id, external_user_id from platform_identities order by team_id"
+      tenant_id: bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb
+      expected_rows: 1
+      require_columns: [team_id]
+      forbidden_values:
+        team_id: ["11111111-1111-1111-1111-111111111111"]
+      required: true
+      regression_case: pass_to_pass
+    - id: platform_link_tokens_exclude_other_team
+      sql: "select team_id, code from platform_link_tokens order by team_id"
+      tenant_id: bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb
+      expected_rows: 1
+      require_columns: [team_id]
+      forbidden_values:
+        team_id: ["11111111-1111-1111-1111-111111111111"]
+      required: true
+      regression_case: pass_to_pass
+    - id: provider_notification_batches_exclude_other_team
+      sql: "select team_id, batch_key from provider_notification_batches order by team_id"
+      tenant_id: bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb
+      expected_rows: 1
+      require_columns: [team_id]
+      forbidden_values:
+        team_id: ["11111111-1111-1111-1111-111111111111"]
+      required: true
+      regression_case: pass_to_pass
+fuzz:
+  enabled: false
+gate:
+  fail_on_high_confidence: true
+  required_inputs: [sql_traces, database, state_assertions]
