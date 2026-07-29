@@ -2,8 +2,17 @@
 
 ## [Unreleased]
 
+## [1.1.2] - 2026-07-29
+
+- Fix dbt Semantic Layer parsing for real MetricFlow manifests and add regression
+  coverage for the corrected adapter behavior.
+- Add reviewer-facing evaluation evidence, including external taxonomy coverage,
+  a live-database Midday study, expanded brownfield results, and the revised
+  manuscript.
 - Publish the reviewed Node runtime changes as `policystrata@0.1.4` and the
   Agent Trust Gateway changes as `@policystrata/agent-trust-gateway@0.1.2`.
+- Keep the Node runtime and Agent Trust Gateway package versions unchanged in
+  this Python-package release.
 
 ## [1.1.1] - 2026-07-22
 
