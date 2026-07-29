@@ -6,7 +6,7 @@ from importlib import resources
 
 try:
     from importlib.resources.abc import Traversable
-except ImportError:  # Python 3.10 exposes Traversable from importlib.abc.
+except ImportError:
     from importlib.abc import Traversable
 from pathlib import Path
 from typing import Any
@@ -62,8 +62,9 @@ def domain_root(domain: str = BUILTIN_DOMAIN) -> Traversable:
     return resources.files("policystrata").joinpath("domains").joinpath(domain)
 
 
-def load_yaml(path: Traversable | Path) -> Any:
-    return yaml.safe_load(path.read_text(encoding="utf-8"))
+def load_yaml(path: Traversable | Path) -> object:
+    value: object = yaml.safe_load(path.read_text(encoding="utf-8"))
+    return value
 
 
 def load_yaml_mapping(path: Traversable | Path) -> dict[str, Any]:
@@ -251,7 +252,7 @@ def validate_suite_name(suite: str) -> str:
     return suite
 
 
-def validate_matrix_count(count: Any) -> int:
+def validate_matrix_count(count: object) -> int:
     if not isinstance(count, int) or isinstance(count, bool):
         raise TypeError("matrix count must be an integer")
     if count < 1 or count > MAX_GENERATED_COUNT:

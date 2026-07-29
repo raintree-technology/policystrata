@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 
 from policystrata.writes import (
@@ -26,7 +28,7 @@ def _principal() -> WritePrincipal:
     )
 
 
-def _task(operator: str, **request_kwargs) -> WriteTask:
+def _task(operator: str, **request_kwargs: Any) -> WriteTask:
     request = WriteRequest(
         action=request_kwargs.pop("action", "update"),
         table=request_kwargs.pop("table", "accounts"),
@@ -87,7 +89,6 @@ def test_summary_zero_false_positives_full_localization() -> None:
     assert summary.false_positives == 0
     assert summary.localization_accuracy == 1.0
     assert summary.killed == 6 * len(WRITE_OPERATORS)
-    # Three of eight operators are database-contained.
     assert 0.0 < summary.containment_rate < 1.0
 
 

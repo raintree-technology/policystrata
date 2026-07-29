@@ -36,6 +36,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 import psycopg
 from psycopg.conninfo import conninfo_to_dict, make_conninfo
@@ -53,8 +54,6 @@ DEFAULT_ADMIN_URL = os.environ.get(
     "postgresql://policystrata:policystrata@127.0.0.1:55432/postgres",
 )
 
-# midday's real predicate on insights, and the weakened form used for the teeth test. The policy
-# name is midday's; only the USING clause changes.
 REAL_POLICY = "Team members can view their insights"
 SECOND_REAL_POLICY = "Insights can be selected by a member of the team"
 WEAKEN_SQL = f"""
@@ -77,20 +76,13 @@ def database_url(
         params["user"] = user
     if password is not None:
         params["password"] = password
-    return make_conninfo(**params)
+    normalized = {key: str(value) for key, value in params.items() if value is not None}
+    return make_conninfo("", **normalized)
 
 
-# Fixed load order. The bridge must precede midday's own SQL: its policies call auth.uid() and
-# private.get_teams_for_authenticated_user(), and its tables reference base tables midday does
-# not commit. midday's SQL is not idempotent, so each run starts from a fresh database.
 LOAD_ORDER = ("supabase_runtime.sql", "schema_scoped.sql", "seed.sql")
 
 
-# INHERIT is load-bearing, not incidental. supabase_runtime.sql grants this role membership in
-# `authenticated`, and Supabase expects that role's table privileges to apply without an explicit
-# SET ROLE. NOINHERIT turns every check into "permission denied for table insights" rather than a
-# containment result. NOBYPASSRLS is the flag that keeps midday's policies enforced, and the role
-# owns nothing, so inheriting `authenticated` grants no way around them.
 APP_ROLE_ATTRIBUTES = "login nosuperuser nocreatedb nocreaterole inherit noreplication nobypassrls"
 
 
@@ -101,14 +93,7 @@ def ensure_app_role(admin_url: str) -> None:
         if cur.fetchone() is None:
             cur.execute(f"create role midday_app password 'midday_app' {APP_ROLE_ATTRIBUTES}")
             return
-        # The role may already exist on a shared cluster, possibly with attributes that would
-        # invalidate the result. Assert them rather than trusting whatever is there.
         cur.execute(f"alter role midday_app password 'midday_app' {APP_ROLE_ATTRIBUTES}")
-        # PostgreSQL 16+ fixes a membership's inherit_option when the GRANT runs and never
-        # backfills it, so ALTER ROLE ... INHERIT above does not repair a membership granted
-        # while the role was NOINHERIT. Drop the stale membership and let supabase_runtime.sql
-        # re-grant it under the corrected attributes. Guarded because `authenticated` is created
-        # by that bridge and does not exist on a fresh cluster.
         cur.execute("select 1 from pg_roles where rolname = 'authenticated'")
         if cur.fetchone() is not None:
             cur.execute("revoke authenticated from midday_app")
@@ -151,7 +136,7 @@ def weaken_policy(admin_url: str) -> None:
         cur.execute(WEAKEN_SQL)
 
 
-def run_scan(admin_url: str, out_dir: Path) -> tuple[int, list[dict]]:
+def run_scan(admin_url: str, out_dir: Path) -> tuple[int, list[dict[str, Any]]]:
     env = os.environ.copy()
     env["POLICYSTRATA_DATABASE_URL"] = database_url(admin_url, DATABASE)
     env["POLICYSTRATA_APP_DATABASE_URL"] = database_url(
@@ -177,7 +162,7 @@ def run_scan(admin_url: str, out_dir: Path) -> tuple[int, list[dict]]:
         env=env,
     )
     findings_path = out_dir / "findings.jsonl"
-    findings = []
+    findings: list[dict[str, Any]] = []
     if findings_path.exists():
         findings = [json.loads(line) for line in findings_path.read_text().splitlines() if line.strip()]
     if completed.returncode not in (0, 1):
@@ -187,7 +172,7 @@ def run_scan(admin_url: str, out_dir: Path) -> tuple[int, list[dict]]:
     return completed.returncode, findings
 
 
-def summarize(findings: list[dict]) -> str:
+def summarize(findings: list[dict[str, Any]]) -> str:
     if not findings:
         return "-"
     ids = sorted({f["id"] for f in findings})
@@ -206,11 +191,10 @@ def main() -> int:
     args = parser.parse_args()
 
     rows: list[list[str]] = []
-    results: dict[str, dict] = {}
+    results: dict[str, dict[str, Any]] = {}
 
     ensure_app_role(args.admin_url)
 
-    # Run 1: midday's policies as committed.
     reset_database(args.admin_url)
     policies = loaded_policy_count(args.admin_url)
     if policies != 20:
@@ -237,16 +221,12 @@ def main() -> int:
         "result": "pass" if intact_ok else "fail",
     }
 
-    # Run 2: same fixture, one real predicate weakened to USING (true).
     reset_database(args.admin_url)
     weaken_policy(args.admin_url)
     weakened_exit, weakened_findings = run_scan(
         args.admin_url,
         args.out_root / "brownfield-midday-live-weakened",
     )
-    # Only the insights predicate was weakened, so only insights checks may fail. A checker that
-    # also flagged invoice_recurring or insight_user_status would be reporting noise, not
-    # containment, so the untouched tables staying clean is part of the pass condition.
     failed = {f["id"] for f in weakened_findings}
     insights_failures = {i for i in failed if "insights_" in i}
     collateral = failed - insights_failures

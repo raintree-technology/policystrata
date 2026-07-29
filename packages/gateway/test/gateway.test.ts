@@ -25,6 +25,14 @@ const PACKAGE_JSON = JSON.parse(
   readFileSync(join(TEST_DIR, "..", "..", "package.json"), "utf8"),
 ) as { version: string };
 
+function requiredItem<T>(items: readonly T[], index: number): T {
+  const item = items[index];
+  if (item === undefined) {
+    throw new Error(`expected item at index ${index}`);
+  }
+  return item;
+}
+
 const manifest: PolicyStrataRuntimeManifest = {
   schemaVersion: "policystrata.runtime_manifest.v1",
   version: "gateway.test",
@@ -70,8 +78,8 @@ test("decideRuntimeEvent returns an allow decision with a redacted event envelop
 
   assert.equal(result.ok, true);
   assert.equal(result.mode, "enforce");
-  assert.equal(result.events[0].decision.action, "allow");
-  assert.equal(result.decisions[0].event.decision.action, "allow");
+  assert.equal(requiredItem(result.events, 0).decision.action, "allow");
+  assert.equal(requiredItem(result.decisions, 0).event.decision.action, "allow");
 });
 
 test("guardRuntimePayload throws in enforce mode for denied runtime events", async () => {
@@ -93,7 +101,7 @@ test("decideRuntimeEvents permits shadow-mode observation without changing the d
 
   assert.equal(result.ok, false);
   assert.equal(result.mode, "shadow");
-  assert.equal(result.decisions[0].action, "deny");
+  assert.equal(requiredItem(result.decisions, 0).action, "deny");
 });
 
 test("uploadRuntimeEvents strips payloads by default", async () => {
@@ -124,9 +132,13 @@ test("uploadRuntimeEvents strips payloads by default", async () => {
       (received as { gateway: { version: string } }).gateway.version,
       PACKAGE_JSON.version,
     );
-    assert.deepEqual((received as { events: RuntimeEventWithDecision[] }).events[0].payload, undefined);
-    assert.equal((received as { events: RuntimeEventWithDecision[] }).events[0].expectedDecision, undefined);
-    assert.equal((received as { events: RuntimeEventWithDecision[] }).events[0].payloadHash, undefined);
+    const uploadedEvent = requiredItem(
+      (received as { events: RuntimeEventWithDecision[] }).events,
+      0,
+    );
+    assert.deepEqual(uploadedEvent.payload, undefined);
+    assert.equal(uploadedEvent.expectedDecision, undefined);
+    assert.equal(uploadedEvent.payloadHash, undefined);
     assert.equal((received as { headers?: unknown }).headers, undefined);
     assert.equal(idempotency, "evt-upload-once");
   } finally {
@@ -202,9 +214,12 @@ test("runtime evaluation rejects SQL substring tenant matches and classifies ris
   );
 
   assert.equal(substring.ok, false);
-  assert.match(substring.decisions[0].reason, /missing tenant predicate/);
-  assert.equal(exportRisk.decisions[0].queryRisk, "export");
-  assert.match(exportRisk.decisions[0].reasons.join("\n"), /SQL query risk export/);
+  assert.match(requiredItem(substring.decisions, 0).reason, /missing tenant predicate/);
+  assert.equal(requiredItem(exportRisk.decisions, 0).queryRisk, "export");
+  assert.match(
+    requiredItem(exportRisk.decisions, 0).reasons.join("\n"),
+    /SQL query risk export/,
+  );
 });
 
 test("runtime evaluation denies unparameterized SQL when required", () => {
@@ -217,8 +232,8 @@ test("runtime evaluation denies unparameterized SQL when required", () => {
   );
 
   assert.equal(result.ok, false);
-  assert.equal(result.decisions[0].controlId, "sql_parameterization_required");
-  assert.match(result.decisions[0].reason, /string_literal/);
+  assert.equal(requiredItem(result.decisions, 0).controlId, "sql_parameterization_required");
+  assert.match(requiredItem(result.decisions, 0).reason, /string_literal/);
 });
 
 test("runtime evaluation checks RLS drift and egress destination classes", () => {
@@ -246,8 +261,8 @@ test("runtime evaluation checks RLS drift and egress destination classes", () =>
     }),
   );
 
-  assert.equal(rls.decisions[0].controlId, "rls_drift");
-  assert.equal(egress.decisions[0].controlId, "egress_destination_class");
+  assert.equal(requiredItem(rls.decisions, 0).controlId, "rls_drift");
+  assert.equal(requiredItem(egress.decisions, 0).controlId, "egress_destination_class");
 });
 
 test("runtime evaluation denies when manifest kill switch is enabled", () => {
@@ -257,7 +272,7 @@ test("runtime evaluation denies when manifest kill switch is enabled", () => {
   );
 
   assert.equal(result.ok, false);
-  assert.equal(result.decisions[0].controlId, "runtime_kill_switch");
+  assert.equal(requiredItem(result.decisions, 0).controlId, "runtime_kill_switch");
 });
 
 test("nativeIntegrationRuntimeEvent emits provider traceability", () => {
@@ -276,7 +291,10 @@ test("nativeIntegrationRuntimeEvent emits provider traceability", () => {
 });
 
 test("uploadRuntimeEvents sends clearance and legacy organization headers", async () => {
-  let organizationHeaders: { clearance?: string; assurance?: string } = {};
+  let organizationHeaders: {
+    clearance: string | undefined;
+    assurance: string | undefined;
+  } = { clearance: undefined, assurance: undefined };
   const controlPlane = await startJsonServer(async (request) => {
     organizationHeaders = {
       clearance: request.headers["x-clearance-organization-id"]?.toString(),
@@ -326,9 +344,13 @@ test("HTTP gateway evaluates, blocks, and uploads redacted runtime events", asyn
 
     assert.equal(response.status, 403);
     assert.equal(body.ok, false);
-    assert.equal(body.decisions[0].action, "deny");
-    assert.equal((received as { events: RuntimeEventWithDecision[] }).events[0].payload, undefined);
-    assert.equal((received as { events: RuntimeEventWithDecision[] }).events[0].decision.action, "deny");
+    assert.equal(requiredItem(body.decisions, 0).action, "deny");
+    const uploadedEvent = requiredItem(
+      (received as { events: RuntimeEventWithDecision[] }).events,
+      0,
+    );
+    assert.equal(uploadedEvent.payload, undefined);
+    assert.equal(uploadedEvent.decision.action, "deny");
   } finally {
     await gateway.close();
     await controlPlane.close();

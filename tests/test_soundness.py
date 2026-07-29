@@ -4,6 +4,7 @@ import random
 
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
+from hypothesis.strategies import DataObject
 
 from policystrata.domain import BUILTIN_DOMAINS, load_policy, load_surface_config, load_surfaces
 from policystrata.generator import (
@@ -11,7 +12,7 @@ from policystrata.generator import (
     query_for_mutation,
     select_restricted_principal,
 )
-from policystrata.models import Task, WitnessClass
+from policystrata.models import Policy, SurfaceConfig, SurfaceVersions, Task, Trace, WitnessClass
 from policystrata.mutations import get_mutation
 from policystrata.runner import evaluate_task
 from policystrata.soundness import (
@@ -20,10 +21,10 @@ from policystrata.soundness import (
     witness_implies_contract_violation,
 )
 
-_DOMAIN_CACHE: dict[str, tuple] = {}
+_DOMAIN_CACHE: dict[str, tuple[Policy, SurfaceVersions, SurfaceConfig]] = {}
 
 
-def _domain(domain: str):
+def _domain(domain: str) -> tuple[Policy, SurfaceVersions, SurfaceConfig]:
     if domain not in _DOMAIN_CACHE:
         _DOMAIN_CACHE[domain] = (
             load_policy(domain),
@@ -33,7 +34,7 @@ def _domain(domain: str):
     return _DOMAIN_CACHE[domain]
 
 
-def _trace_for(domain: str, mutation_id: str, seed: int):
+def _trace_for(domain: str, mutation_id: str, seed: int) -> Trace:
     policy, surfaces, surface_config = _domain(domain)
     principal = select_restricted_principal(policy)
     rng = random.Random(seed)
@@ -61,14 +62,17 @@ def _trace_for(domain: str, mutation_id: str, seed: int):
     seed=st.integers(min_value=0, max_value=10_000),
     data=st.data(),
 )
-def test_soundness_witness_implies_contract_violation(domain: str, seed: int, data) -> None:
+def test_soundness_witness_implies_contract_violation(
+    domain: str,
+    seed: int,
+    data: DataObject,
+) -> None:
     mutation_id = data.draw(st.sampled_from(mutation_ids_for_domain(domain)))
     trace = _trace_for(domain, mutation_id, seed)
     assert witness_implies_contract_violation(trace)
 
 
 def test_soundness_exhaustive_over_taxonomy() -> None:
-    # A finite exhaustive sweep over every operator x several seeds per domain.
     for domain in BUILTIN_DOMAINS:
         for mutation_id in mutation_ids_for_domain(domain):
             for seed in range(25):
@@ -99,7 +103,7 @@ def test_clean_controls_have_no_contract_violation() -> None:
         assert all(decision.allowed for decision in trace.contract_decisions.values())
 
 
-def _first_allowed_metric(policy, role_name: str) -> str:
+def _first_allowed_metric(policy: Policy, role_name: str) -> str:
     role = policy.roles[role_name]
     for metric in sorted(role.allowed_metrics):
         if metric in policy.metrics:
@@ -111,9 +115,7 @@ def test_completeness_covers_all_operators() -> None:
     coverage = completeness_by_class()
     listed = {operator for entry in coverage for operator in entry.operators}
     contract_map = {entry.operator for entry in operator_contract_map()}
-    # Every operator is characterized in both views, and they agree.
     assert listed == contract_map
-    # Every non-clean witness class produced by the taxonomy is represented.
     classes = {entry.witness_class for entry in coverage}
     assert WitnessClass.CLEAN not in classes
     assert len(classes) >= 4

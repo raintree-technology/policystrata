@@ -423,7 +423,6 @@ def main(argv: list[str] | None = None) -> int:
         if not is_user_type_error(exc):
             raise
         parser.error(str(exc))
-    return 2
 
 
 def run_command(args: argparse.Namespace) -> int:

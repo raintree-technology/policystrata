@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+## [1.1.3] - 2026-07-29
+
+- Enforce strict Python and TypeScript checking across source, scripts, and tests.
+- Validate runtime manifests and events at untyped boundaries without unsafe
+  structural casts, and preserve required event-builder fields.
+- Remove undefined-valued trace properties, redundant validators, stale
+  comments, and duplicated parser coverage.
+- Publish Node runtime `policystrata@0.1.5` and Agent Trust Gateway
+  `@policystrata/agent-trust-gateway@0.1.3`.
+
 ## [1.1.2] - 2026-07-29
 
 - Fix dbt Semantic Layer parsing for real MetricFlow manifests and add regression

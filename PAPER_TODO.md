@@ -1,6 +1,6 @@
 # Paper and Evidence TODO
 
-Unfinished work on the PolicyStrata paper and its evaluation evidence, as of 2026-07-28.
+Unfinished work on the PolicyStrata paper and its evaluation evidence, as of 2026-07-29.
 
 Checked items were completed in the 2026-07-28 tech-debt pass and are kept for the record.
 Everything still unchecked is genuinely open.
@@ -119,20 +119,87 @@ Actionable without anyone else. Ordered by how much each would answer a reviewer
 - [x] Wired the LASM cross-check into Related Work, Benchmark Construction, Results, Threats,
       `references.bib`, `REVISION_NOTES.md`, and the extended-studies table in `docs/evidence.md`.
 
-## 4. Decisions not made
+## 4. Publication submission waterfall
 
-- [x] Chose a research-track target with a late-2026 deadline, an 18-page text-and-figure limit,
-      and a direct fit with software engineering for AI, dependability, and program analysis. The
-      venue, deadline, and submission gate are recorded in `paper/submissions/`, which is
-      deliberately gitignored — see below.
-- [x] Dropped tool-demo framing for resubmission. The canonical manuscript stays venue-neutral
-      until anonymization; the chosen target is a research track, not a demo track.
-- [x] Kept the venue name out of every committed file. The target track is double-anonymous and
-      asks authors not to specify where a manuscript was submitted. This repository is public and
-      the preprint links to it, so a committed file naming the venue would disclose the submission
-      next to the preprint — the exact pairing the policy warns against, and a desk-reject risk.
-      Preprints themselves are explicitly permitted, so publishing the paper is fine; naming the
-      venue alongside it is not.
+Decision made 2026-07-29: pursue the same tool paper sequentially through the venues below, with
+the smallest possible venue-specific changes. This supersedes the earlier single-target FSE
+research-track plan. The local FSE notes are parked as a possible future plan, not an active
+submission.
+
+### Rules for every attempt
+
+- [x] Keep only one archival submission of this work active at a time. Submit to the next venue
+      only after the previous venue rejects the paper or confirms its withdrawal.
+- [x] Stop this waterfall when the paper is accepted. Do not republish substantially the same
+      paper. A later journal article must make a genuinely new contribution, cite the conference
+      paper, and disclose the relationship.
+- [x] Keep `paper/main.tex` as the canonical source. Venue files are formatting wrappers, not
+      independently edited manuscripts.
+- [ ] Keep a submission log with each submitted, withdrawn, decided, and accepted date so the
+      non-overlap is auditable.
+- [ ] Keep the claims, results, figures, and evidence stable across attempts. Limit revisions to
+      reviewer fixes, page-limit cuts, required disclosures, formatting, and venue-specific
+      framing.
+
+### Attempt 1 — APSEC 2026 Tool Demonstration
+
+- [ ] Before investing in the conversion, ask the chairs to confirm that accepted tool-demo
+      papers are archival and included in the proceedings; the track page does not state this
+      clearly.
+- [ ] Confirm the required proceedings template and the track's AI-assistance disclosure policy.
+- [ ] Cut the stable core to 4 pages all-inclusive and prepare the required publicly accessible
+      3–5 minute YouTube demonstration video.
+- [ ] Register the abstract by 2026-09-14 and submit the paper by 2026-09-21.
+- [ ] Record the 2026-10-12 decision. If accepted, stop. If rejected, incorporate useful reviews
+      and proceed to SANER.
+
+### Attempt 2 — SANER 2027 Tool Demo, only after APSEC rejection or withdrawal
+
+- [ ] Verify the exact SANER 2027 EasyChair submission URL; the official track page currently
+      displays a conflicting `saner2026` link.
+- [ ] Expand the same core to at most 5 IEEE pages including references. Keep the presentation
+      scientific and OSS-focused rather than commercial.
+- [ ] Confirm before submission that an author can register at the full rate and demonstrate the
+      tool in person in Richmond, Virginia.
+- [ ] Optionally register the abstract by 2026-10-19 and submit by 2026-10-23.
+- [ ] Record the 2026-12-08 decision. If accepted, stop. If rejected, incorporate useful reviews
+      and proceed to SIGMOD.
+
+### Attempt 3 — SIGMOD 2027 Demonstrations, only after SANER rejection or withdrawal
+
+- [ ] Convert the stable core to 4 all-inclusive ACM `sigconf` pages and emphasize the live
+      data-management demonstration and audience interaction.
+- [ ] Ensure every author has CMT and ORCID accounts, then complete all conflict-of-interest
+      declarations within 24 hours of submission.
+- [ ] Submit by 2027-01-15 and record the 2027-03-08 decision.
+- [ ] If accepted, stop. If rejected, evaluate the JOSS conversion below.
+
+### Rolling fallback — JOSS
+
+- [ ] Do not submit until the project has at least six months of verified public development
+      history. The repository begins on 2026-06-25, so 2026-12-25 is only the earliest apparent
+      eligibility date; verify the public GitHub history and current JOSS rules first.
+- [ ] Confirm that the software is feature-complete, maintainable, openly developed, and has
+      credible research impact within JOSS scope.
+- [ ] Convert the stable material into a JOSS software paper focused on software design and
+      research use, with the required AI-assistance disclosure.
+- [ ] Do not use conversational AI in exchanges with JOSS editors or reviewers.
+
+### Minimal-change manuscript work
+
+- [ ] Build one stable 4-page core first.
+- [ ] Keep a fifth-page SANER extension that can be added without rewriting the core.
+- [ ] Build the ACM wrapper only if the waterfall reaches SIGMOD.
+- [ ] Preserve the parked FSE notes locally. If that double-anonymous target is revived later,
+      keep its venue-specific plan out of the public repository and do not activate it alongside
+      another archival submission.
+
+Official calls checked 2026-07-29:
+
+- <https://conf.researchr.org/track/apsec-2026/apsec-2026-tool-demonstration>
+- <https://conf.researchr.org/track/saner-2027/saner-2027-tool-demo-track>
+- <https://2027.sigmod.org/calls_sigmod_demos.shtml>
+- <https://joss.theoj.org/about>
 
 ## 5. Cosmetic
 

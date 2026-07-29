@@ -1,5 +1,6 @@
 import json
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -11,6 +12,7 @@ from policystrata.reachability import (
     AnthropicClient,
     DeterministicStubClient,
     ReachabilityBudget,
+    ReachabilityCase,
     ReachabilityReport,
     build_cases,
     generate_paraphrases,
@@ -37,7 +39,7 @@ ALLOWED_QUERY_JSON = json.dumps(
 )
 
 
-def stale_alias_case(paraphrase_count: int = 1):
+def stale_alias_case(paraphrase_count: int = 1) -> ReachabilityCase:
     cases = build_cases(
         DOMAIN,
         paraphrase_count=paraphrase_count,
@@ -71,7 +73,7 @@ def test_generate_paraphrases_is_deterministic_and_bounded() -> None:
         generate_paraphrases(query, count=99, seed=7)
 
 
-def test_hand_written_paraphrase_files_take_precedence(tmp_path) -> None:
+def test_hand_written_paraphrase_files_take_precedence(tmp_path: Path) -> None:
     paraphrase_dir = tmp_path / "paraphrases"
     paraphrase_dir.mkdir()
     (paraphrase_dir / "stale_metric_alias_manifest.txt").write_text(
@@ -91,7 +93,6 @@ def test_hand_written_paraphrase_files_take_precedence(tmp_path) -> None:
         "Show bookings by month for last month.",
         "What were our bookings by region for last month?",
     ]
-    # No file for the second mutation: falls back to generated paraphrases.
     assert len(cases[1].paraphrases) == 3
 
 
@@ -148,7 +149,6 @@ def test_repair_budget_recovers_from_malformed_reply() -> None:
     assert outcome.parsed
     assert outcome.attempts == 2
     assert outcome.reached
-    # The second call is the repair prompt, still under the same system prompt.
     assert len(client.calls) == 2
     assert "not a valid semantic-query" in client.calls[1][1]
 
@@ -196,7 +196,7 @@ def test_manifest_skew_probe_detects_differing_plans() -> None:
     assert probe.plans_differ
 
 
-def test_full_stub_study_over_domain_and_report_serialization(tmp_path) -> None:
+def test_full_stub_study_over_domain_and_report_serialization(tmp_path: Path) -> None:
     cases = build_cases(DOMAIN, paraphrase_count=2)
     budget = ReachabilityBudget(max_attempts=2)
     client = DeterministicStubClient()
@@ -235,7 +235,7 @@ def test_parse_semantic_query_accepts_fenced_json_and_rejects_junk() -> None:
         parse_semantic_query('{"metric": "ticket_count", "limit": 0}')
 
 
-def test_anthropic_client_reports_missing_package(monkeypatch) -> None:
+def test_anthropic_client_reports_missing_package(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setitem(sys.modules, "anthropic", None)
     monkeypatch.setenv("ANTHROPIC_API_KEY", "unused")
     client = AnthropicClient()
@@ -243,7 +243,7 @@ def test_anthropic_client_reports_missing_package(monkeypatch) -> None:
         client.complete("system", "prompt")
 
 
-def test_anthropic_client_requires_api_key(monkeypatch) -> None:
+def test_anthropic_client_requires_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
     class DummyModule:
         @staticmethod
         def Anthropic(api_key: str) -> None:  # noqa: N802 - mirrors the SDK name
@@ -256,7 +256,7 @@ def test_anthropic_client_requires_api_key(monkeypatch) -> None:
         client.complete("system", "prompt")
 
 
-def test_anthropic_client_model_selection(monkeypatch) -> None:
+def test_anthropic_client_model_selection(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("POLICYSTRATA_REACHABILITY_MODEL", raising=False)
     assert AnthropicClient().model == DEFAULT_ANTHROPIC_MODEL
     monkeypatch.setenv("POLICYSTRATA_REACHABILITY_MODEL", "claude-example-override")

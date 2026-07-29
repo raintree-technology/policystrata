@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import time
+from collections.abc import Callable
 from pathlib import Path
 from statistics import median
 from typing import Any
@@ -51,8 +52,6 @@ class WitnessMinimization(InputModel):
     original_bytes: int
     minimized_bytes: int
     reduction_ratio: float
-    # Reduction restricted to the semantic IR the reducer actually targets;
-    # the full-witness ratio above is diluted by fixed contract scaffolding.
     original_ir_bytes: int
     minimized_ir_bytes: int
     ir_reduction_ratio: float
@@ -159,8 +158,11 @@ def measure_trace(
     )
 
 
-def _is_one_minimal(original: Trace, reduced: Trace, replay: Any) -> bool:
-    """A witness is 1-minimal when no single further reduction preserves it."""
+def _is_one_minimal(
+    original: Trace,
+    reduced: Trace,
+    replay: Callable[[SemanticQuery], Trace],
+) -> bool:
     from policystrata.minimize import preserves_witness
 
     for candidate in semantic_reduction_candidates(reduced.semantic_ir):
@@ -213,7 +215,6 @@ def _run_domain(run_dir: Path) -> str:
         domain = raw.get("domain")
         if isinstance(domain, str):
             return domain
-    # Fall back to the domain recorded on the first trace.
     traces = load_traces(run_dir)
     if traces:
         return traces[0].domain

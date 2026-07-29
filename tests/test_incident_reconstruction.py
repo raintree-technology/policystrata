@@ -33,7 +33,7 @@ def test_reconstructed_suite_metadata_is_incident_reconstruction() -> None:
     assert metadata.notes, "suite_metadata.notes must carry the citation trail"
 
 
-def test_reconstructed_suite_kills_every_task_with_correct_localization(tmp_path) -> None:
+def test_reconstructed_suite_kills_every_task_with_correct_localization(tmp_path: Path) -> None:
     out_dir = tmp_path / "run"
 
     traces = run_suite("incident_reconstruction", "reconstructed", out_dir, DOMAIN_PATH)
@@ -57,7 +57,7 @@ def test_reconstructed_suite_kills_every_task_with_correct_localization(tmp_path
         assert "http" in trace.request, f"{trace.task_id} request must carry its source citation"
 
 
-def test_reconstructed_suite_run_metadata_reports_provenance(tmp_path) -> None:
+def test_reconstructed_suite_run_metadata_reports_provenance(tmp_path: Path) -> None:
     import json
 
     out_dir = tmp_path / "run"

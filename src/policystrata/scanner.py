@@ -8,7 +8,7 @@ import time
 from collections import Counter
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 from xml.sax.saxutils import escape, quoteattr
 
 import psycopg
@@ -19,7 +19,10 @@ from policystrata.database import (
     DEFAULT_APP_DATABASE_URL,
     DEFAULT_DATABASE_URL,
     PostgresAdapter,
-    assert_read_only_sql,
+    QueryAdapter,
+)
+from policystrata.database import (
+    assert_read_only_sql as assert_read_only_sql,
 )
 from policystrata.domain import BUILTIN_DOMAINS, load_policy, load_surface_config, load_yaml_mapping
 from policystrata.evidence import markdown_table
@@ -43,10 +46,12 @@ from policystrata.scan_models import (
 )
 from policystrata.trace_import import (
     fuzz_imported_trace,
-    load_imported_traces,
     resolve_optional_config_path,
     resolve_scan_input_paths,
     semantic_query_dump,
+)
+from policystrata.trace_import import (
+    load_imported_traces as load_imported_traces,
 )
 
 SCAN_OUTPUT_FILES = {
@@ -229,7 +234,7 @@ def scan_imported_traces(
     config_path: Path,
     policy: Policy,
     imported_traces: list[ImportedTrace],
-    database_adapter: PostgresAdapter | None,
+    database_adapter: QueryAdapter | None,
 ) -> tuple[list[ScanFinding], Counter[str]]:
     findings: list[ScanFinding] = []
     mutant_statuses: Counter[str] = Counter()
@@ -361,7 +366,7 @@ def scan_imported_trace(
     config_path: Path,
     policy: Policy,
     trace: ImportedTrace,
-    database_adapter: PostgresAdapter | None = None,
+    database_adapter: QueryAdapter | None = None,
 ) -> list[ScanFinding]:
     findings: list[ScanFinding] = []
     oracle = PolicyOracle(policy)
@@ -504,7 +509,7 @@ def should_compare_trace_on_database(
     config: ScanConfig,
     trace: ImportedTrace,
     canonical: Decision | None,
-    database_adapter: PostgresAdapter | None,
+    database_adapter: QueryAdapter | None,
 ) -> bool:
     return (
         database_adapter is not None
@@ -520,7 +525,7 @@ def scan_imported_trace_on_database(
     config_path: Path,
     policy: Policy,
     trace: ImportedTrace,
-    app: PostgresAdapter,
+    app: QueryAdapter,
 ) -> list[ScanFinding]:
     if trace.semantic_ir is None:
         return []
@@ -595,7 +600,7 @@ def scan_imported_trace_on_database(
 
 
 def query_trace_sql(
-    app: PostgresAdapter,
+    app: QueryAdapter,
     sql: str,
     tenant_id: str | None,
     config: ScanConfig,
@@ -605,7 +610,7 @@ def query_trace_sql(
     error_id: str,
     error_title: str,
     metadata: dict[str, Any],
-) -> tuple[list[dict[str, Any]], ScanFinding | None]:
+) -> tuple[list[dict[str, object]], ScanFinding | None]:
     try:
         return app.query(sql, tenant_id=tenant_id), None
     except DATABASE_QUERY_EXCEPTIONS as exc:
@@ -633,7 +638,7 @@ def imported_trace_tenant_id(trace: ImportedTrace, principal_tenant_ids: list[st
     return None
 
 
-def normalize_rows(rows: list[dict[str, Any]]) -> list[str]:
+def normalize_rows(rows: list[dict[str, object]]) -> list[str]:
     return sorted(json.dumps(row, sort_keys=True, default=str) for row in rows)
 
 
@@ -712,7 +717,7 @@ def wait_for_postgres(database_url: str, timeout_seconds: float) -> None:
 def scan_rls_checks(
     config: ScanConfig,
     config_path: Path,
-    app: PostgresAdapter,
+    app: QueryAdapter,
 ) -> list[ScanFinding]:
     findings: list[ScanFinding] = []
     for check in config.database.rls_checks:
@@ -764,7 +769,7 @@ def scan_rls_checks(
 def scan_state_assertions(
     config: ScanConfig,
     config_path: Path,
-    app: PostgresAdapter,
+    app: QueryAdapter,
 ) -> list[ScanFinding]:
     findings: list[ScanFinding] = []
     for check in config.database.state_assertions:
@@ -812,7 +817,7 @@ def scan_state_assertions(
 
 def evaluate_state_assertion(
     check: StateAssertionConfig,
-    rows: list[dict[str, Any]],
+    rows: list[dict[str, object]],
 ) -> tuple[list[str], WitnessClass]:
     failures: list[str] = []
     witness_class = WitnessClass.OVER_RESTRICTIVE
@@ -862,7 +867,7 @@ def evaluate_state_assertion(
     return failures, witness_class
 
 
-def assertion_value_key(value: Any) -> str:
+def assertion_value_key(value: object) -> str:
     return json.dumps(value, sort_keys=True, default=str)
 
 
@@ -936,7 +941,7 @@ def adapter_finding(
 
 
 def adapter_value_findings(
-    values: list[Any],
+    values: list[object],
     id_prefix: str,
     title: str,
     reason_template: str,
@@ -1046,12 +1051,13 @@ def finding(
     metadata: dict[str, Any] | None = None,
 ) -> ScanFinding:
     command = f"policystrata scan --config {config_path}"
+    normalized_surface = surface_name(surface)
     return ScanFinding(
         id=safe_identifier(finding_id),
         title=title,
         severity=severity,
         confidence=confidence,
-        surface=cast(SurfaceName, surface),
+        surface=normalized_surface,
         witness_class=witness_class,
         evidence_level=evidence_level,
         reasons=reasons,
@@ -1065,10 +1071,26 @@ def finding(
         reproducible_command=command,
         metadata=metadata or {},
         what_changed=default_what_changed(witness_class, surface),
-        owner=cast(SurfaceName, surface),
+        owner=normalized_surface,
         probable_fix=default_probable_fix(witness_class, surface),
         ci_gate_command=command,
     )
+
+
+def surface_name(value: str) -> SurfaceName:
+    if value == "manifest":
+        return "manifest"
+    if value == "grammar":
+        return "grammar"
+    if value == "validator":
+        return "validator"
+    if value == "compiler":
+        return "compiler"
+    if value == "database":
+        return "database"
+    if value == "release":
+        return "release"
+    raise ValueError(f"unknown policy surface: {value}")
 
 
 def sql_preserves_tenant_scope(config: ScanConfig, policy: Policy, trace: ImportedTrace) -> bool:
@@ -1085,9 +1107,6 @@ def sql_preserves_tenant_scope(config: ScanConfig, policy: Policy, trace: Import
         )
     columns = tenant_columns_for_scope_check(config, trace)
     if not columns:
-        # No tenancy basis is configured for this (custom) domain, so the
-        # tenant-scope check is not applicable and must not be reported as a
-        # violation. Built-in domains keep their canonical column below.
         return True
     return sql_mentions_any_tenant_column(trace.sql, columns) and sql_has_tenant_binding(
         trace.sql,
@@ -1218,7 +1237,6 @@ def primary_table_from_sql(sql: str) -> str | None:
     if match is None:
         return None
     table = match.group(1)
-    # Strip a schema/database qualifier: "public.accounts" -> "accounts".
     return table.split(".")[-1].lower()
 
 
@@ -1324,7 +1342,7 @@ def build_summary(
 def assess_integration_readiness(
     config: ScanConfig,
     imported_traces: list[ImportedTrace],
-    database_adapter: PostgresAdapter | None,
+    database_adapter: QueryAdapter | None,
     findings: list[ScanFinding],
 ) -> dict[str, Any]:
     stages = {
@@ -1368,7 +1386,7 @@ def exercised_evidence_levels(
     config: ScanConfig,
     policy: Policy,
     imported_traces: list[ImportedTrace],
-    database_adapter: PostgresAdapter | None,
+    database_adapter: QueryAdapter | None,
     mutant_statuses: Counter[str],
 ) -> Counter[str]:
     exercised: Counter[str] = Counter()

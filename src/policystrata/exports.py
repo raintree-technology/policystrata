@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from collections import Counter
 from pathlib import Path
-from typing import Any, Literal, cast
+from typing import Any, Literal
 
 from policystrata.models import Trace
 from policystrata.summary import accounting_status, load_traces, summarize_traces
@@ -56,7 +56,7 @@ def load_run_metadata(run_dir: Path) -> dict[str, Any]:
     metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
     if not isinstance(metadata, dict):
         return {}
-    return cast(dict[str, Any], metadata)
+    return {str(key): value for key, value in metadata.items()}
 
 
 def policystrata_evidence_record(trace: Trace) -> dict[str, Any]:

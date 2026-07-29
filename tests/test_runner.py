@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
@@ -9,7 +10,7 @@ from policystrata.runner import evaluate_task, run_suite, witness_file_path
 from policystrata.summary import summarize_run
 
 
-def test_run_suite_writes_traces_summary_and_witnesses(tmp_path) -> None:
+def test_run_suite_writes_traces_summary_and_witnesses(tmp_path: Path) -> None:
     out_dir = tmp_path / "run"
 
     traces = run_suite("support_saas", "seeded", out_dir)
@@ -41,7 +42,7 @@ def test_run_suite_writes_traces_summary_and_witnesses(tmp_path) -> None:
     assert "compiler_drops_tenant_predicate" in metadata["mutation_operator_ids"]
 
 
-def test_run_suite_handles_symlinked_output_directory(tmp_path) -> None:
+def test_run_suite_handles_symlinked_output_directory(tmp_path: Path) -> None:
     real_dir = tmp_path / "real"
     linked_dir = tmp_path / "linked"
     real_dir.mkdir()
@@ -58,7 +59,7 @@ def test_run_suite_handles_symlinked_output_directory(tmp_path) -> None:
     assert all(trace.witness_path and trace.witness_path.startswith("witnesses/") for trace in traces)
 
 
-def test_run_suite_rejects_path_like_task_ids(tmp_path) -> None:
+def test_run_suite_rejects_path_like_task_ids(tmp_path: Path) -> None:
     domain_path = copy_domain("support_saas", tmp_path)
     (domain_path / "tasks" / "adversarial.yaml").write_text(
         """
@@ -96,7 +97,7 @@ tasks:
 
 
 @pytest.mark.parametrize("task_id", ["../../escaped", "nested/path", r"nested\\path"])
-def test_witness_file_path_rejects_escape_attempts(tmp_path, task_id: str) -> None:
+def test_witness_file_path_rejects_escape_attempts(tmp_path: Path, task_id: str) -> None:
     with pytest.raises(ValueError, match="unsafe task id"):
         witness_file_path(tmp_path / "run" / "witnesses", task_id)
 
@@ -148,7 +149,7 @@ def test_evaluate_task_rejects_unknown_principal_with_clear_error() -> None:
         evaluate_task(policy, task, surface_config)
 
 
-def test_run_suite_detects_database_containment(tmp_path) -> None:
+def test_run_suite_detects_database_containment(tmp_path: Path) -> None:
     traces = run_suite("support_saas", "seeded", tmp_path / "run")
 
     contained = [trace for trace in traces if trace.containment_layer == "database"]
@@ -157,7 +158,7 @@ def test_run_suite_detects_database_containment(tmp_path) -> None:
     assert all(not trace.release_decision.allowed for trace in contained)
 
 
-def test_generated_suite_writes_many_generated_mutants(tmp_path) -> None:
+def test_generated_suite_writes_many_generated_mutants(tmp_path: Path) -> None:
     traces = run_suite(
         "support_saas",
         "generated",
@@ -175,7 +176,7 @@ def test_generated_suite_writes_many_generated_mutants(tmp_path) -> None:
     assert metadata["suite_provenance"] == "generated"
 
 
-def test_static_suite_can_declare_detector_frozen_blinded_metadata(tmp_path) -> None:
+def test_static_suite_can_declare_detector_frozen_blinded_metadata(tmp_path: Path) -> None:
     domain_path = copy_domain("support_saas", tmp_path)
     (domain_path / "tasks" / "external_blinded.yaml").write_text(
         """
@@ -222,7 +223,7 @@ tasks:
     assert metadata["detector_freeze_id"] == "ps-freeze-2026-07-01"
 
 
-def test_generated_alt_seed_suite_preserves_held_out_compatibility(tmp_path) -> None:
+def test_generated_alt_seed_suite_preserves_held_out_compatibility(tmp_path: Path) -> None:
     alt_seed_traces = run_suite("support_saas", "generated_alt_seed", tmp_path / "generated_alt_seed")
     held_out_traces = run_suite("support_saas", "held_out", tmp_path / "held_out")
 
@@ -230,7 +231,7 @@ def test_generated_alt_seed_suite_preserves_held_out_compatibility(tmp_path) -> 
     assert [trace.task_id for trace in alt_seed_traces] == [trace.task_id for trace in held_out_traces]
 
 
-def test_finance_saas_seeded_suite_runs_with_finance_sql(tmp_path) -> None:
+def test_finance_saas_seeded_suite_runs_with_finance_sql(tmp_path: Path) -> None:
     traces = run_suite("finance_saas", "seeded", tmp_path / "finance")
 
     assert len(traces) == 20

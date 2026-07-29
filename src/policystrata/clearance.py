@@ -16,7 +16,7 @@ import yaml
 from pydantic import ConfigDict, Field, field_validator
 
 from policystrata import __version__
-from policystrata.models import CompatModel, InputModel, SafeIdentifier
+from policystrata.models import CompatModel, InputModel, SafeIdentifier, Summary
 from policystrata.summary import summarize_run
 
 
@@ -558,7 +558,7 @@ def _artifact_ref(run_dir: Path, path: Path, *, redacted: bool = False) -> dict[
     }
 
 
-def _release_state(summary: Any) -> str:
+def _release_state(summary: Summary) -> str:
     if summary.survived > 0:
         return "blocked"
     if summary.false_positives > 0:

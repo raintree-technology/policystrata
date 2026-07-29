@@ -14,6 +14,8 @@ import {
   evaluateRuntimeEvent,
   evaluateRuntimeEvents,
   expectedRuntimeDecisionMismatches,
+  parsePolicyStrataRuntimeManifest,
+  parsePolicyStrataRuntimeEvent,
   retrievalRuntimeEvent,
   sqlRuntimeEvent,
   toolRuntimeEvent,
@@ -247,6 +249,45 @@ test("runtime event builders create typed common-layer events", () => {
   });
 });
 
+test("runtime event parser validates untyped input and preserves extensions", () => {
+  const parsed = parsePolicyStrataRuntimeEvent({
+    ...runtimeEvent(),
+    extensionField: { retained: true },
+  });
+  assert.deepEqual(parsed.extensionField, { retained: true });
+
+  const invalidEvents: readonly [unknown, RegExp][] = [
+    [{ ...runtimeEvent(), eventId: undefined }, /eventId/],
+    [{ ...runtimeEvent(), layer: "unknown_layer" }, /layer/],
+    [{ ...runtimeEvent(), agent: {} }, /agent\.key/],
+    [{ ...runtimeEvent(), dataClasses: "pii" }, /dataClasses/],
+    [
+      {
+        ...runtimeEvent(),
+        resource: { kind: "table", name: "support_tickets", tags: [42] },
+      },
+      /resource\.tags/,
+    ],
+    [
+      {
+        ...runtimeEvent(),
+        decision: { action: "allow", reason: 42 },
+      },
+      /decision\.reason/,
+    ],
+    [
+      {
+        ...runtimeEvent(),
+        expectedDecision: { allowed: "yes" },
+      },
+      /expectedDecision\.allowed/,
+    ],
+  ];
+  for (const [value, pattern] of invalidEvents) {
+    assert.throws(() => parsePolicyStrataRuntimeEvent(value), pattern);
+  }
+});
+
 test("runtime manifest JSON Schema is packaged as a deny-by-default manifest schema", () => {
   assert.equal(runtimeManifestSchema.title, "PolicyStrata Runtime Manifest");
   assert.deepEqual(
@@ -269,6 +310,41 @@ test("runtime conformance manifest validates against the packaged JSON Schema", 
   assert.match(JSON.stringify(validate.errors), /defaultDecision/);
 });
 
+test("runtime manifest parser validates untyped JSON at the boundary", () => {
+  assert.equal(parsePolicyStrataRuntimeManifest(conformanceManifest).version, "conformance.1");
+  assert.throws(
+    () =>
+      parsePolicyStrataRuntimeManifest({
+        ...conformanceManifest,
+        resources: [{ name: "transactions", actions: [{ name: "read" }] }],
+      }),
+    /invalid action/,
+  );
+  assert.throws(
+    () => parsePolicyStrataRuntimeManifest({ ...conformanceManifest, roleAliases: [] }),
+    /roleAliases/,
+  );
+  assert.throws(
+    () =>
+      parsePolicyStrataRuntimeManifest({
+        ...conformanceManifest,
+        resources: [
+          {
+            name: "transactions",
+            actions: [
+              {
+                name: "read",
+                allowedRoles: ["viewer"],
+                semanticConstraints: { metrics: "not-an-array" },
+              },
+            ],
+          },
+        ],
+      }),
+    /semanticConstraints\.metrics/,
+  );
+});
+
 test("generic authorize follows runtime conformance fixtures", () => {
   const authorizer = createPolicyStrataAuthorizer(conformanceManifest);
 
@@ -284,7 +360,9 @@ test("generic authorize follows runtime conformance fixtures", () => {
 });
 
 test("top-level authorize helper delegates to the generic runtime API", () => {
-  const decision = authorize(conformanceManifest, conformanceCases[0].input);
+  const fixture = conformanceCases[0];
+  assert.ok(fixture);
+  const decision = authorize(conformanceManifest, fixture.input);
 
   assert.equal(decision.allowed, true);
   assert.deepEqual(decision.normalizedRoles, ["household_viewer"]);
@@ -646,7 +724,9 @@ test("evaluateRuntimeEvents returns decisions and redacted events for batches", 
     decisions.map((decision) => decision.eventId),
     ["evt_allowed", "evt_redact"],
   );
-  assert.equal(decisions[1].action, "redact");
-  assert.deepEqual(decisions[1].redactions, ["pii"]);
-  assert.deepEqual(decisions[1].event.decision.redactions, ["pii"]);
+  const redactedDecision = decisions[1];
+  assert.ok(redactedDecision);
+  assert.equal(redactedDecision.action, "redact");
+  assert.deepEqual(redactedDecision.redactions, ["pii"]);
+  assert.deepEqual(redactedDecision.event.decision.redactions, ["pii"]);
 });

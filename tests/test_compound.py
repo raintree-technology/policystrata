@@ -12,19 +12,27 @@ from policystrata.compound import (
 )
 from policystrata.domain import load_policy, load_surface_config
 from policystrata.generator import mutation_ids_for_domain
-from policystrata.models import Decision, SemanticQuery
+from policystrata.models import (
+    Decision,
+    Policy,
+    SemanticQuery,
+    SurfaceConfig,
+    Task,
+    Trace,
+    WitnessClass,
+)
 from policystrata.mutations import compound_expectations, get_mutation
 from policystrata.runner import evaluate_task
 
 
-def support_policy_and_surfaces():
+def support_policy_and_surfaces() -> tuple[Policy, SurfaceConfig]:
     return load_policy("support_saas"), load_surface_config("support_saas")
 
 
 def test_compound_expectations_uses_earliest_surface() -> None:
     specs = [
-        get_mutation("db_rls_old_ownership_field"),  # database
-        get_mutation("stale_metric_alias_manifest"),  # manifest
+        get_mutation("db_rls_old_ownership_field"),
+        get_mutation("stale_metric_alias_manifest"),
     ]
     expectation = compound_expectations(specs)
     assert expectation.localized_surface == "manifest"
@@ -33,8 +41,6 @@ def test_compound_expectations_uses_earliest_surface() -> None:
 
 
 def test_compound_expectations_drops_containment_when_layer_is_skewed() -> None:
-    # compiler_drops_tenant_predicate is contained by database; if database is
-    # also skewed, containment no longer holds.
     specs = [
         get_mutation("compiler_drops_tenant_predicate"),
         get_mutation("db_rls_old_ownership_field"),
@@ -46,21 +52,19 @@ def test_compound_expectations_drops_containment_when_layer_is_skewed() -> None:
 
 def test_compound_expectations_keeps_containment_when_layer_clean() -> None:
     specs = [
-        get_mutation("stale_metric_alias_manifest"),  # manifest
-        get_mutation("compiler_drops_tenant_predicate"),  # compiler, contained by database
+        get_mutation("stale_metric_alias_manifest"),
+        get_mutation("compiler_drops_tenant_predicate"),
     ]
     expectation = compound_expectations(specs)
     assert expectation.localized_surface == "manifest"
-    # database is not among the affected surfaces, so containment survives.
     assert expectation.containment_layer == "database"
 
 
 def test_merge_contract_decisions_unions_violations() -> None:
     policy, surfaces = support_policy_and_surfaces()
 
-    def sub(mutation_id: str):
+    def sub(mutation_id: str) -> Trace:
         principal = next(p.id for p in policy.principals.values() if "admin" not in p.role)
-        from policystrata.models import Task, WitnessClass
 
         spec = get_mutation(mutation_id)
         task = Task(
@@ -149,7 +153,6 @@ def test_compound_case_requires_two_mutations() -> None:
 def test_run_compound_study_full_domain_all_detected() -> None:
     report = run_compound_study("support_saas", orders=(2, 3), per_order=30)
     assert report.total == 60
-    # Distinct-surface composition preserves first-transition attribution.
     assert report.detection_rate == 1.0
     assert report.attribution_accuracy == 1.0
 
@@ -165,8 +168,6 @@ def test_merge_prefers_violation_over_containment() -> None:
     contained = Decision(
         allowed=True, reasons=["database contained a downstream obligation violation"]
     )
-    from policystrata.models import Trace, WitnessClass
-
     def trace_with(database_decision: Decision) -> Trace:
         return Trace(
             task_id="t",

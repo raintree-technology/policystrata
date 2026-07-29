@@ -7,7 +7,7 @@ import {
   type AgentTrustGatewayMode,
   type RuntimeEventUploadOptions,
 } from "./index.js";
-import type { PolicyStrataRuntimeManifest } from "policystrata/runtime";
+import { parsePolicyStrataRuntimeManifest } from "policystrata/runtime";
 
 type Flags = Record<string, string | boolean>;
 
@@ -20,8 +20,10 @@ async function main(argv: string[]): Promise<number> {
   }
 
   if (command === "decide") {
-    const manifest = await readJson<PolicyStrataRuntimeManifest>(requiredString(flags, "manifest"));
-    const eventPayload = await readJson<unknown>(requiredString(flags, "event"));
+    const manifest = parsePolicyStrataRuntimeManifest(
+      await readJson(requiredString(flags, "manifest")),
+    );
+    const eventPayload = await readJson(requiredString(flags, "event"));
     const mode = modeFlag(flags);
     const result = decideRuntimePayload(manifest, eventPayload, mode);
     const body = `${JSON.stringify(result, null, 2)}\n`;
@@ -35,15 +37,20 @@ async function main(argv: string[]): Promise<number> {
   }
 
   if (command === "serve") {
-    const manifest = await readJson<PolicyStrataRuntimeManifest>(requiredString(flags, "manifest"));
+    const manifest = parsePolicyStrataRuntimeManifest(
+      await readJson(requiredString(flags, "manifest")),
+    );
     const upload = uploadOptions(flags);
+    const host = optionalString(flags, "host");
+    const gatewayToken =
+      optionalString(flags, "gateway-token") ?? process.env.POLICYSTRATA_GATEWAY_TOKEN;
     const gateway = await startAgentTrustGateway({
       manifest,
-      host: optionalString(flags, "host"),
+      ...(host ? { host } : {}),
       port: numberFlag(flags, "port") ?? 8787,
       mode: modeFlag(flags),
-      upload,
-      gatewayToken: optionalString(flags, "gateway-token") ?? process.env.POLICYSTRATA_GATEWAY_TOKEN,
+      ...(upload ? { upload } : {}),
+      ...(gatewayToken ? { gatewayToken } : {}),
       failOnUploadError: flags["fail-on-upload-error"] === true,
     });
     process.stderr.write(`PolicyStrata Agent Trust Gateway listening at ${gateway.url}\n`);
@@ -58,6 +65,9 @@ function parseFlags(argv: string[]): Flags {
   const flags: Flags = {};
   for (let index = 0; index < argv.length; index += 1) {
     const item = argv[index];
+    if (item === undefined) {
+      throw new Error(`missing argument at index ${index}`);
+    }
     if (!item.startsWith("--")) {
       throw new Error(`unexpected argument: ${item}`);
     }
@@ -76,10 +86,12 @@ function parseFlags(argv: string[]): Flags {
 function uploadOptions(flags: Flags): RuntimeEventUploadOptions | undefined {
   const apiUrl = optionalString(flags, "api-url");
   if (!apiUrl) return undefined;
+  const token = optionalString(flags, "token") ?? process.env.POLICYSTRATA_CONTROL_PLANE_TOKEN;
+  const organizationId = optionalString(flags, "organization-id");
   return {
     apiUrl,
-    token: optionalString(flags, "token") ?? process.env.POLICYSTRATA_CONTROL_PLANE_TOKEN,
-    organizationId: optionalString(flags, "organization-id"),
+    ...(token ? { token } : {}),
+    ...(organizationId ? { organizationId } : {}),
     includePayload: flags["include-payload"] === true,
   };
 }
@@ -117,8 +129,9 @@ function optionalString(flags: Flags, key: string): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
-async function readJson<T>(path: string): Promise<T> {
-  return JSON.parse(await readFile(path, "utf8")) as T;
+async function readJson(path: string): Promise<unknown> {
+  const parsed: unknown = JSON.parse(await readFile(path, "utf8"));
+  return parsed;
 }
 
 function waitForShutdown(close: () => Promise<void>): Promise<void> {

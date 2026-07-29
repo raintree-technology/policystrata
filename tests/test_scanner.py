@@ -70,7 +70,7 @@ def test_scan_config_accepts_optional_runtime_sections() -> None:
     assert config.runtime_events.files == ["runtime-events.jsonl"]
 
 
-def test_scan_config_rejects_unknown_keys(tmp_path) -> None:
+def test_scan_config_rejects_unknown_keys(tmp_path: Path) -> None:
     config_path = tmp_path / "policystrata.yaml"
     config_path.write_text(
         """
@@ -100,7 +100,7 @@ def test_state_assertion_requires_condition() -> None:
         StateAssertionConfig(id="no_op_state", sql="select tenant_id from accounts")
 
 
-def test_scan_failing_fixture_writes_gate_outputs(tmp_path) -> None:
+def test_scan_failing_fixture_writes_gate_outputs(tmp_path: Path) -> None:
     result = run_scan(Path("examples/postgres_dbt/policystrata.yaml"), tmp_path / "scan")
 
     assert result.gate.outcome == GateOutcome.FAIL
@@ -186,7 +186,7 @@ def test_render_junit_quotes_attribute_values() -> None:
     assert failure.text == 'Add tenant_id = "current tenant"'
 
 
-def test_secute_security_cases_fixture_exercises_security_failures(tmp_path) -> None:
+def test_secute_security_cases_fixture_exercises_security_failures(tmp_path: Path) -> None:
     result = run_scan(Path("examples/secute_security_cases/policystrata.yaml"), tmp_path / "secute")
 
     finding_ids = {item.id for item in result.findings}
@@ -219,7 +219,7 @@ def test_secute_security_cases_doctor_reports_governance_wiring() -> None:
     assert "raw_customer_export" in coverage["prompt_manifest_unauthorized_metrics"]
 
 
-def test_scan_clean_fixture_passes(tmp_path) -> None:
+def test_scan_clean_fixture_passes(tmp_path: Path) -> None:
     result = run_scan(Path("examples/postgres_dbt/policystrata_clean.yaml"), tmp_path / "clean")
 
     assert result.gate.outcome == GateOutcome.PASS
@@ -229,7 +229,7 @@ def test_scan_clean_fixture_passes(tmp_path) -> None:
     assert "## Evidence Exercised" in (tmp_path / "clean" / "report.md").read_text(encoding="utf-8")
 
 
-def test_scan_accepts_configured_tenancy_predicate(tmp_path) -> None:
+def test_scan_accepts_configured_tenancy_predicate(tmp_path: Path) -> None:
     trace_path = tmp_path / "traces.jsonl"
     config_path = tmp_path / "policystrata.yaml"
     trace_path.write_text(
@@ -331,7 +331,7 @@ def test_hashed_semantic_tenant_filter_fails_closed() -> None:
     assert any(item.id == "unsafe_release_hashed_tenant_filter" for item in findings)
 
 
-def test_scan_accepts_policystrata_node_mixed_jsonl(tmp_path) -> None:
+def test_scan_accepts_policystrata_node_mixed_jsonl(tmp_path: Path) -> None:
     trace_path = tmp_path / "traces.jsonl"
     config_path = tmp_path / "policystrata.yaml"
     records = [
@@ -419,7 +419,7 @@ def test_scan_state_assertions_pass_clean_database_state() -> None:
     assert findings == []
 
 
-def test_scan_summary_counts_successful_real_db_evidence(tmp_path) -> None:
+def test_scan_summary_counts_successful_real_db_evidence(tmp_path: Path) -> None:
     config_path = Path("examples/postgres_dbt/policystrata_real_db_clean.yaml")
     config = load_scan_config(config_path)
     trace = load_imported_traces([Path("examples/postgres_dbt/traces_real_db_clean.jsonl")])[0]
@@ -436,7 +436,7 @@ def test_scan_summary_counts_successful_real_db_evidence(tmp_path) -> None:
     assert exercised["real_db"] >= 2
 
 
-def test_dbt_adapter_reports_expression_and_metadata_diagnostics(tmp_path) -> None:
+def test_dbt_adapter_reports_expression_and_metadata_diagnostics(tmp_path: Path) -> None:
     fixture = tmp_path / "semantic_models.yml"
     fixture.write_text(
         """
@@ -465,7 +465,7 @@ metrics:
     assert "customer_email" in result["sensitive_metadata_missing"]
 
 
-def test_imported_trace_rejects_non_read_only_sql(tmp_path) -> None:
+def test_imported_trace_rejects_non_read_only_sql(tmp_path: Path) -> None:
     trace_path = tmp_path / "traces.jsonl"
     trace_path.write_text(
         json.dumps(
@@ -483,7 +483,7 @@ def test_imported_trace_rejects_non_read_only_sql(tmp_path) -> None:
         load_imported_traces([trace_path])
 
 
-def test_imported_trace_ignores_extra_adapter_fields(tmp_path) -> None:
+def test_imported_trace_ignores_extra_adapter_fields(tmp_path: Path) -> None:
     trace_path = tmp_path / "traces.jsonl"
     trace_path.write_text(
         json.dumps(
@@ -513,7 +513,7 @@ def test_imported_trace_ignores_extra_adapter_fields(tmp_path) -> None:
     assert not hasattr(trace, "span_id")
 
 
-def test_imported_trace_paths_must_stay_under_config_dir(tmp_path) -> None:
+def test_imported_trace_paths_must_stay_under_config_dir(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="must stay under"):
         resolve_scan_input_paths(tmp_path, ["../traces.jsonl"], "sql trace")
 
@@ -525,7 +525,7 @@ def test_read_only_sql_rejects_write_tokens() -> None:
         assert_read_only_sql("select tenant_id from accounts; delete from accounts")
 
 
-def test_fuzz_classifies_stillborn_and_equivalent_mutants(tmp_path) -> None:
+def test_fuzz_classifies_stillborn_and_equivalent_mutants(tmp_path: Path) -> None:
     trace_path = tmp_path / "traces.jsonl"
     trace_path.write_text(
         json.dumps(
@@ -631,14 +631,15 @@ def test_scan_imported_trace_reports_database_execution_errors() -> None:
     assert findings[0].evidence_level == "real_db"
 
 
-def test_start_docker_fixture_uses_docker_compose(monkeypatch) -> None:
-    calls = []
+def test_start_docker_fixture_uses_docker_compose(monkeypatch: pytest.MonkeyPatch) -> None:
+    run_calls: list[tuple[list[str], bool, bool, bool]] = []
+    wait_calls: list[tuple[str, float]] = []
 
-    def fake_run(command, check, capture_output, text):
-        calls.append((command, check, capture_output, text))
+    def fake_run(command: list[str], check: bool, capture_output: bool, text: bool) -> None:
+        run_calls.append((command, check, capture_output, text))
 
-    def fake_wait(database_url, timeout_seconds):
-        calls.append((database_url, timeout_seconds))
+    def fake_wait(database_url: str, timeout_seconds: float) -> None:
+        wait_calls.append((database_url, timeout_seconds))
 
     config = load_scan_config(Path("examples/postgres_dbt/policystrata.yaml"))
     config.database.start_docker = True
@@ -653,9 +654,9 @@ def test_start_docker_fixture_uses_docker_compose(monkeypatch) -> None:
         "postgresql://policystrata:policystrata@localhost:55432/support_saas",
     )
 
-    assert calls[0][0][:4] == ["docker", "compose", "-f", str(Path("docker-compose.yml").resolve())]
-    assert calls[0][0][-3:] == ["up", "-d", "postgres"]
-    assert calls[1] == (
+    assert run_calls[0][0][:4] == ["docker", "compose", "-f", str(Path("docker-compose.yml").resolve())]
+    assert run_calls[0][0][-3:] == ["up", "-d", "postgres"]
+    assert wait_calls[0] == (
         "postgresql://policystrata:policystrata@localhost:55432/support_saas",
         4.0,
     )

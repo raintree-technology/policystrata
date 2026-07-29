@@ -10,10 +10,12 @@ from policystrata.scalability import (
     throughput_curve,
 )
 
+FactorPair = tuple[tuple[str, str], tuple[str, str]]
 
-def _all_pairs(factors: dict[str, list[str]]) -> set:
+
+def _all_pairs(factors: dict[str, list[str]]) -> set[FactorPair]:
     names = sorted(factors)
-    pairs = set()
+    pairs: set[FactorPair] = set()
     for a, b in combinations(names, 2):
         for va, vb in product(factors[a], factors[b]):
             pairs.add(((a, va), (b, vb)))
@@ -34,7 +36,6 @@ def test_pairwise_covering_array_covers_all_pairs() -> None:
             covered.add(((a, row[a]), (b, row[b])))
     assert _all_pairs(factors) <= covered
     assert result.all_interactions_covered is True
-    # A pairwise array must be far smaller than the full cross product.
     assert result.covering_array_size < result.full_cross_product
     assert result.reduction_ratio > 0.5
 
@@ -57,12 +58,11 @@ def test_throughput_curve_is_measured() -> None:
     curve = throughput_curve("support_saas", sizes=(50, 100))
     assert [p.cases for p in curve.points] == [50, 100]
     for point in curve.points:
-        assert point.kills == point.cases  # every generated mutant is killed
+        assert point.kills == point.cases
         assert point.mean_ms_per_case >= 0.0
 
 
 def test_factor_scaling_reduction_grows_with_size() -> None:
     points = factor_scaling(principal_counts=(2, 8, 32))
     assert points[0].covering_array_size < points[-1].covering_array_size
-    # Reduction ratio should not shrink as the cross product grows.
     assert points[-1].reduction_ratio >= points[0].reduction_ratio

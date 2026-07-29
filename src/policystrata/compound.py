@@ -178,7 +178,6 @@ def evaluate_compound_case(
     if non_clean:
         earliest = min(non_clean, key=lambda trace: surface_position(trace.localized_surface))
         observed_class = earliest.witness_class
-        # Containment holds only if the containing surface is not itself skewed.
         affected = {spec.affected_surface for spec in specs if spec.witness_class != WitnessClass.CLEAN}
         if earliest.containment_layer is not None and earliest.containment_layer not in affected:
             observed_containment = earliest.containment_layer
@@ -255,21 +254,21 @@ def generate_compound_cases(
     while len(cases) < count and attempts < max_attempts:
         attempts += 1
         picked = rng.sample(pool, order) if len(pool) >= order else pool
-        surfaces = {get_mutation(m).affected_surface for m in picked}
+        surfaces: set[SurfaceName] = {get_mutation(m).affected_surface for m in picked}
         if len(surfaces) != len(picked):
-            continue  # require distinct surfaces
+            continue
         key = tuple(sorted(picked))
         if key in seen:
             continue
         seen.add(key)
-        # Build a query that carries the primary (earliest-surface) mutation's shape.
         ordered = sorted(picked, key=lambda m: surface_position(get_mutation(m).affected_surface))
         primary = ordered[0]
         query = query_for_mutation(policy, principal, primary, rng)
         versions = surface_versions
+        sorted_surfaces = sorted(surfaces, key=surface_position)
         request = (
             f"Compound drift case {len(cases) + 1}: simultaneous skews on "
-            f"{', '.join(sorted(surfaces, key=surface_position))}."
+            f"{', '.join(sorted_surfaces)}."
         )
         cases.append(
             CompoundCase(

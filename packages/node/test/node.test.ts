@@ -29,6 +29,24 @@ function readJsonl(path: string): Record<string, unknown>[] {
     .map((line) => JSON.parse(line) as Record<string, unknown>);
 }
 
+function readSingleJsonl(path: string): Record<string, unknown> {
+  const records = readJsonl(path);
+  assert.equal(records.length, 1);
+  const record = records[0];
+  if (!record) {
+    throw new Error(`expected one JSONL record in ${path}`);
+  }
+  return record;
+}
+
+function readFirstJsonl(path: string): Record<string, unknown> {
+  const record = readJsonl(path)[0];
+  if (!record) {
+    throw new Error(`expected at least one JSONL record in ${path}`);
+  }
+  return record;
+}
+
 test("wrapTool emits a redacted PolicyStrata-compatible SQL trace", async () => {
   const { dir, path } = tempTracePath();
   const recorder = createPolicyStrataRecorder({
@@ -74,7 +92,7 @@ test("wrapTool emits a redacted PolicyStrata-compatible SQL trace", async () => 
 
   const records = readJsonl(path);
   assert.equal(records.length, 1);
-  const record = records[0];
+  const record = readSingleJsonl(path);
   assert.equal(record.record_type, "sql_trace");
   assert.equal(record.node_sdk_version, PACKAGE_JSON.version);
   assert.equal(record.service, "demo-data-agent");
@@ -127,7 +145,7 @@ test("recordSession drops prompt text by default", () => {
     approvalPolicy: "read_only",
   });
 
-  const [record] = readJsonl(path);
+  const record = readSingleJsonl(path);
   assert.equal(record.record_type, "agent_session");
   assert.equal((record.agent_session as Record<string, unknown>).prompt_class, "user_finance_question");
   assert.equal((record.agent_session as Record<string, unknown>).prompt_text, undefined);
@@ -166,7 +184,7 @@ test("write tools emit mutation records without top-level read SQL", async () =>
     { sessionId: "chat-run-1", tenantIds: ["household-123"], approvalToken: "signed-token" },
   );
 
-  const [record] = readJsonl(path);
+  const record = readSingleJsonl(path);
   assert.equal(record.record_type, "mutation");
   assert.equal(record.sql, undefined);
   assert.equal(
@@ -230,7 +248,7 @@ test("tool errors redact messages by default", async () => {
 
   await assert.rejects(() => failingTool({}, {}), /supersecret/);
 
-  const [record] = readJsonl(path);
+  const record = readSingleJsonl(path);
   assert.deepEqual(record.error, { name: "Error", message: "redacted" });
   assert.doesNotMatch(JSON.stringify(record), /supersecret|tokenfixturevalue/);
 
@@ -255,7 +273,7 @@ test("opt-in tool error messages pass through secret redaction", async () => {
 
   await assert.rejects(() => failingTool({}, {}), /supersecret/);
 
-  const [record] = readJsonl(path);
+  const record = readSingleJsonl(path);
   assert.equal((record.error as Record<string, unknown>).name, "Error");
   assert.match(String((record.error as Record<string, unknown>).message), /password=\[redacted\]/);
   assert.match(String((record.error as Record<string, unknown>).message), /token=\[redacted\]/);
@@ -288,7 +306,7 @@ test("authorization context keeps only safe status fields", () => {
     },
   );
 
-  const [record] = readJsonl(path);
+  const record = readSingleJsonl(path);
   assert.deepEqual(record.authorization, {
     consent_checked: true,
     approval_token_present: false,
@@ -337,7 +355,7 @@ test("semantic IR and expected policy payloads are redacted by default", () => {
     },
   });
 
-  const [record] = readJsonl(path);
+  const record = readSingleJsonl(path);
   const serialized = JSON.stringify(record);
   const semanticFilters = (record.semantic_ir as Record<string, unknown>).filters as Record<string, unknown>;
   const expectedPolicyKeys = Object.keys(record.expected_policy as Record<string, unknown>);
@@ -375,7 +393,7 @@ test("mutation and audit plural ID fields are hashed by default", () => {
     { event_emitted: true, user_ids: ["user-1"] },
   );
 
-  const [record] = readJsonl(path);
+  const record = readSingleJsonl(path);
   const serialized = JSON.stringify(record);
   assert.match(serialized, /hmac-sha256:/);
   assert.doesNotMatch(serialized, /account_ids|organization_ids|user_ids|acct-1|org-1|user-1/);
@@ -447,9 +465,12 @@ test("argument and result summary keys are sanitized by default", async () => {
     {},
   );
 
-  const [record] = readJsonl(path);
+  const record = readSingleJsonl(path);
   const argumentFields = (record.argument_shape as { fields: Record<string, unknown> }).fields;
   const resultFields = (record.result as Record<string, string[]>).fields_returned;
+  if (!resultFields) {
+    throw new Error("expected result.fields_returned");
+  }
   assert.deepEqual(argumentFields.merchant, { type: "string" });
   assert.ok(Object.keys(argumentFields).some((key) => key.startsWith("hmac-sha256:")));
   assert.ok(resultFields.some((field) => field.startsWith("hmac-sha256:")));
@@ -492,7 +513,7 @@ test("wrapped Drizzle transaction clients capture queries", async () => {
   }));
   await tracedDb.transaction(async (tx) => tx.execute(query));
 
-  const [record] = readJsonl(path);
+  const record = readFirstJsonl(path);
   assert.equal(record.record_type, "sql_trace");
   assert.equal(record.sql, "select count(*) from transactions where transactions.household_id = $1");
   assert.deepEqual(record.tenant_ids, ["household-123"]);

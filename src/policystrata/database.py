@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import re
 from pathlib import Path
-from typing import Any
+from typing import Protocol
 
 import psycopg
 
@@ -38,6 +38,10 @@ FORBIDDEN_SQL_TOKENS = {
 }
 
 
+class QueryAdapter(Protocol):
+    def query(self, sql: str, tenant_id: str | None = None) -> list[dict[str, object]]: ...
+
+
 class PostgresAdapter:
     def __init__(self, database_url: str = DEFAULT_DATABASE_URL) -> None:
         self.database_url = database_url
@@ -47,7 +51,7 @@ class PostgresAdapter:
         with psycopg.connect(self.database_url, autocommit=True) as conn, conn.cursor() as cur:
             cur.execute(sql)
 
-    def query(self, sql: str, tenant_id: str | None = None) -> list[dict[str, Any]]:
+    def query(self, sql: str, tenant_id: str | None = None) -> list[dict[str, object]]:
         assert_read_only_sql(sql)
         with (
             psycopg.connect(self.database_url) as conn,

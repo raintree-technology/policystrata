@@ -1,10 +1,11 @@
 import json
+from pathlib import Path
 
 from policystrata.minimize import minimize_trace
 from policystrata.runner import run_suite
 
 
-def test_minimized_witness_preserves_violated_obligation(tmp_path) -> None:
+def test_minimized_witness_preserves_violated_obligation(tmp_path: Path) -> None:
     run_dir = tmp_path / "run"
     traces = run_suite("support_saas", "seeded", run_dir)
     trace = next(item for item in traces if item.mutation == "compiler_drops_tenant_predicate")
@@ -24,7 +25,7 @@ def test_minimized_witness_preserves_violated_obligation(tmp_path) -> None:
     assert witness["release_allowed"] == trace.release_decision.allowed
 
 
-def test_minimized_witness_keeps_semantically_required_dimension(tmp_path) -> None:
+def test_minimized_witness_keeps_semantically_required_dimension(tmp_path: Path) -> None:
     run_dir = tmp_path / "run"
     traces = run_suite("support_saas", "seeded", run_dir)
     trace = next(item for item in traces if item.mutation == "grammar_permits_forbidden_dimension")
@@ -36,7 +37,7 @@ def test_minimized_witness_keeps_semantically_required_dimension(tmp_path) -> No
     assert witness["witness_class"] == trace.witness_class
 
 
-def test_minimize_without_replay_returns_compact_projection(tmp_path) -> None:
+def test_minimize_without_replay_returns_compact_projection(tmp_path: Path) -> None:
     traces = run_suite("support_saas", "seeded", tmp_path / "run")
     trace = next(item for item in traces if item.mutation == "compiler_drops_tenant_predicate")
 

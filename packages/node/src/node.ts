@@ -3,8 +3,10 @@ import { createHmac, randomUUID } from "node:crypto";
 import { appendFileSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 
+import { isRecord as isObject, optionalProperty } from "./internal.js";
+
 export type PolicyStrataToolKind = "read" | "write" | "memory" | "external";
-export const POLICYSTRATA_NODE_SDK_VERSION = "0.1.4";
+export const POLICYSTRATA_NODE_SDK_VERSION = "0.1.5";
 
 export interface PolicyStrataRedactionConfig {
   hashIds?: boolean;
@@ -205,15 +207,15 @@ export interface PolicyStrataTraceRecord {
 }
 
 interface NormalizedContext {
-  sessionId?: string;
-  principal?: string;
+  sessionId: string | undefined;
+  principal: string | undefined;
   tenantIds: string[];
-  actor?: PolicyStrataActor;
-  semanticIr?: Record<string, unknown>;
-  releaseAllowed?: boolean;
+  actor: PolicyStrataActor | undefined;
+  semanticIr: Record<string, unknown> | undefined;
+  releaseAllowed: boolean | undefined;
   authorization: PolicyStrataAuthorization;
-  expectedPolicy?: Record<string, unknown>;
-  privilegedReason?: string;
+  expectedPolicy: Record<string, unknown> | undefined;
+  privilegedReason: string | undefined;
 }
 
 interface CapturedQuery {
@@ -227,7 +229,7 @@ interface ToolExecutionState {
   startedAt: Date;
   toolName: string;
   toolKind: PolicyStrataToolKind;
-  toolScope?: string;
+  toolScope: string | undefined;
   approvalRequired: boolean;
   argsShape: unknown;
   context: NormalizedContext;
@@ -410,16 +412,22 @@ export class PolicyStrataRecorder {
       id: safeIdentifier(`session-${sessionId}`),
       recordType: "agent_session",
       context: { ...context, sessionId },
-      agentSession: pruneUndefined({
+      agentSession: {
         session_id: sessionId,
-        prompt_class: input.promptClass ?? input.prompt_class,
-        prompt_text: this.redaction.includePromptText ? promptText : undefined,
-        model: input.model,
-        tools_available: input.toolsAvailable ?? input.tools_available,
-        tools_called: input.toolsCalled ?? input.tools_called,
-        write_tools_enabled: input.writeToolsEnabled ?? input.write_tools_enabled,
-        approval_policy: input.approvalPolicy ?? input.approval_policy,
-      }),
+        ...optionalProperty("prompt_class", input.promptClass ?? input.prompt_class),
+        ...optionalProperty(
+          "prompt_text",
+          this.redaction.includePromptText ? promptText : undefined,
+        ),
+        ...optionalProperty("model", input.model),
+        ...optionalProperty("tools_available", input.toolsAvailable ?? input.tools_available),
+        ...optionalProperty("tools_called", input.toolsCalled ?? input.tools_called),
+        ...optionalProperty(
+          "write_tools_enabled",
+          input.writeToolsEnabled ?? input.write_tools_enabled,
+        ),
+        ...optionalProperty("approval_policy", input.approvalPolicy ?? input.approval_policy),
+      },
     });
     this.writeRecord(record);
     return record;
@@ -489,7 +497,7 @@ export class PolicyStrataRecorder {
         tool: {
           name: state.toolName,
           kind: state.toolKind,
-          scope: state.toolScope,
+          ...(state.toolScope ? { scope: state.toolScope } : {}),
           approval_required: state.approvalRequired,
         },
         authorization: this.authorizationForTool(state),
@@ -521,7 +529,7 @@ export class PolicyStrataRecorder {
       tool: {
         name: state.toolName,
         kind: state.toolKind,
-        scope: state.toolScope,
+        ...(state.toolScope ? { scope: state.toolScope } : {}),
         approval_required: state.approvalRequired,
       },
       authorization: this.authorizationForTool(state),
@@ -534,35 +542,43 @@ export class PolicyStrataRecorder {
   }
 
   private authorizationForTool(state: ToolExecutionState): PolicyStrataAuthorization {
-    return pruneUndefined({
+    return {
       ...state.context.authorization,
       household_actor_required: state.toolScope === "household",
       write_context_required: state.toolKind === "write",
       approval_required: state.approvalRequired,
-      approval_token_present: state.context.authorization.approval_token_present,
-      actor_role: state.context.actor?.role,
-    }) as PolicyStrataAuthorization;
+      ...optionalProperty(
+        "approval_token_present",
+        state.context.authorization.approval_token_present,
+      ),
+      ...optionalProperty("actor_role", state.context.actor?.role),
+    };
   }
 
   private buildRecord(input: {
     id: string;
-    traceId?: string;
+    traceId?: string | undefined;
     recordType: PolicyStrataTraceRecord["record_type"];
     context: NormalizedContext;
-    sql?: string;
-    tool?: PolicyStrataTraceRecord["tool"];
-    authorization?: PolicyStrataAuthorization;
-    query?: PolicyStrataTraceRecord["query"];
-    result?: PolicyStrataResultTrace;
-    mutation?: PolicyStrataMutationTrace;
-    audit?: PolicyStrataAuditTrace;
-    error?: PolicyStrataTraceRecord["error"];
+    sql?: string | undefined;
+    tool?: PolicyStrataTraceRecord["tool"] | undefined;
+    authorization?: PolicyStrataAuthorization | undefined;
+    query?: PolicyStrataTraceRecord["query"] | undefined;
+    result?: PolicyStrataResultTrace | undefined;
+    mutation?: PolicyStrataMutationTrace | undefined;
+    audit?: PolicyStrataAuditTrace | undefined;
+    error?: PolicyStrataTraceRecord["error"] | undefined;
     argumentShape?: unknown;
-    agentSession?: Record<string, unknown>;
-    releaseAllowed?: boolean;
-    semanticIr?: Record<string, unknown>;
+    agentSession?: Record<string, unknown> | undefined;
+    releaseAllowed?: boolean | undefined;
+    semanticIr?: Record<string, unknown> | undefined;
   }): PolicyStrataTraceRecord {
-    return pruneUndefined({
+    const query = redactSqlAnalysis(input.query, this.redaction);
+    const result = redactResultTrace(input.result, this.redaction);
+    const mutation = redactMutationTrace(input.mutation, this.redaction);
+    const audit = redactAuditTrace(input.audit, this.redaction);
+    const agentSession = redactOptionalRecord(input.agentSession, this.redaction);
+    return {
       id: input.id,
       record_type: input.recordType,
       version: "policystrata.node.trace.v1",
@@ -570,35 +586,50 @@ export class PolicyStrataRecorder {
       source: this.options.source ?? DEFAULT_SOURCE,
       timestamp: this.now().toISOString(),
       service: this.options.service,
-      environment: this.options.environment,
       trace_id: input.traceId ?? input.id,
-      session_id: input.context.sessionId,
-      principal: input.context.principal,
-      tenant_ids: input.context.tenantIds.length > 0 ? input.context.tenantIds : undefined,
-      release_allowed: input.releaseAllowed ?? input.context.releaseAllowed,
-      sql: input.sql,
-      semantic_ir: sanitizeSemanticIr(input.semanticIr ?? input.context.semanticIr, this.redaction),
-      expected_policy: redactTraceValue(input.context.expectedPolicy, this.redaction),
-      actor: input.context.actor,
-      tool: input.tool,
-      authorization: input.authorization ?? input.context.authorization,
-      query: redactTraceValue(input.query, this.redaction) as PolicyStrataTraceRecord["query"],
-      result: redactTraceValue(input.result, this.redaction) as PolicyStrataResultTrace | undefined,
-      mutation: redactTraceValue(input.mutation, this.redaction),
-      audit: redactTraceValue(input.audit, this.redaction),
-      argument_shape: input.argumentShape,
-      agent_session: redactTraceValue(input.agentSession, this.redaction) as Record<string, unknown> | undefined,
-      error: input.error,
-    }) as PolicyStrataTraceRecord;
+      ...optionalProperty("environment", this.options.environment),
+      ...optionalProperty("session_id", input.context.sessionId),
+      ...optionalProperty("principal", input.context.principal),
+      ...optionalProperty(
+        "tenant_ids",
+        input.context.tenantIds.length > 0 ? input.context.tenantIds : undefined,
+      ),
+      ...optionalProperty(
+        "release_allowed",
+        input.releaseAllowed ?? input.context.releaseAllowed,
+      ),
+      ...optionalProperty("sql", input.sql),
+      ...optionalProperty(
+        "semantic_ir",
+        sanitizeSemanticIr(input.semanticIr ?? input.context.semanticIr, this.redaction),
+      ),
+      ...optionalProperty(
+        "expected_policy",
+        redactOptionalRecord(input.context.expectedPolicy, this.redaction),
+      ),
+      ...optionalProperty("actor", input.context.actor),
+      ...optionalProperty("tool", input.tool),
+      ...optionalProperty(
+        "authorization",
+        input.authorization ?? input.context.authorization,
+      ),
+      ...optionalProperty("query", query),
+      ...optionalProperty("result", result),
+      ...optionalProperty("mutation", mutation),
+      ...optionalProperty("audit", audit),
+      ...optionalProperty("argument_shape", input.argumentShape),
+      ...optionalProperty("agent_session", agentSession),
+      ...optionalProperty("error", input.error),
+    };
   }
 
   private normalizeContext(ctx?: unknown): NormalizedContext {
     const merged = mergePolicyStrataContext(ctx);
-    const actor = normalizeActor(valueAsRecord(merged.actor));
+    const actor = normalizeActor(recordValue(merged.actor));
     const tenantIds = stringArray(merged.tenantIds ?? merged.tenant_ids ?? this.options.tenantIds);
     const actorTenant = actor?.household_id ?? actor?.organization_id;
     const rawTenantIds = tenantIds.length > 0 ? tenantIds : actorTenant ? [actorTenant] : [];
-    const authorization = sanitizeAuthorization(valueAsRecord(merged.authorization), this.redaction);
+    const authorization = sanitizeAuthorization(recordValue(merged.authorization), this.redaction);
     const approvalToken = merged.approvalToken ?? merged.approval_token;
     const privilegedReason = stringValue(merged.privilegedReason ?? merged.privileged_reason);
     const authorizationPrivilegedReason =
@@ -615,24 +646,30 @@ export class PolicyStrataRecorder {
       actor: actor ? this.redactActor(actor) : undefined,
       semanticIr: recordValue(merged.semanticIr ?? merged.semantic_ir),
       releaseAllowed: booleanValue(merged.releaseAllowed ?? merged.release_allowed),
-      authorization: pruneUndefined({
+      authorization: {
         ...authorization,
         approval_token_present:
           booleanValue(authorization?.approval_token_present) ?? approvalToken !== undefined,
-        privileged_reason: authorizationPrivilegedReason,
-      }) as PolicyStrataAuthorization,
+        ...optionalProperty("privileged_reason", authorizationPrivilegedReason),
+      },
       expectedPolicy: recordValue(merged.expectedPolicy ?? merged.expected_policy),
       privilegedReason: authorizationPrivilegedReason,
     };
   }
 
   private redactActor(actor: PolicyStrataActor): PolicyStrataActor {
-    return pruneUndefined({
-      user_id: actor.user_id ? this.redactId(actor.user_id) : undefined,
-      household_id: actor.household_id ? this.redactId(actor.household_id) : undefined,
-      organization_id: actor.organization_id ? this.redactId(actor.organization_id) : undefined,
-      role: actor.role,
-    }) as PolicyStrataActor;
+    return {
+      ...optionalProperty("user_id", actor.user_id ? this.redactId(actor.user_id) : undefined),
+      ...optionalProperty(
+        "household_id",
+        actor.household_id ? this.redactId(actor.household_id) : undefined,
+      ),
+      ...optionalProperty(
+        "organization_id",
+        actor.organization_id ? this.redactId(actor.organization_id) : undefined,
+      ),
+      ...optionalProperty("role", actor.role),
+    };
   }
 
   private redactId(value: string): string {
@@ -663,7 +700,7 @@ export class PolicyStrataRecorder {
     const recorder = this;
     const proxy = new Proxy(target, {
       get(rawTarget, prop, receiver) {
-        const value = Reflect.get(rawTarget, prop, receiver) as unknown;
+        const value: unknown = Reflect.get(rawTarget, prop, receiver);
         if (typeof value !== "function") {
           return isPlainObject(value) ? recorder.wrapObject(value, contextProvider, seen) : value;
         }
@@ -673,9 +710,9 @@ export class PolicyStrataRecorder {
             const wrappedArgs = [...args];
             wrappedArgs[0] = (tx: unknown, ...callbackArgs: unknown[]) =>
               callback(recorder.wrapTransactionClient(tx, contextProvider, seen), ...callbackArgs);
-            return value.apply(rawTarget, wrappedArgs) as unknown;
+            return value.apply(rawTarget, wrappedArgs);
           }
-          const result = value.apply(rawTarget, args) as unknown;
+          const result: unknown = value.apply(rawTarget, args);
           recorder.captureSqlFromMethod(rawTarget, prop, args, contextProvider);
           return recorder.wrapPotentialQuery(result, contextProvider, seen);
         };
@@ -727,11 +764,11 @@ export class PolicyStrataRecorder {
     };
     return new Proxy(query, {
       get(rawTarget, prop, receiver) {
-        const value = Reflect.get(rawTarget, prop, receiver) as unknown;
+        const value: unknown = Reflect.get(rawTarget, prop, receiver);
         if ((prop === "execute" || prop === "then") && typeof value === "function") {
           return function wrappedExecute(this: unknown, ...args: unknown[]) {
             capture();
-            return value.apply(rawTarget, args) as unknown;
+            return value.apply(rawTarget, args);
           };
         }
         return value;
@@ -852,8 +889,8 @@ function analyzeSql(
   if (SQL_AGGREGATE_PATTERN.test(normalizedSql) && observedTenantTables.length > 0 && !hasTenantPredicate) {
     warnings.push({
       code: "aggregate_without_tenant_predicate",
-      table: observedTenantTables[0],
       message: "aggregate over tenant table has no visible tenant predicate",
+      ...(observedTenantTables[0] ? { table: observedTenantTables[0] } : {}),
     });
   }
   if (privileged && !privilegedReason) {
@@ -880,7 +917,7 @@ function normalizeQueryInput(input: unknown): PolicyStrataQueryInput {
   if (!isObject(input)) {
     return {};
   }
-  const direct = input as PolicyStrataQueryInput;
+  const direct = queryInputFromRecord(input);
   const fromToSql = callSqlMethod(input, "toSQL");
   if (fromToSql) {
     return { ...direct, ...fromToSql };
@@ -889,10 +926,40 @@ function normalizeQueryInput(input: unknown): PolicyStrataQueryInput {
   if (fromToQuery) {
     return { ...direct, ...fromToQuery };
   }
+  const sql = typeof direct.sql === "string" ? direct.sql : stringValue(input.sql);
+  const query = typeof direct.query === "string" ? direct.query : stringValue(input.query);
   return {
     ...direct,
-    sql: typeof direct.sql === "string" ? direct.sql : stringValue(input.sql),
-    query: typeof direct.query === "string" ? direct.query : stringValue(input.query),
+    ...(sql ? { sql } : {}),
+    ...(query ? { query } : {}),
+  };
+}
+
+function queryInputFromRecord(input: Record<string, unknown>): PolicyStrataQueryInput {
+  const sql = stringValue(input.sql);
+  const query = stringValue(input.query);
+  const source = stringValue(input.source);
+  const privilegedReason = stringValue(input.privilegedReason);
+  const privilegedReasonSnake = stringValue(input.privileged_reason);
+  const semanticIr = recordValue(input.semanticIr);
+  const semanticIrSnake = recordValue(input.semantic_ir);
+  return {
+    ...(sql ? { sql } : {}),
+    ...(query ? { query } : {}),
+    ...(Array.isArray(input.params) ? { params: input.params } : {}),
+    ...(source ? { source } : {}),
+    ...(typeof input.privileged === "boolean" ? { privileged: input.privileged } : {}),
+    ...(privilegedReason ? { privilegedReason } : {}),
+    ...(privilegedReasonSnake ? { privileged_reason: privilegedReasonSnake } : {}),
+    ...(input.result !== undefined ? { result: input.result } : {}),
+    ...(typeof input.releaseAllowed === "boolean"
+      ? { releaseAllowed: input.releaseAllowed }
+      : {}),
+    ...(typeof input.release_allowed === "boolean"
+      ? { release_allowed: input.release_allowed }
+      : {}),
+    ...(semanticIr ? { semanticIr } : {}),
+    ...(semanticIrSnake ? { semantic_ir: semanticIrSnake } : {}),
   };
 }
 
@@ -902,17 +969,19 @@ function callSqlMethod(input: Record<string, unknown>, method: string): PolicySt
     return undefined;
   }
   try {
-    const value = candidate.call(input) as unknown;
+    const value: unknown = candidate.call(input);
     if (typeof value === "string") {
       return { sql: value };
     }
     if (!isObject(value)) {
       return undefined;
     }
+    const sql = stringValue(value.sql ?? value.text);
+    const query = stringValue(value.query);
     return {
-      sql: stringValue(value.sql ?? value.text),
-      query: stringValue(value.query),
-      params: Array.isArray(value.params) ? value.params : undefined,
+      ...(sql ? { sql } : {}),
+      ...(query ? { query } : {}),
+      ...(Array.isArray(value.params) ? { params: value.params } : {}),
     };
   } catch {
     return undefined;
@@ -1123,12 +1192,15 @@ function splitTopLevel(input: string): string[] {
 function summarizeResult(result: unknown, redaction: Required<PolicyStrataRedactionConfig>): PolicyStrataResultTrace {
   const rows = rowsFromResult(result);
   const fields = fieldsFromRows(rows, result, redaction);
-  return pruneUndefined({
-    row_count: rowCountFromResult(result, rows),
+  return {
+    ...optionalProperty("row_count", rowCountFromResult(result, rows)),
     fields_returned: fields,
     contains_sensitive_values: fields.some((field) => SENSITIVE_FIELD_PATTERN.test(field)),
-    rows: redaction.includeResultRows ? result : undefined,
-  }) as PolicyStrataResultTrace;
+    ...optionalProperty(
+      "rows",
+      redaction.includeResultRows ? redactTraceValue(result, redaction) : undefined,
+    ),
+  };
 }
 
 function rowsFromResult(result: unknown): Record<string, unknown>[] {
@@ -1234,7 +1306,99 @@ function sanitizeAuthorization(
       output[field] = sanitizeTraceString(value, redaction);
     }
   }
-  return output as PolicyStrataAuthorization;
+  return output;
+}
+
+function redactSqlAnalysis(
+  value: PolicyStrataTraceRecord["query"] | undefined,
+  redaction: Required<PolicyStrataRedactionConfig>,
+): PolicyStrataTraceRecord["query"] | undefined {
+  if (!value) {
+    return undefined;
+  }
+  return {
+    sql: sanitizeTraceString(value.sql, redaction),
+    tables: value.tables.map((item) => sanitizeTraceString(item, redaction)),
+    selected_columns: value.selected_columns.map((item) => sanitizeTraceString(item, redaction)),
+    tenant_predicates: value.tenant_predicates.map((item) =>
+      sanitizeTraceString(item, redaction),
+    ),
+    warnings: value.warnings.map((warning) => ({
+      code: warning.code,
+      message: sanitizeTraceString(warning.message, redaction),
+      ...optionalProperty(
+        "table",
+        warning.table ? sanitizeTraceString(warning.table, redaction) : undefined,
+      ),
+    })),
+    raw_sql_unparseable: value.raw_sql_unparseable,
+    ...optionalProperty("query_index", value.query_index),
+  };
+}
+
+function redactResultTrace(
+  value: PolicyStrataResultTrace | undefined,
+  redaction: Required<PolicyStrataRedactionConfig>,
+): PolicyStrataResultTrace | undefined {
+  if (!value) {
+    return undefined;
+  }
+  return {
+    ...redactTraceObject(value, redaction),
+    ...optionalProperty("row_count", value.row_count),
+    ...optionalProperty(
+      "fields_returned",
+      value.fields_returned?.map((field) => sanitizeTraceString(field, redaction)),
+    ),
+    ...optionalProperty("contains_sensitive_values", value.contains_sensitive_values),
+    ...optionalProperty("rows", redactTraceValue(value.rows, redaction)),
+  };
+}
+
+function redactMutationTrace(
+  value: PolicyStrataMutationTrace | undefined,
+  redaction: Required<PolicyStrataRedactionConfig>,
+): PolicyStrataMutationTrace | undefined {
+  if (!value) {
+    return undefined;
+  }
+  const sanitizeStrings = (items: string[] | undefined): string[] | undefined =>
+    items?.map((item) => sanitizeTraceString(item, redaction));
+  return {
+    ...redactTraceObject(value, redaction),
+    ...optionalProperty(
+      "table",
+      value.table ? sanitizeTraceString(value.table, redaction) : undefined,
+    ),
+    ...optionalProperty("where_predicates", sanitizeStrings(value.where_predicates)),
+    ...optionalProperty("columns_written", sanitizeStrings(value.columns_written)),
+    ...optionalProperty("expected_tables", sanitizeStrings(value.expected_tables)),
+    ...optionalProperty("permitted_columns", sanitizeStrings(value.permitted_columns)),
+  };
+}
+
+function redactAuditTrace(
+  value: PolicyStrataAuditTrace | undefined,
+  redaction: Required<PolicyStrataRedactionConfig>,
+): PolicyStrataAuditTrace | undefined {
+  if (!value) {
+    return undefined;
+  }
+  return {
+    ...redactTraceObject(value, redaction),
+    ...optionalProperty("event_emitted", value.event_emitted),
+    ...optionalProperty(
+      "event_type",
+      value.event_type ? sanitizeTraceString(value.event_type, redaction) : undefined,
+    ),
+  };
+}
+
+function redactOptionalRecord(
+  value: Record<string, unknown> | undefined,
+  redaction: Required<PolicyStrataRedactionConfig>,
+): Record<string, unknown> | undefined {
+  return value ? redactTraceObject(value, redaction) : undefined;
 }
 
 function sanitizeSemanticIr(
@@ -1328,12 +1492,15 @@ function normalizeActor(input?: Record<string, unknown>): PolicyStrataActor | un
   if (!input) {
     return undefined;
   }
-  return pruneUndefined({
-    user_id: stringValue(input.user_id ?? input.userId),
-    household_id: stringValue(input.household_id ?? input.householdId),
-    organization_id: stringValue(input.organization_id ?? input.organizationId),
-    role: stringValue(input.role),
-  }) as PolicyStrataActor;
+  return {
+    ...optionalProperty("user_id", stringValue(input.user_id ?? input.userId)),
+    ...optionalProperty("household_id", stringValue(input.household_id ?? input.householdId)),
+    ...optionalProperty(
+      "organization_id",
+      stringValue(input.organization_id ?? input.organizationId),
+    ),
+    ...optionalProperty("role", stringValue(input.role)),
+  };
 }
 
 function hashValue(value: string, salt: string): string {
@@ -1523,20 +1690,6 @@ function isAsciiDigit(code: number): boolean {
   return code >= 48 && code <= 57;
 }
 
-function pruneUndefined<T>(value: T): T {
-  if (Array.isArray(value)) {
-    return value.map((item) => pruneUndefined(item)).filter((item) => item !== undefined) as T;
-  }
-  if (!isObject(value)) {
-    return value;
-  }
-  return Object.fromEntries(
-    Object.entries(value)
-      .filter(([, item]) => item !== undefined)
-      .map(([key, item]) => [key, pruneUndefined(item)]),
-  ) as T;
-}
-
 function stringArray(value: unknown): string[] {
   if (!Array.isArray(value)) {
     return [];
@@ -1554,14 +1707,6 @@ function booleanValue(value: unknown): boolean | undefined {
 
 function recordValue(value: unknown): Record<string, unknown> | undefined {
   return isObject(value) ? value : undefined;
-}
-
-function valueAsRecord(value: unknown): Record<string, unknown> | undefined {
-  return isObject(value) ? value : undefined;
-}
-
-function isObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {

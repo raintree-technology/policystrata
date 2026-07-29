@@ -1,3 +1,5 @@
+from typing import Any
+
 import pytest
 from pydantic import ValidationError
 
@@ -73,7 +75,7 @@ def test_policy_denies_query_over_budget() -> None:
 
 
 @pytest.mark.parametrize("limit", [0, -1, True, "1"])
-def test_semantic_query_rejects_invalid_limits(limit) -> None:
+def test_semantic_query_rejects_invalid_limits(limit: Any) -> None:
     with pytest.raises(ValidationError):
         SemanticQuery(
             metric="ticket_count",

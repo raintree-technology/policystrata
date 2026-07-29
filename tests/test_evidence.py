@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 import pytest
 
@@ -7,7 +8,10 @@ from policystrata.runner import run_suite
 
 
 @pytest.mark.parametrize("witness_path", ["../secret.json", "/tmp/secret.json"])
-def test_evidence_rejects_witness_paths_outside_run_dir(tmp_path, witness_path: str) -> None:
+def test_evidence_rejects_witness_paths_outside_run_dir(
+    tmp_path: Path,
+    witness_path: str,
+) -> None:
     run_dir = tmp_path / "run"
     run_suite("support_saas", "seeded", run_dir)
     traces_path = run_dir / "traces.jsonl"
@@ -21,7 +25,7 @@ def test_evidence_rejects_witness_paths_outside_run_dir(tmp_path, witness_path: 
         render_evidence_tables({"malicious": run_dir})
 
 
-def test_evidence_rejects_symlink_witness_escape(tmp_path) -> None:
+def test_evidence_rejects_symlink_witness_escape(tmp_path: Path) -> None:
     run_dir = tmp_path / "run"
     outside = tmp_path / "outside"
     outside.mkdir()
@@ -33,7 +37,7 @@ def test_evidence_rejects_symlink_witness_escape(tmp_path) -> None:
         run_artifact_path(run_dir, "linked/secret.json")
 
 
-def test_evidence_accepts_in_run_witness_path(tmp_path) -> None:
+def test_evidence_accepts_in_run_witness_path(tmp_path: Path) -> None:
     run_dir = tmp_path / "run"
     traces = run_suite("support_saas", "seeded", run_dir)
 
@@ -42,7 +46,7 @@ def test_evidence_accepts_in_run_witness_path(tmp_path) -> None:
     assert path.is_file()
 
 
-def test_evidence_renders_suite_provenance(tmp_path) -> None:
+def test_evidence_renders_suite_provenance(tmp_path: Path) -> None:
     run_dir = tmp_path / "run"
     run_suite("support_saas", "seeded", run_dir)
 

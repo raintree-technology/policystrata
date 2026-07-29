@@ -11,7 +11,7 @@ from policystrata.domain import BUILTIN_DOMAINS, copy_domain, load_policy
 from policystrata.init_scan import BASIC_SCAN_TEMPLATES
 
 
-def test_cli_demo_runs_built_in_demo(tmp_path, capsys) -> None:
+def test_cli_demo_runs_built_in_demo(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     out_dir = tmp_path / "demo"
 
     assert main(["demo", "--out", str(out_dir)]) == 0
@@ -34,7 +34,7 @@ def test_cli_demo_runs_built_in_demo(tmp_path, capsys) -> None:
     assert any((out_dir / "witnesses").glob("*.json"))
 
 
-def test_cli_run_and_summarize(tmp_path, capsys) -> None:
+def test_cli_run_and_summarize(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     out_dir = tmp_path / "run"
 
     assert main(["run", "--domain", "support_saas", "--suite", "seeded", "--out", str(out_dir)]) == 0
@@ -47,7 +47,7 @@ def test_cli_run_and_summarize(tmp_path, capsys) -> None:
     assert summary_output["mutant_kill_rate"] == 1.0
 
 
-def test_cli_schema_writes_contract_to_stdout(capsys) -> None:
+def test_cli_schema_writes_contract_to_stdout(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["schema", "--kind", "imported-trace"]) == 0
 
     schema = json.loads(capsys.readouterr().out)
@@ -56,7 +56,10 @@ def test_cli_schema_writes_contract_to_stdout(capsys) -> None:
     assert set(schema["required"]) >= {"id", "principal", "sql"}
 
 
-def test_cli_schema_writes_contract_to_file(tmp_path, capsys) -> None:
+def test_cli_schema_writes_contract_to_file(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     out_path = tmp_path / "schemas" / "scan-result.json"
 
     assert main(["schema", "--kind", "scan-result", "--out", str(out_path)]) == 0
@@ -67,7 +70,10 @@ def test_cli_schema_writes_contract_to_file(tmp_path, capsys) -> None:
     assert set(schema["required"]) >= {"domain", "gate", "summary", "findings"}
 
 
-def test_cli_runtime_evaluate_writes_decision_batch(tmp_path, capsys) -> None:
+def test_cli_runtime_evaluate_writes_decision_batch(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     manifest_path = tmp_path / "runtime-manifest.json"
     event_path = tmp_path / "runtime-event.json"
     out_path = tmp_path / "runtime-decisions.json"
@@ -136,7 +142,10 @@ def test_cli_runtime_evaluate_writes_decision_batch(tmp_path, capsys) -> None:
     assert result["events"][0]["decision"]["control"]["id"] == "auth_context_required"
 
 
-def test_cli_runtime_evaluate_writes_runtime_events_artifact_for_directory_out(tmp_path, capsys) -> None:
+def test_cli_runtime_evaluate_writes_runtime_events_artifact_for_directory_out(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     manifest_path = tmp_path / "runtime-manifest.json"
     event_path = tmp_path / "runtime-event.json"
     out_dir = tmp_path / "runtime-out"
@@ -196,7 +205,10 @@ def test_cli_runtime_evaluate_writes_runtime_events_artifact_for_directory_out(t
     assert json.loads(artifact_path.read_text(encoding="utf-8"))["events"][0]["eventId"] == "evt_allowed"
 
 
-def test_cli_runtime_evaluate_asserts_expected_decisions(tmp_path, capsys) -> None:
+def test_cli_runtime_evaluate_asserts_expected_decisions(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     manifest_path = tmp_path / "runtime-manifest.json"
     event_path = tmp_path / "runtime-event.json"
     manifest_path.write_text(
@@ -256,7 +268,7 @@ def test_cli_runtime_evaluate_asserts_expected_decisions(tmp_path, capsys) -> No
     assert result["expectedMismatches"] == []
 
 
-def test_cli_minimize(tmp_path, capsys) -> None:
+def test_cli_minimize(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     out_dir = tmp_path / "run"
     main(["run", "--domain", "support_saas", "--suite", "seeded", "--out", str(out_dir)])
     capsys.readouterr()
@@ -270,7 +282,10 @@ def test_cli_minimize(tmp_path, capsys) -> None:
     assert "contract_decisions" in minimized
 
 
-def test_cli_generated_baselines_and_evidence(tmp_path, capsys) -> None:
+def test_cli_generated_baselines_and_evidence(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     out_dir = tmp_path / "generated"
 
     assert (
@@ -309,7 +324,10 @@ def test_cli_generated_baselines_and_evidence(tmp_path, capsys) -> None:
     assert "| policystrata |" not in evidence
 
 
-def test_cli_artifact_report_outputs_usability_metrics(tmp_path, capsys) -> None:
+def test_cli_artifact_report_outputs_usability_metrics(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     out_dir = tmp_path / "run"
 
     assert main(["run", "--domain", "support_saas", "--suite", "seeded", "--out", str(out_dir)]) == 0
@@ -341,7 +359,10 @@ def test_docs_github_action_examples_use_current_release_tag() -> None:
     assert set(action_refs) == {f"raintree-technology/policystrata@v{__version__}"}
 
 
-def test_cli_scan_writes_junit_output(tmp_path, capsys) -> None:
+def test_cli_scan_writes_junit_output(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     out_dir = tmp_path / "scan"
     junit_path = tmp_path / "reports" / "policystrata.xml"
 
@@ -369,7 +390,7 @@ def test_cli_scan_writes_junit_output(tmp_path, capsys) -> None:
     assert root.findall(".//failure")
 
 
-def test_cli_export_adapters(tmp_path, capsys) -> None:
+def test_cli_export_adapters(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     out_dir = tmp_path / "run"
     inspect_path = tmp_path / "exports" / "inspect.jsonl"
     benchflow_path = tmp_path / "exports" / "benchflow.json"
@@ -415,7 +436,7 @@ def test_cli_export_adapters(tmp_path, capsys) -> None:
     assert first_trace["artifacts"]["databaseResultKeys"]
 
 
-def test_cli_rejects_negative_generated_count(tmp_path) -> None:
+def test_cli_rejects_negative_generated_count(tmp_path: Path) -> None:
     with pytest.raises(SystemExit) as exc_info:
         main(
             [
@@ -434,7 +455,10 @@ def test_cli_rejects_negative_generated_count(tmp_path) -> None:
     assert exc_info.value.code == 2
 
 
-def test_cli_rejects_path_like_suite_without_traceback(tmp_path, capsys) -> None:
+def test_cli_rejects_path_like_suite_without_traceback(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     out_dir = tmp_path / "run"
 
     with pytest.raises(SystemExit) as exc_info:
@@ -457,7 +481,10 @@ def test_cli_rejects_path_like_suite_without_traceback(tmp_path, capsys) -> None
     assert not out_dir.exists()
 
 
-def test_cli_rejects_invalid_external_task_without_partial_output(tmp_path, capsys) -> None:
+def test_cli_rejects_invalid_external_task_without_partial_output(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     domain_path = copy_domain("support_saas", tmp_path)
     out_dir = tmp_path / "run"
     (domain_path / "tasks" / "adversarial.yaml").write_text(
@@ -510,7 +537,7 @@ tasks:
     assert not out_dir.exists()
 
 
-def test_cli_check_dbt_semantic_integration(capsys) -> None:
+def test_cli_check_dbt_semantic_integration(capsys: pytest.CaptureFixture[str]) -> None:
     fixture = "examples/integrations/dbt_semantic/finance_saas/semantic_models.yml"
 
     assert main(["check-integration", "dbt-semantic", "--domain", "finance_saas", "--path", fixture]) == 0
@@ -520,7 +547,10 @@ def test_cli_check_dbt_semantic_integration(capsys) -> None:
     assert output["stale_dbt_metrics"] == []
 
 
-def test_cli_check_integration_can_fail_on_warnings(tmp_path, capsys) -> None:
+def test_cli_check_integration_can_fail_on_warnings(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     fixture = tmp_path / "semantic_models.yml"
     fixture.write_text(
         """
@@ -559,7 +589,10 @@ metrics: []
     assert json.loads(capsys.readouterr().out)["sensitive_metadata_missing"] == ["customer_email"]
 
 
-def test_cli_init_scan_creates_runnable_scaffold(tmp_path, capsys) -> None:
+def test_cli_init_scan_creates_runnable_scaffold(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     scanner_dir = tmp_path / "scanner"
 
     assert main(["init-scan", "--out", str(scanner_dir)]) == 0
@@ -579,8 +612,8 @@ def test_cli_init_scan_creates_runnable_scaffold(tmp_path, capsys) -> None:
 @pytest.mark.parametrize("source_domain", BUILTIN_DOMAINS)
 def test_cli_init_scan_creates_runnable_source_domain_scaffold(
     source_domain: str,
-    tmp_path,
-    capsys,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     scanner_dir = tmp_path / f"{source_domain}-scanner"
 
@@ -604,7 +637,10 @@ def test_cli_init_scan_creates_runnable_source_domain_scaffold(
     assert scan["gate"] == "pass"
 
 
-def test_cli_init_scan_copies_packaged_postgres_dbt_example(tmp_path, capsys) -> None:
+def test_cli_init_scan_copies_packaged_postgres_dbt_example(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     scanner_dir = tmp_path / "policystrata-example"
 
     assert main(["init-scan", "postgres_dbt", "--out", str(scanner_dir)]) == 0
@@ -629,7 +665,9 @@ def test_cli_init_scan_copies_packaged_postgres_dbt_example(tmp_path, capsys) ->
     assert clean["gate"] == "pass"
 
 
-def test_cli_scan_help_documents_examples_and_config_sections(capsys) -> None:
+def test_cli_scan_help_documents_examples_and_config_sections(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     with pytest.raises(SystemExit) as exc_info:
         main(["scan", "--help"])
 
@@ -641,7 +679,10 @@ def test_cli_scan_help_documents_examples_and_config_sections(capsys) -> None:
     assert "runtime_manifests" in output
 
 
-def test_cli_scan_uses_gate_exit_codes(tmp_path, capsys) -> None:
+def test_cli_scan_uses_gate_exit_codes(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     failed_out = tmp_path / "failed"
     clean_out = tmp_path / "clean"
 
@@ -662,7 +703,9 @@ def test_cli_scan_uses_gate_exit_codes(tmp_path, capsys) -> None:
     assert clean["findings"] == 0
 
 
-def test_cli_doctor_config_reports_wired_and_missing_stack(capsys) -> None:
+def test_cli_doctor_config_reports_wired_and_missing_stack(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     assert main(["doctor", "--config", "examples/postgres_dbt/policystrata.yaml"]) == 0
     doctor = json.loads(capsys.readouterr().out)
 
@@ -679,7 +722,10 @@ def test_cli_doctor_config_reports_wired_and_missing_stack(capsys) -> None:
     assert any(todo["id"] == "fix_database_fixture" for todo in doctor["remediation"])
 
 
-def test_cli_doctor_reports_configured_runtime_gateway_readiness(tmp_path, capsys) -> None:
+def test_cli_doctor_reports_configured_runtime_gateway_readiness(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     manifest_path = tmp_path / "runtime-manifest.json"
     events_path = tmp_path / "runtime-events.json"
     config_path = tmp_path / "policystrata.yaml"
@@ -762,7 +808,9 @@ fuzz:
     assert not any(todo["id"].startswith("fix_runtime") for todo in doctor["remediation"])
 
 
-def test_cli_doctor_environment_markdown_without_config(capsys) -> None:
+def test_cli_doctor_environment_markdown_without_config(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     assert main(["doctor", "--format", "markdown"]) == 0
     markdown = capsys.readouterr().out
 
@@ -773,7 +821,10 @@ def test_cli_doctor_environment_markdown_without_config(capsys) -> None:
     assert not markdown.lstrip().startswith("{")
 
 
-def test_cli_doctor_real_db_config_introspects_schema_and_writes_markdown(tmp_path, capsys) -> None:
+def test_cli_doctor_real_db_config_introspects_schema_and_writes_markdown(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     report_path = tmp_path / "doctor.md"
 
     assert (
@@ -808,7 +859,10 @@ def test_cli_doctor_real_db_config_introspects_schema_and_writes_markdown(tmp_pa
     assert stack["state_assertions"]["status"] == "wired"
 
 
-def test_cli_doctor_policy_docs_classify_privacy_tos_and_obligations(tmp_path, capsys) -> None:
+def test_cli_doctor_policy_docs_classify_privacy_tos_and_obligations(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     docs_dir = tmp_path / "docs"
     docs_dir.mkdir()
     (docs_dir / "privacy.md").write_text(
@@ -893,7 +947,10 @@ fuzz:
     assert stack["policy_docs_ingestion"]["status"] == "wired"
 
 
-def test_cli_doctor_prompt_manifest_compares_exposed_policy_surface(tmp_path, capsys) -> None:
+def test_cli_doctor_prompt_manifest_compares_exposed_policy_surface(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     manifest_path = tmp_path / "prompts.json"
     manifest_path.write_text(
         json.dumps(

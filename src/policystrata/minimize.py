@@ -4,7 +4,7 @@ import json
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 from policystrata.models import SemanticQuery, Trace, WitnessClass
 
@@ -120,6 +120,6 @@ def preserves_witness(original: Trace, candidate: Trace) -> bool:
 def minimize_witness_file(path: Path) -> dict[str, Any]:
     raw = json.loads(path.read_text(encoding="utf-8"))
     if isinstance(raw, dict) and {"semantic_ir", "compiled_sql", "witness_class"} <= raw.keys():
-        return cast(dict[str, Any], raw)
+        return {str(key): value for key, value in raw.items()}
     trace = Trace.model_validate(raw)
     return minimize_trace(trace)

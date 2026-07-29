@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
+
+import pytest
+
 import policystrata.counterfactual as cf
 from policystrata.compound import CompoundCase
 from policystrata.counterfactual import (
@@ -8,10 +12,10 @@ from policystrata.counterfactual import (
     validate_case,
 )
 from policystrata.domain import load_policy, load_surface_config
-from policystrata.models import SemanticQuery
+from policystrata.models import Decision, Policy, SemanticQuery, SurfaceConfig, SurfaceName
 
 
-def support():
+def support() -> tuple[Policy, SurfaceConfig]:
     return load_policy("support_saas"), load_surface_config("support_saas")
 
 
@@ -38,10 +42,8 @@ def test_sufficiency_and_necessity_hold_for_valid_attribution() -> None:
     assert result.sufficiency_holds is True
     assert result.necessity_holds is True
     assert result.counterfactual_valid is True
-    # Repairing the attributed manifest skew moves attribution to grammar.
     attributed_repair = next(r for r in result.repairs if r.role == "attributed")
     assert attributed_repair.first_transition_after == "grammar"
-    # Repairing the non-attributed grammar skew leaves attribution at manifest.
     other_repair = next(r for r in result.repairs if r.role == "non_attributed")
     assert other_repair.first_transition_after == "manifest"
 
@@ -54,24 +56,16 @@ def test_full_study_reports_validity() -> None:
     assert report.necessity_rate == 1.0
 
 
-def test_check_has_teeth_broken_attribution_fails(monkeypatch) -> None:
-    """If attribution were wrong, counterfactual repair must reject it.
-
-    Force the detector to always attribute to 'database' regardless of which
-    surfaces are actually skewed. Repairing the (non-causal) database claim then
-    does not move attribution, so sufficiency must fail.
-    """
+def test_check_has_teeth_broken_attribution_fails(monkeypatch: pytest.MonkeyPatch) -> None:
     policy, surfaces = support()
     case = a_case(["stale_metric_alias_manifest", "grammar_permits_forbidden_dimension"])
 
-    def constant_attribution(_decisions):
+    def constant_attribution(_decisions: Mapping[str, Decision]) -> SurfaceName:
         return "database"
 
     monkeypatch.setattr(cf, "first_contract_violation", constant_attribution)
     result = validate_case(policy, case, surfaces)
     assert result.attributed_surface == "database"
-    # Removing the "attributed" database skew (which does not exist here) cannot
-    # move a constant attribution, so sufficiency fails and the case is invalid.
     assert result.counterfactual_valid is False
 
 

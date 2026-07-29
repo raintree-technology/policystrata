@@ -1,6 +1,8 @@
 import json
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from pathlib import Path
+from typing import Any
 
 import pytest
 from pydantic import ValidationError
@@ -20,7 +22,7 @@ from policystrata.cli import main
 from policystrata.runner import run_suite
 
 
-def test_run_suite_writes_clearance_metadata_contract(tmp_path) -> None:
+def test_run_suite_writes_clearance_metadata_contract(tmp_path: Path) -> None:
     run_dir = tmp_path / "run"
     run_suite("support_saas", "seeded", run_dir)
 
@@ -48,7 +50,7 @@ def test_run_suite_writes_clearance_metadata_contract(tmp_path) -> None:
     assert all(artifact["upload"] is False for artifact in evidence_pack["artifactRefs"])
 
 
-def test_clearance_runner_config_defaults_to_metadata_only(tmp_path) -> None:
+def test_clearance_runner_config_defaults_to_metadata_only(tmp_path: Path) -> None:
     config_path = tmp_path / "clearance.runner.yaml"
     config_path.write_text(
         """
@@ -75,7 +77,7 @@ gates:
     assert config.fail_mode == "fail_closed"
 
 
-def test_clearance_runner_config_rejects_escaping_output_dir(tmp_path) -> None:
+def test_clearance_runner_config_rejects_escaping_output_dir(tmp_path: Path) -> None:
     config_path = tmp_path / "clearance.runner.yaml"
     config_path.write_text("projectId: support-bi\noutputDir: ../escaped\n", encoding="utf-8")
 
@@ -83,7 +85,7 @@ def test_clearance_runner_config_rejects_escaping_output_dir(tmp_path) -> None:
         load_clearance_runner_config(config_path)
 
 
-def test_clearance_runner_config_rejects_unsafe_project_id(tmp_path) -> None:
+def test_clearance_runner_config_rejects_unsafe_project_id(tmp_path: Path) -> None:
     config_path = tmp_path / "clearance.runner.yaml"
     config_path.write_text("projectId: '../escaped'\n", encoding="utf-8")
 
@@ -108,7 +110,7 @@ def test_metadata_boundary_scanner_rejects_raw_prompts_and_secrets() -> None:
         assert_metadata_boundary(payload)
 
 
-def test_clearance_evidence_pack_uses_config_and_exit_code(tmp_path) -> None:
+def test_clearance_evidence_pack_uses_config_and_exit_code(tmp_path: Path) -> None:
     run_dir = tmp_path / "run"
     config_path = tmp_path / "clearance.runner.yaml"
     run_suite("support_saas", "seeded", run_dir)
@@ -131,7 +133,7 @@ releaseCandidate: commit-abc123
     assert clearance_exit_code_for_pack(pack) == ClearanceRunnerExitCode.PASS_OR_REVIEW_ONLY
 
 
-def test_clearance_evidence_pack_has_stable_run_id(tmp_path) -> None:
+def test_clearance_evidence_pack_has_stable_run_id(tmp_path: Path) -> None:
     run_dir = tmp_path / "run"
     run_suite("support_saas", "seeded", run_dir)
 
@@ -141,7 +143,7 @@ def test_clearance_evidence_pack_has_stable_run_id(tmp_path) -> None:
     assert first["runId"] == second["runId"]
 
 
-def test_clearance_artifact_refs_reject_symlink_escape(tmp_path) -> None:
+def test_clearance_artifact_refs_reject_symlink_escape(tmp_path: Path) -> None:
     run_dir = tmp_path / "run"
     run_suite("support_saas", "seeded", run_dir)
     escaped = tmp_path / "outside.json"
@@ -153,7 +155,7 @@ def test_clearance_artifact_refs_reject_symlink_escape(tmp_path) -> None:
         build_clearance_evidence_pack(run_dir)
 
 
-def test_clearance_evidence_pack_references_optional_local_artifacts(tmp_path) -> None:
+def test_clearance_evidence_pack_references_optional_local_artifacts(tmp_path: Path) -> None:
     run_dir = tmp_path / "run"
     run_suite("support_saas", "seeded", run_dir)
     (run_dir / "policystrata").mkdir()
@@ -180,7 +182,7 @@ def test_clearance_evidence_pack_references_optional_local_artifacts(tmp_path) -
     }
 
 
-def test_cli_run_accepts_clearance_metadata_and_output_dir(tmp_path) -> None:
+def test_cli_run_accepts_clearance_metadata_and_output_dir(tmp_path: Path) -> None:
     run_dir = tmp_path / "run"
 
     assert (
@@ -225,7 +227,7 @@ def test_cli_run_accepts_clearance_metadata_and_output_dir(tmp_path) -> None:
     assert metadata["organization_id"] == "org_demo"
 
 
-def test_cli_schema_includes_clearance_contracts(capsys) -> None:
+def test_cli_schema_includes_clearance_contracts(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["schema", "--kind", "clearance-runner-config"]) == 0
     config_schema = json.loads(capsys.readouterr().out)
     assert config_schema["$id"] == "https://policystrata.dev/schemas/clearance.runner.schema.json"
@@ -243,7 +245,9 @@ def test_cli_schema_includes_clearance_contracts(capsys) -> None:
     assert upload_schema["$id"] == "https://policystrata.dev/schemas/clearance-upload.schema.json"
 
 
-def test_clearance_upload_payload_strips_runtime_payload_and_expected_decision(tmp_path) -> None:
+def test_clearance_upload_payload_strips_runtime_payload_and_expected_decision(
+    tmp_path: Path,
+) -> None:
     run_dir = tmp_path / "run"
     config_path = tmp_path / "clearance.runner.yaml"
     run_suite("support_saas", "seeded", run_dir)
@@ -277,7 +281,7 @@ def test_clearance_upload_payload_strips_runtime_payload_and_expected_decision(t
     validate_clearance_upload_payload(payload)
 
 
-def test_clearance_upload_payload_rejects_boundary_violation_and_size(tmp_path) -> None:
+def test_clearance_upload_payload_rejects_boundary_violation_and_size(tmp_path: Path) -> None:
     run_dir = tmp_path / "run"
     config_path = tmp_path / "clearance.runner.yaml"
     run_suite("support_saas", "seeded", run_dir)
@@ -290,7 +294,7 @@ def test_clearance_upload_payload_rejects_boundary_violation_and_size(tmp_path) 
         validate_clearance_upload_payload({**payload, "runtimeEvents": [{"rawPrompt": "hello"}]})
 
 
-def test_clearance_upload_payload_validates_nested_contracts(tmp_path) -> None:
+def test_clearance_upload_payload_validates_nested_contracts(tmp_path: Path) -> None:
     run_dir = tmp_path / "run"
     config_path = tmp_path / "clearance.runner.yaml"
     run_suite("support_saas", "seeded", run_dir)
@@ -303,7 +307,7 @@ def test_clearance_upload_payload_validates_nested_contracts(tmp_path) -> None:
         validate_clearance_upload_payload({**payload, "clearanceRun": broken_run})
 
 
-def test_upload_clearance_payload_posts_metadata_contract(tmp_path) -> None:
+def test_upload_clearance_payload_posts_metadata_contract(tmp_path: Path) -> None:
     run_dir = tmp_path / "run"
     config_path = tmp_path / "clearance.runner.yaml"
     run_suite("support_saas", "seeded", run_dir)
@@ -313,7 +317,7 @@ def test_upload_clearance_payload_posts_metadata_contract(tmp_path) -> None:
         load_clearance_runner_config(config_path),
         idempotency_key="upload-once",
     )
-    received: dict[str, object] = {}
+    received: dict[str, Any] = {}
     server = _start_upload_server(received, status=202)
 
     try:
@@ -337,7 +341,11 @@ def test_upload_clearance_payload_posts_metadata_contract(tmp_path) -> None:
     assert received["body"]["uploadId"] == payload["uploadId"]
 
 
-def test_cli_clearance_runner_upload_requires_runner_token(tmp_path, capsys, monkeypatch) -> None:
+def test_cli_clearance_runner_upload_requires_runner_token(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     run_dir = tmp_path / "run"
     config_path = tmp_path / "clearance.runner.yaml"
     run_suite("support_saas", "seeded", run_dir)
@@ -351,7 +359,10 @@ def test_cli_clearance_runner_upload_requires_runner_token(tmp_path, capsys, mon
     assert output["error"] == "missing_runner_token"
 
 
-def test_cli_clearance_runner_upload_returns_exit_code_four_on_auth_failure(tmp_path, capsys) -> None:
+def test_cli_clearance_runner_upload_returns_exit_code_four_on_auth_failure(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     run_dir = tmp_path / "run"
     config_path = tmp_path / "clearance.runner.yaml"
     run_suite("support_saas", "seeded", run_dir)
@@ -388,9 +399,9 @@ def test_cli_clearance_runner_upload_returns_exit_code_four_on_auth_failure(tmp_
 
 
 def test_cli_clearance_runner_local_only_fails_closed_on_protected_branch(
-    tmp_path,
-    capsys,
-    monkeypatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     run_dir = tmp_path / "run"
     config_path = tmp_path / "clearance.runner.yaml"
@@ -408,9 +419,9 @@ def test_cli_clearance_runner_local_only_fails_closed_on_protected_branch(
 
 
 def test_cli_clearance_runner_local_only_override_records_audit_note(
-    tmp_path,
-    capsys,
-    monkeypatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     run_dir = tmp_path / "run"
     config_path = tmp_path / "clearance.runner.yaml"
@@ -444,7 +455,10 @@ def test_cli_clearance_runner_local_only_override_records_audit_note(
     assert run_contract["localOverrideNote"] == "approved break-glass local evidence run"
 
 
-def test_cli_clearance_runner_validate_audit_and_evidence_pack(tmp_path, capsys) -> None:
+def test_cli_clearance_runner_validate_audit_and_evidence_pack(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     run_dir = tmp_path / "run"
     config_path = tmp_path / "clearance.runner.yaml"
     payload_path = tmp_path / "runtime-event.json"
@@ -486,7 +500,10 @@ def test_cli_clearance_runner_validate_audit_and_evidence_pack(tmp_path, capsys)
     assert pack["localArtifacts"]["evidence_pack"].endswith("evidence-pack.json")
 
 
-def test_cli_clearance_runner_validate_returns_exit_code_three_for_invalid_config(tmp_path, capsys) -> None:
+def test_cli_clearance_runner_validate_returns_exit_code_three_for_invalid_config(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     config_path = tmp_path / "clearance.runner.yaml"
     config_path.write_text("projectId: ../bad\n", encoding="utf-8")
 
@@ -497,7 +514,10 @@ def test_cli_clearance_runner_validate_returns_exit_code_three_for_invalid_confi
     assert output["error"] == "invalid_config"
 
 
-def test_cli_clearance_runner_audit_payload_fails_for_secret(tmp_path, capsys) -> None:
+def test_cli_clearance_runner_audit_payload_fails_for_secret(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     payload_path = tmp_path / "runtime-event.json"
     payload_path.write_text(json.dumps({"token": "tokenfixturevalue"}), encoding="utf-8")
 
@@ -508,7 +528,7 @@ def test_cli_clearance_runner_audit_payload_fails_for_secret(tmp_path, capsys) -
     assert result["findings"][0]["path"] == "$.token"
 
 
-def _start_upload_server(received: dict[str, object], *, status: int) -> HTTPServer:
+def _start_upload_server(received: dict[str, Any], *, status: int) -> HTTPServer:
     class Handler(BaseHTTPRequestHandler):
         def do_POST(self) -> None:
             length = int(self.headers.get("content-length", "0"))

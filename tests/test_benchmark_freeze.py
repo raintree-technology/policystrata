@@ -1,4 +1,7 @@
 import json
+from pathlib import Path
+
+import pytest
 
 from policystrata.cli import main
 from policystrata.freeze import (
@@ -11,7 +14,7 @@ from policystrata.freeze import (
 from policystrata.runner import run_suite
 
 
-def test_freeze_manifest_verifies_and_marks_run_metadata(tmp_path) -> None:
+def test_freeze_manifest_verifies_and_marks_run_metadata(tmp_path: Path) -> None:
     manifest_path = tmp_path / "freeze" / "support-generated.json"
     manifest = write_benchmark_manifest(
         "support_saas",
@@ -56,7 +59,7 @@ def test_detector_hash_covers_compiler_source() -> None:
     assert source_hash(DETECTOR_SOURCE_FILES) != source_hash(without_compiler)
 
 
-def test_freeze_verification_detects_suite_tampering(tmp_path) -> None:
+def test_freeze_verification_detects_suite_tampering(tmp_path: Path) -> None:
     manifest_path = tmp_path / "freeze.json"
     write_benchmark_manifest(
         "support_saas",
@@ -78,7 +81,7 @@ def test_freeze_verification_detects_suite_tampering(tmp_path) -> None:
     assert {item["field"] for item in verification["mismatches"]} >= {"generated_count", "task_hash"}
 
 
-def test_freeze_verification_detects_provenance_tampering(tmp_path) -> None:
+def test_freeze_verification_detects_provenance_tampering(tmp_path: Path) -> None:
     manifest_path = tmp_path / "freeze.json"
     manifest = write_benchmark_manifest(
         "support_saas",
@@ -104,7 +107,10 @@ def test_freeze_verification_detects_provenance_tampering(tmp_path) -> None:
     assert {item["field"] for item in verification["mismatches"]} >= {"git_commit", "suite_metadata"}
 
 
-def test_freeze_cli_round_trip_and_tamper_exit_code(tmp_path, capsys) -> None:
+def test_freeze_cli_round_trip_and_tamper_exit_code(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     manifest_path = tmp_path / "freeze.json"
 
     assert (

@@ -207,8 +207,8 @@ class CompoundExpectation:
     affected_surfaces: frozenset[SurfaceName]
 
 
-def surface_position(surface: str) -> int:
-    return SURFACE_ORDER.index(surface)  # type: ignore[arg-type]
+def surface_position(surface: SurfaceName) -> int:
+    return SURFACE_ORDER.index(surface)
 
 
 def order_mutation_specs(specs: Sequence[MutationSpec]) -> tuple[MutationSpec, ...]:

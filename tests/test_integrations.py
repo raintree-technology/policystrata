@@ -34,7 +34,7 @@ def test_dbt_semantic_adapter_matches_finance_policy_fixture() -> None:
     assert result["missing_policy_dimensions"] == []
 
 
-def test_dbt_semantic_adapter_classifies_warning_diagnostics(tmp_path) -> None:
+def test_dbt_semantic_adapter_classifies_warning_diagnostics(tmp_path: Path) -> None:
     fixture = tmp_path / "semantic_models.yml"
     fixture.write_text(
         """
@@ -59,13 +59,7 @@ def test_dbt_semantic_adapter_does_not_classify_lineage_info_as_warning() -> Non
     assert not dbt_semantic_has_warnings({"models_missing_lineage": ["support_metrics"]})
 
 
-# Scanner gap 3 (docs/brownfield-results.md): a semantic layer declares a dimension under a local
-# name but lets a query reach it through an entity join as `entity__dimension`, a name that never
-# appears verbatim in the manifest. Flat name matching reported every such policy reference as
-# missing. These pin the resolution rules and, importantly, their limits.
-
-
-def test_dbt_semantic_adapter_resolves_entity_qualified_dimension_names(tmp_path) -> None:
+def test_dbt_semantic_adapter_resolves_entity_qualified_dimension_names(tmp_path: Path) -> None:
     fixture = write_semantic_model(
         tmp_path,
         """
@@ -86,12 +80,11 @@ metrics: []
 
     assert "region" in resolvable
     assert "booking__region" in resolvable
-    # The entity is groupable on its own, and every metric exposes the aggregation-time dimension.
     assert "booking" in resolvable
     assert "metric_time" in resolvable
 
 
-def test_dbt_semantic_adapter_resolves_entity_reached_through_another_entity(tmp_path) -> None:
+def test_dbt_semantic_adapter_resolves_entity_reached_through_another_entity(tmp_path: Path) -> None:
     fixture = write_semantic_model(
         tmp_path,
         """
@@ -113,7 +106,7 @@ metrics: []
 
 
 def test_dbt_semantic_adapter_qualifies_dimensions_only_by_their_own_models_entities(
-    tmp_path,
+    tmp_path: Path,
 ) -> None:
     """Qualification is per-model, not project-wide, or the resolvable set would accept anything."""
     fixture = write_semantic_model(
@@ -140,12 +133,11 @@ metrics: []
     resolvable = resolvable_dimension_names(load_dbt_semantic_inventory(fixture))
 
     assert "booking__region" in resolvable
-    # `region` belongs to the bookings model, so the users entity must not qualify it.
     assert "user__region" not in resolvable
 
 
 def test_dbt_semantic_adapter_reports_missing_dimensions_against_resolvable_names(
-    tmp_path,
+    tmp_path: Path,
 ) -> None:
     """Pins the wiring, not just the helper: a policy naming `booking__is_instant` is satisfied by
     a model that declares entity `booking` and dimension `is_instant`."""
@@ -171,7 +163,7 @@ metrics: []
     assert "booking__is_instant" not in result["missing_policy_dimensions"]
 
 
-def test_dbt_semantic_adapter_judges_dimension_staleness_on_declared_names(tmp_path) -> None:
+def test_dbt_semantic_adapter_judges_dimension_staleness_on_declared_names(tmp_path: Path) -> None:
     """A declared dimension the policy names only in qualified form is matched, not stale."""
     fixture = write_semantic_model(
         tmp_path,
@@ -195,11 +187,7 @@ metrics: []
     assert result["stale_dbt_dimensions"] == []
 
 
-# Scanner gap 4: `metrics | measures` treated every measure as individually governable, so private
-# building-block measures were reported stale against a policy never meant to name them.
-
-
-def test_dbt_semantic_adapter_reports_promoted_measure_without_policy_as_stale(tmp_path) -> None:
+def test_dbt_semantic_adapter_reports_promoted_measure_without_policy_as_stale(tmp_path: Path) -> None:
     fixture = write_semantic_model(
         tmp_path,
         """
@@ -219,7 +207,7 @@ metrics: []
     assert result["stale_dbt_metrics"] == ["abandoned_tickets"]
 
 
-def test_dbt_semantic_adapter_does_not_report_private_measure_as_stale(tmp_path) -> None:
+def test_dbt_semantic_adapter_does_not_report_private_measure_as_stale(tmp_path: Path) -> None:
     fixture = write_semantic_model(
         tmp_path,
         """
@@ -238,7 +226,7 @@ metrics: []
     assert result["stale_dbt_metrics"] == []
 
 
-def test_dbt_semantic_adapter_serves_policy_metric_backed_by_private_measure(tmp_path) -> None:
+def test_dbt_semantic_adapter_serves_policy_metric_backed_by_private_measure(tmp_path: Path) -> None:
     """The pools are asymmetric on purpose: a private measure still answers a policy metric."""
     fixture = write_semantic_model(
         tmp_path,
@@ -261,11 +249,7 @@ metrics: []
     assert result["stale_dbt_metrics"] == []
 
 
-# Scanner gap 5: an omitted `expr:` is not an empty expression. dbt and MetricFlow default it to
-# the measure's own name, and the adapter reported every such measure as a mismatch.
-
-
-def test_dbt_semantic_adapter_resolves_omitted_expression_to_measure_name(tmp_path) -> None:
+def test_dbt_semantic_adapter_resolves_omitted_expression_to_measure_name(tmp_path: Path) -> None:
     """`account_balance` is the real upstream case: the measure omits `expr:` and the policy
     column is the measure's own name, so the implicit default matches."""
     fixture = write_semantic_model(
@@ -286,7 +270,7 @@ metrics: []
     assert result["expression_mismatches"] == []
 
 
-def test_dbt_semantic_adapter_still_reports_wrong_implicit_expression(tmp_path) -> None:
+def test_dbt_semantic_adapter_still_reports_wrong_implicit_expression(tmp_path: Path) -> None:
     """The fix resolves the default; it does not stop checking it."""
     fixture = write_semantic_model(
         tmp_path,
@@ -340,7 +324,7 @@ def test_dbt_semantic_adapter_reports_only_real_warnings_on_metricflow_manifest(
     assert result["sensitive_metadata_missing"] == ["company_name"]
 
 
-def test_snowflake_text_to_sql_fixture_runs_without_snowflake(tmp_path) -> None:
+def test_snowflake_text_to_sql_fixture_runs_without_snowflake(tmp_path: Path) -> None:
     result = run_scan(
         Path("examples/integrations/snowflake_text_to_sql/policystrata.yaml"),
         tmp_path / "snowflake",

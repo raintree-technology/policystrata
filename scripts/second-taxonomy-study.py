@@ -16,6 +16,7 @@ import argparse
 import collections
 import json
 from pathlib import Path
+from typing import Any
 
 from policystrata.mutations import MUTATIONS
 
@@ -29,7 +30,7 @@ SUITES = (
     "analytics-clickhouse-generated",
 )
 
-SOURCE = {
+SOURCE: dict[str, Any] = {
     "citation": (
         "Chu, A Systematic Survey of Security Threats and Defenses in LLM-Based AI Agents: "
         "A Layered Attack Surface Framework, arXiv:2604.23338"
@@ -53,9 +54,6 @@ SOURCE = {
     ],
 }
 
-# Human judgement: the benchmark begins with an already-formed semantic plan, then mutates
-# model-facing contracts, executable tools, or policy enforcement. None of its operators changes
-# model foundations, memory, agent coordination, or ecosystem dependencies.
 OPERATOR_LAYER = {
     "stale_metric_alias_manifest": "Cognitive",
     "grammar_permits_forbidden_dimension": "Cognitive",
@@ -94,7 +92,7 @@ def operator_counts(run_root: Path) -> collections.Counter[str]:
     return counts
 
 
-def build_report(counts: collections.Counter[str]) -> dict:
+def build_report(counts: collections.Counter[str]) -> dict[str, Any]:
     if set(OPERATOR_LAYER) != set(MUTATIONS) or set(counts) != set(MUTATIONS):
         raise SystemExit(
             "LASM map, registry, and traces are out of sync: "
@@ -141,7 +139,7 @@ def build_report(counts: collections.Counter[str]) -> dict:
     }
 
 
-def render_markdown(report: dict) -> str:
+def render_markdown(report: dict[str, Any]) -> str:
     totals = report["totals"]
     lines = [
         "# Second External Taxonomy Cross-Check",

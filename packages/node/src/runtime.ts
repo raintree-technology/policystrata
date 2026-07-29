@@ -1,3 +1,5 @@
+import { isRecord, optionalProperty } from "./internal.js";
+
 export type PolicyStrataRuntimeMode = "shadow" | "enforce";
 export type PolicyStrataRuntimeDefaultDecision = "deny";
 export type PolicyStrataRuntimeToolKind = "read" | "write" | "export" | "memory" | "external";
@@ -286,7 +288,7 @@ export interface PolicyStrataRuntimeExpectedDecision {
   policyRefs?: readonly string[];
 }
 
-export interface PolicyStrataRuntimeEventInput {
+export interface PolicyStrataRuntimeEventFields {
   schemaVersion: string;
   eventId: string;
   project: string;
@@ -319,75 +321,89 @@ export interface PolicyStrataRuntimeEventInput {
   approvalRequiredSatisfied?: boolean;
   promptInjection?: boolean;
   tainted?: boolean;
+}
+
+export interface PolicyStrataRuntimeEventInput extends PolicyStrataRuntimeEventFields {
   [key: string]: unknown;
 }
 
-export type PolicyStrataRuntimeEventBuilderInput = Omit<
-  PolicyStrataRuntimeEventInput,
+type OpenRuntimeEvent<T> = T & Record<string, unknown>;
+
+type PolicyStrataRuntimeEventBuilderFields = Omit<
+  PolicyStrataRuntimeEventFields,
   "schemaVersion" | "observedAt"
 > & {
   schemaVersion?: string;
   observedAt?: string;
 };
 
-export type PolicyStrataLayerRuntimeEventBuilderInput = Omit<
-  PolicyStrataRuntimeEventBuilderInput,
-  "layer" | "operation"
+type PolicyStrataLayerRuntimeEventBuilderFields = Omit<
+  PolicyStrataRuntimeEventFields,
+  "schemaVersion" | "observedAt" | "layer" | "operation"
 > & {
+  schemaVersion?: string;
+  observedAt?: string;
   operation?: string;
 };
 
-export type PolicyStrataSqlRuntimeEventInput = Omit<
-  PolicyStrataLayerRuntimeEventBuilderInput,
-  "payload"
-> & {
-  sql: string;
-  payload?: Record<string, unknown>;
-  rowCount?: number;
-  rowLimit?: number;
-};
+export type PolicyStrataRuntimeEventBuilderInput =
+  OpenRuntimeEvent<PolicyStrataRuntimeEventBuilderFields>;
 
-export type PolicyStrataToolRuntimeEventInput = Omit<
-  PolicyStrataLayerRuntimeEventBuilderInput,
-  "resource" | "toolInputSchemaRef" | "toolOutputSchemaRef" | "mcpInputSchemaRef" | "mcpOutputSchemaRef"
-> & {
-  toolName: string;
-  toolKind?: PolicyStrataRuntimeToolKind;
-  resource?: Partial<PolicyStrataRuntimeResourceEventRef>;
-  inputSchemaRef?: string;
-  outputSchemaRef?: string;
-  mcpInputSchemaRef?: string;
-  mcpOutputSchemaRef?: string;
-};
+export type PolicyStrataLayerRuntimeEventBuilderInput =
+  OpenRuntimeEvent<PolicyStrataLayerRuntimeEventBuilderFields>;
 
-export type PolicyStrataRetrievalRuntimeEventInput = Omit<
-  PolicyStrataLayerRuntimeEventBuilderInput,
-  "resource"
-> & {
-  resourceName: string;
-  resource?: Partial<PolicyStrataRuntimeResourceEventRef>;
-  tenantId?: string;
-  requiredEntitlements?: readonly string[];
-};
+export type PolicyStrataSqlRuntimeEventInput = OpenRuntimeEvent<
+  Omit<PolicyStrataLayerRuntimeEventBuilderFields, "payload"> & {
+    sql: string;
+    payload?: Record<string, unknown>;
+    rowCount?: number;
+    rowLimit?: number;
+  }
+>;
 
-export type PolicyStrataEgressRuntimeEventInput = Omit<
-  PolicyStrataLayerRuntimeEventBuilderInput,
-  "resource"
-> & {
-  destination: string;
-  destinationClass?: string;
-  resource?: Partial<PolicyStrataRuntimeResourceEventRef>;
-};
+export type PolicyStrataToolRuntimeEventInput = OpenRuntimeEvent<
+  Omit<
+    PolicyStrataLayerRuntimeEventBuilderFields,
+    "resource" | "toolInputSchemaRef" | "toolOutputSchemaRef" | "mcpInputSchemaRef" | "mcpOutputSchemaRef"
+  > & {
+    toolName: string;
+    toolKind?: PolicyStrataRuntimeToolKind;
+    resource?: Partial<PolicyStrataRuntimeResourceEventRef>;
+    inputSchemaRef?: string;
+    outputSchemaRef?: string;
+    mcpInputSchemaRef?: string;
+    mcpOutputSchemaRef?: string;
+  }
+>;
 
-export type PolicyStrataClearanceEvidencePackRuntimeEventInput = Omit<
-  PolicyStrataLayerRuntimeEventBuilderInput,
-  "artifactRefs" | "layer" | "operation" | "payloadHash" | "resource" | "summary"
-> & {
-  evidencePackRef: string;
-  runId?: string;
-  sha256?: string;
-  summary?: string;
-};
+export type PolicyStrataRetrievalRuntimeEventInput = OpenRuntimeEvent<
+  Omit<PolicyStrataLayerRuntimeEventBuilderFields, "resource"> & {
+    resourceName: string;
+    resource?: Partial<PolicyStrataRuntimeResourceEventRef>;
+    tenantId?: string;
+    requiredEntitlements?: readonly string[];
+  }
+>;
+
+export type PolicyStrataEgressRuntimeEventInput = OpenRuntimeEvent<
+  Omit<PolicyStrataLayerRuntimeEventBuilderFields, "resource"> & {
+    destination: string;
+    destinationClass?: string;
+    resource?: Partial<PolicyStrataRuntimeResourceEventRef>;
+  }
+>;
+
+export type PolicyStrataClearanceEvidencePackRuntimeEventInput = OpenRuntimeEvent<
+  Omit<
+    PolicyStrataLayerRuntimeEventBuilderFields,
+    "artifactRefs" | "operation" | "payloadHash" | "resource" | "summary"
+  > & {
+    evidencePackRef: string;
+    runId?: string;
+    sha256?: string;
+    summary?: string;
+  }
+>;
 
 export interface PolicyStrataRuntimeEventEvaluation {
   eventId: string;
@@ -411,7 +427,361 @@ export function buildRuntimeEvent(input: PolicyStrataRuntimeEventBuilderInput): 
     ...event,
     schemaVersion: schemaVersion ?? "0.2.0",
     observedAt: observedAt ?? new Date().toISOString(),
-  } as PolicyStrataRuntimeEventInput;
+  };
+}
+
+export function parsePolicyStrataRuntimeEvent(value: unknown): PolicyStrataRuntimeEventInput {
+  if (!isRecord(value)) {
+    throw new Error("PolicyStrata runtime event must be an object");
+  }
+  const schemaVersion = requiredEventString(value, "schemaVersion");
+  const eventId = requiredEventString(value, "eventId");
+  const project = requiredEventString(value, "project");
+  const observedAt = requiredEventString(value, "observedAt");
+  const operation = requiredEventString(value, "operation");
+  const summary = requiredEventString(value, "summary");
+  if (!isPolicyLayer(value.layer)) {
+    throw new Error(`PolicyStrata runtime event has invalid layer: ${String(value.layer)}`);
+  }
+  const agent = parseRuntimeAgent(value.agent);
+  const releaseCandidate = parseOptionalString(value.releaseCandidate, "event releaseCandidate");
+  const environment = parseOptionalString(value.environment, "event environment");
+  const decision = parseRuntimeEventDecision(value.decision);
+  const expectedDecision = parseRuntimeExpectedDecision(value.expectedDecision);
+  const actor = parseRuntimeActor(value.actor);
+  const resource = parseRuntimeEventResource(value.resource);
+  const dataClasses = parseOptionalStringArray(value.dataClasses, "event dataClasses");
+  const policyRefs = parseOptionalStringArray(value.policyRefs, "event policyRefs");
+  const control = optionalRecord(value.control, "event control");
+  const traceId = parseOptionalString(value.traceId, "event traceId");
+  const spanId = parseOptionalString(value.spanId, "event spanId");
+  const eventRef = parseOptionalString(value.eventRef, "event eventRef");
+  const witnessRefs = parseOptionalStringArray(value.witnessRefs, "event witnessRefs");
+  const toolInputSchemaRef = parseOptionalString(
+    value.toolInputSchemaRef,
+    "event toolInputSchemaRef",
+  );
+  const toolOutputSchemaRef = parseOptionalString(
+    value.toolOutputSchemaRef,
+    "event toolOutputSchemaRef",
+  );
+  const mcpInputSchemaRef = parseOptionalString(
+    value.mcpInputSchemaRef,
+    "event mcpInputSchemaRef",
+  );
+  const mcpOutputSchemaRef = parseOptionalString(
+    value.mcpOutputSchemaRef,
+    "event mcpOutputSchemaRef",
+  );
+  const payloadHash = parseOptionalString(value.payloadHash, "event payloadHash");
+  const artifactRefs = parseOptionalStringArray(value.artifactRefs, "event artifactRefs");
+  const findingIds = parseOptionalStringArray(value.findingIds, "event findingIds");
+  const payload = optionalRecord(value.payload, "event payload");
+  const approvalRequiredSatisfied = parseOptionalBoolean(
+    value.approvalRequiredSatisfied,
+    "event approvalRequiredSatisfied",
+  );
+  const promptInjection = parseOptionalBoolean(value.promptInjection, "event promptInjection");
+  const tainted = parseOptionalBoolean(value.tainted, "event tainted");
+
+  return {
+    ...unknownProperties(value, RUNTIME_EVENT_KNOWN_FIELDS),
+    schemaVersion,
+    eventId,
+    project,
+    observedAt,
+    agent,
+    layer: value.layer,
+    operation,
+    summary,
+    ...optionalProperty("releaseCandidate", releaseCandidate),
+    ...optionalProperty("environment", environment),
+    ...optionalProperty("decision", decision),
+    ...optionalProperty("expectedDecision", expectedDecision),
+    ...optionalProperty("actor", actor),
+    ...optionalProperty("resource", resource),
+    ...optionalProperty("dataClasses", dataClasses),
+    ...optionalProperty("policyRefs", policyRefs),
+    ...optionalProperty("control", control),
+    ...optionalProperty("traceId", traceId),
+    ...optionalProperty("spanId", spanId),
+    ...optionalProperty("eventRef", eventRef),
+    ...optionalProperty("witnessRefs", witnessRefs),
+    ...optionalProperty("toolInputSchemaRef", toolInputSchemaRef),
+    ...optionalProperty("toolOutputSchemaRef", toolOutputSchemaRef),
+    ...optionalProperty("mcpInputSchemaRef", mcpInputSchemaRef),
+    ...optionalProperty("mcpOutputSchemaRef", mcpOutputSchemaRef),
+    ...optionalProperty("payloadHash", payloadHash),
+    ...optionalProperty("artifactRefs", artifactRefs),
+    ...optionalProperty("findingIds", findingIds),
+    ...optionalProperty("payload", payload),
+    ...optionalProperty("approvalRequiredSatisfied", approvalRequiredSatisfied),
+    ...optionalProperty("promptInjection", promptInjection),
+    ...optionalProperty("tainted", tainted),
+  };
+}
+
+const RUNTIME_EVENT_KNOWN_FIELDS = new Set([
+  "schemaVersion",
+  "eventId",
+  "project",
+  "observedAt",
+  "agent",
+  "layer",
+  "operation",
+  "summary",
+  "releaseCandidate",
+  "environment",
+  "decision",
+  "expectedDecision",
+  "actor",
+  "resource",
+  "dataClasses",
+  "policyRefs",
+  "control",
+  "traceId",
+  "spanId",
+  "eventRef",
+  "witnessRefs",
+  "toolInputSchemaRef",
+  "toolOutputSchemaRef",
+  "mcpInputSchemaRef",
+  "mcpOutputSchemaRef",
+  "payloadHash",
+  "artifactRefs",
+  "findingIds",
+  "payload",
+  "approvalRequiredSatisfied",
+  "promptInjection",
+  "tainted",
+]);
+const RUNTIME_AGENT_KNOWN_FIELDS = new Set(["key", "name", "kind", "version"]);
+const RUNTIME_ACTOR_KNOWN_FIELDS = new Set([
+  "userId",
+  "tenantId",
+  "role",
+  "scopes",
+  "entitlements",
+  "delegatedBy",
+  "serviceAccount",
+  "purpose",
+  "region",
+]);
+const RUNTIME_RESOURCE_KNOWN_FIELDS = new Set([
+  "kind",
+  "name",
+  "id",
+  "uri",
+  "tenantId",
+  "tags",
+  "entitlement",
+  "requiredEntitlements",
+  "version",
+  "region",
+]);
+
+function parseRuntimeAgent(value: unknown): PolicyStrataRuntimeAgent {
+  if (!isRecord(value)) {
+    throw new Error("PolicyStrata runtime event agent must be an object");
+  }
+  const key = requiredEventString(value, "key", "agent");
+  const name = parseOptionalString(value.name, "event agent.name");
+  const kind = parseOptionalString(value.kind, "event agent.kind");
+  const version = parseOptionalString(value.version, "event agent.version");
+  return {
+    ...unknownProperties(value, RUNTIME_AGENT_KNOWN_FIELDS),
+    key,
+    ...optionalProperty("name", name),
+    ...optionalProperty("kind", kind),
+    ...optionalProperty("version", version),
+  };
+}
+
+function parseRuntimeActor(value: unknown): PolicyStrataRuntimeActor | undefined {
+  if (value === undefined) return undefined;
+  if (!isRecord(value)) {
+    throw new Error("PolicyStrata runtime event actor must be an object");
+  }
+  const userId = parseOptionalString(value.userId, "event actor.userId");
+  const tenantId = parseOptionalString(value.tenantId, "event actor.tenantId");
+  const role = parseOptionalString(value.role, "event actor.role");
+  const scopes = parseOptionalStringArray(value.scopes, "event actor.scopes");
+  const entitlements = parseOptionalStringArray(value.entitlements, "event actor.entitlements");
+  const delegatedBy = parseOptionalString(value.delegatedBy, "event actor.delegatedBy");
+  const serviceAccount = parseOptionalString(
+    value.serviceAccount,
+    "event actor.serviceAccount",
+  );
+  const purpose = parseOptionalString(value.purpose, "event actor.purpose");
+  const region = parseOptionalString(value.region, "event actor.region");
+  return {
+    ...unknownProperties(value, RUNTIME_ACTOR_KNOWN_FIELDS),
+    ...optionalProperty("userId", userId),
+    ...optionalProperty("tenantId", tenantId),
+    ...optionalProperty("role", role),
+    ...optionalProperty("scopes", scopes),
+    ...optionalProperty("entitlements", entitlements),
+    ...optionalProperty("delegatedBy", delegatedBy),
+    ...optionalProperty("serviceAccount", serviceAccount),
+    ...optionalProperty("purpose", purpose),
+    ...optionalProperty("region", region),
+  };
+}
+
+function parseRuntimeEventResource(
+  value: unknown,
+): PolicyStrataRuntimeResourceEventRef | undefined {
+  if (value === undefined) return undefined;
+  if (!isRecord(value)) {
+    throw new Error("PolicyStrata runtime event resource must be an object");
+  }
+  const kind = requiredEventString(value, "kind", "resource");
+  const name = requiredEventString(value, "name", "resource");
+  const id = parseOptionalString(value.id, "event resource.id");
+  const uri = parseOptionalString(value.uri, "event resource.uri");
+  const tenantId = parseOptionalString(value.tenantId, "event resource.tenantId");
+  const tags = parseOptionalStringArray(value.tags, "event resource.tags");
+  const entitlement = parseOptionalString(value.entitlement, "event resource.entitlement");
+  const requiredEntitlements = parseOptionalStringArray(
+    value.requiredEntitlements,
+    "event resource.requiredEntitlements",
+  );
+  const version = parseOptionalString(value.version, "event resource.version");
+  const region = parseOptionalString(value.region, "event resource.region");
+  return {
+    ...unknownProperties(value, RUNTIME_RESOURCE_KNOWN_FIELDS),
+    kind,
+    name,
+    ...optionalProperty("id", id),
+    ...optionalProperty("uri", uri),
+    ...optionalProperty("tenantId", tenantId),
+    ...optionalProperty("tags", tags),
+    ...optionalProperty("entitlement", entitlement),
+    ...optionalProperty("requiredEntitlements", requiredEntitlements),
+    ...optionalProperty("version", version),
+    ...optionalProperty("region", region),
+  };
+}
+
+function parseRuntimeEventDecision(
+  value: unknown,
+): PolicyStrataRuntimeEventDecision | undefined {
+  if (value === undefined) return undefined;
+  if (!isRecord(value) || !isRuntimeEventAction(value.action)) {
+    throw new Error("PolicyStrata runtime event decision has an invalid action");
+  }
+  const reason = requiredEventString(value, "reason", "decision");
+  const control = parseRuntimeDecisionControl(value.control);
+  const policyRefs = parseOptionalStringArray(value.policyRefs, "event decision.policyRefs");
+  const redactions = parseOptionalStringArray(value.redactions, "event decision.redactions");
+  const approvalRef = parseOptionalString(value.approvalRef, "event decision.approvalRef");
+  const queryRisk = parseOptionalString(value.queryRisk, "event decision.queryRisk");
+  return {
+    action: value.action,
+    reason,
+    ...optionalProperty("control", control),
+    ...optionalProperty("policyRefs", policyRefs),
+    ...optionalProperty("redactions", redactions),
+    ...optionalProperty("approvalRef", approvalRef),
+    ...optionalProperty("queryRisk", queryRisk),
+  };
+}
+
+function parseRuntimeDecisionControl(
+  value: unknown,
+): PolicyStrataRuntimeEventDecision["control"] | undefined {
+  if (value === undefined) return undefined;
+  if (!isRecord(value)) {
+    throw new Error("PolicyStrata runtime event decision.control must be an object");
+  }
+  const id = requiredEventString(value, "id", "decision.control");
+  if (value.mode !== undefined && !isRuntimeDecisionControlMode(value.mode)) {
+    throw new Error("PolicyStrata runtime event decision.control.mode is invalid");
+  }
+  const mode = value.mode;
+  const objective = parseOptionalString(value.objective, "event decision.control.objective");
+  return {
+    id,
+    ...optionalProperty("mode", mode),
+    ...optionalProperty("objective", objective),
+  };
+}
+
+function parseRuntimeExpectedDecision(
+  value: unknown,
+): PolicyStrataRuntimeExpectedDecision | undefined {
+  if (value === undefined) return undefined;
+  if (!isRecord(value)) {
+    throw new Error("PolicyStrata runtime event expectedDecision must be an object");
+  }
+  const allowed = parseOptionalBoolean(value.allowed, "event expectedDecision.allowed");
+  const action = value.action;
+  if (action !== undefined && !isRuntimeEventAction(action)) {
+    throw new Error("PolicyStrata runtime event expectedDecision.action is invalid");
+  }
+  const controlId = parseOptionalString(value.controlId, "event expectedDecision.controlId");
+  const reason = parseOptionalString(value.reason, "event expectedDecision.reason");
+  const reasonIncludes = parseOptionalStringArray(
+    value.reasonIncludes,
+    "event expectedDecision.reasonIncludes",
+  );
+  const redactions = parseOptionalStringArray(
+    value.redactions,
+    "event expectedDecision.redactions",
+  );
+  const policyRefs = parseOptionalStringArray(
+    value.policyRefs,
+    "event expectedDecision.policyRefs",
+  );
+  return {
+    ...optionalProperty("allowed", allowed),
+    ...optionalProperty("action", action),
+    ...optionalProperty("controlId", controlId),
+    ...optionalProperty("reason", reason),
+    ...optionalProperty("reasonIncludes", reasonIncludes),
+    ...optionalProperty("redactions", redactions),
+    ...optionalProperty("policyRefs", policyRefs),
+  };
+}
+
+function requiredEventString(
+  value: Record<string, unknown>,
+  key: string,
+  parent = "event",
+): string {
+  const result = stringValue(value[key]);
+  if (!result) {
+    const path = parent === "event" ? key : `${parent}.${key}`;
+    throw new Error(`PolicyStrata runtime event ${path} must be a non-empty string`);
+  }
+  return result;
+}
+
+function isPolicyLayer(value: unknown): value is PolicyStrataPolicyLayer {
+  return policyStrataPolicyLayers.some((layer) => layer === value);
+}
+
+function isRuntimeEventAction(value: unknown): value is PolicyStrataRuntimeEventAction {
+  return policyStrataRuntimeEventActions.some((action) => action === value);
+}
+
+function isRuntimeDecisionControlMode(
+  value: unknown,
+): value is "release_gate" | "runtime_enforcement" | "monitor" {
+  return value === "release_gate" || value === "runtime_enforcement" || value === "monitor";
+}
+
+function unknownProperties(
+  value: Record<string, unknown>,
+  knownFields: ReadonlySet<string>,
+): Record<string, unknown> {
+  const properties: Record<string, unknown> = {};
+  for (const [key, item] of Object.entries(value)) {
+    if (!knownFields.has(key)) {
+      properties[key] = item;
+    }
+  }
+  return properties;
 }
 
 export function sqlRuntimeEvent(input: PolicyStrataSqlRuntimeEventInput): PolicyStrataRuntimeEventInput {
@@ -508,18 +878,263 @@ export function clearanceEvidencePackRuntimeEvent(
 
 interface NormalizedRuntimeAction {
   name: string;
-  kind?: string;
+  kind: string | undefined;
   allowedRoles: readonly string[];
   approvalRequired: boolean;
   requiresWriteGrant: boolean;
-  semanticConstraints?: PolicyStrataRuntimeSemanticConstraints;
-  releaseConstraints?: PolicyStrataRuntimeReleaseConstraints;
+  semanticConstraints: PolicyStrataRuntimeSemanticConstraints | undefined;
+  releaseConstraints: PolicyStrataRuntimeReleaseConstraints | undefined;
 }
 
 interface NormalizedRuntimeResource {
   name: string;
-  type?: string;
+  type: string | undefined;
   actions: Map<string, NormalizedRuntimeAction>;
+}
+
+export function parsePolicyStrataRuntimeManifest(value: unknown): PolicyStrataRuntimeManifest {
+  if (!isRecord(value)) {
+    throw new Error("PolicyStrata runtime manifest must be an object");
+  }
+  const schemaVersion = stringValue(value.schemaVersion);
+  if (!schemaVersion) {
+    throw new Error("PolicyStrata runtime manifest is missing schemaVersion");
+  }
+  const version = value.version;
+  if (
+    (typeof version !== "string" || version.length === 0) &&
+    (typeof version !== "number" || !Number.isFinite(version))
+  ) {
+    throw new Error("PolicyStrata runtime manifest version must be a string or number");
+  }
+  if (value.defaultDecision !== "deny") {
+    throw new Error("PolicyStrata runtime manifests must default to deny");
+  }
+
+  const roleAliases = parseRoleAliases(value.roleAliases);
+  const resources = parseRuntimeResources(value.resources);
+  const tools = parseRuntimeTools(value.tools);
+  const controls = optionalRecord(value.controls, "manifest controls");
+  const manifest: PolicyStrataRuntimeManifest = {
+    schemaVersion,
+    version,
+    defaultDecision: "deny",
+    ...(roleAliases ? { roleAliases } : {}),
+    ...(resources ? { resources } : {}),
+    ...(tools ? { tools } : {}),
+    ...(controls ? { controls } : {}),
+  };
+  validateManifest(manifest);
+  return manifest;
+}
+
+function parseRoleAliases(value: unknown): Record<string, string> | undefined {
+  if (value === undefined) return undefined;
+  if (!isRecord(value)) {
+    throw new Error("PolicyStrata runtime manifest roleAliases must map strings to strings");
+  }
+  const aliases: Record<string, string> = {};
+  for (const [role, alias] of Object.entries(value)) {
+    if (typeof alias !== "string") {
+      throw new Error("PolicyStrata runtime manifest roleAliases must map strings to strings");
+    }
+    aliases[role] = alias;
+  }
+  return aliases;
+}
+
+function parseRuntimeResources(value: unknown): PolicyStrataRuntimeResource[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value)) {
+    throw new Error("PolicyStrata runtime manifest resources must be an array");
+  }
+  return value.map(parseRuntimeResource);
+}
+
+function parseRuntimeResource(value: unknown): PolicyStrataRuntimeResource {
+  const resource = recordValue(value);
+  const name = stringValue(resource.name);
+  if (!name || !Array.isArray(resource.actions)) {
+    throw new Error("PolicyStrata runtime resources require a name and actions array");
+  }
+  const type = parseOptionalString(resource.type, `resource ${name} type`);
+  const source = parseOptionalString(resource.source, `resource ${name} source`);
+  return {
+    name,
+    actions: resource.actions.map((action) => parseRuntimeAction(action, name)),
+    ...(type ? { type } : {}),
+    ...(source ? { source } : {}),
+  };
+}
+
+function parseRuntimeAction(value: unknown, resourceName: string): PolicyStrataRuntimeAction {
+  const action = recordValue(value);
+  const name = stringValue(action.name);
+  if (!name || !isNonEmptyStringArray(action.allowedRoles)) {
+    throw new Error(`PolicyStrata runtime resource ${resourceName} has an invalid action`);
+  }
+  const kind = parseOptionalString(action.kind, `action ${name} kind`);
+  const approvalRequired = parseOptionalBoolean(
+    action.approvalRequired,
+    `action ${name} approvalRequired`,
+  );
+  const requiresWriteGrant = parseOptionalBoolean(
+    action.requiresWriteGrant,
+    `action ${name} requiresWriteGrant`,
+  );
+  const semanticConstraints = parseSemanticConstraints(
+    action.semanticConstraints,
+    `action ${name} semanticConstraints`,
+  );
+  const releaseConstraints = parseReleaseConstraints(
+    action.releaseConstraints,
+    `action ${name} releaseConstraints`,
+  );
+  const metrics = parseOptionalStringArray(action.metrics, `action ${name} metrics`);
+  const dimensions = parseOptionalStringArray(action.dimensions, `action ${name} dimensions`);
+  const source = parseOptionalString(action.source, `action ${name} source`);
+  return {
+    name,
+    allowedRoles: action.allowedRoles,
+    ...(kind ? { kind } : {}),
+    ...(approvalRequired !== undefined ? { approvalRequired } : {}),
+    ...(requiresWriteGrant !== undefined ? { requiresWriteGrant } : {}),
+    ...(semanticConstraints ? { semanticConstraints } : {}),
+    ...(releaseConstraints ? { releaseConstraints } : {}),
+    ...(metrics ? { metrics } : {}),
+    ...(dimensions ? { dimensions } : {}),
+    ...(source ? { source } : {}),
+  };
+}
+
+function parseRuntimeTools(value: unknown): PolicyStrataRuntimeTool[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value)) {
+    throw new Error("PolicyStrata runtime manifest tools must be an array");
+  }
+  return value.map(parseRuntimeTool);
+}
+
+function parseRuntimeTool(value: unknown): PolicyStrataRuntimeTool {
+  const tool = recordValue(value);
+  const name = stringValue(tool.name);
+  if (!name || !isRuntimeToolKind(tool.kind) || !isNonEmptyStringArray(tool.allowedRoles)) {
+    throw new Error("PolicyStrata runtime manifest contains an invalid tool");
+  }
+  const approvalRequired = parseOptionalBoolean(
+    tool.approvalRequired,
+    `tool ${name} approvalRequired`,
+  );
+  const metrics = parseOptionalStringArray(tool.metrics, `tool ${name} metrics`);
+  const dimensions = parseOptionalStringArray(tool.dimensions, `tool ${name} dimensions`);
+  const source = parseOptionalString(tool.source, `tool ${name} source`);
+  return {
+    name,
+    kind: tool.kind,
+    allowedRoles: tool.allowedRoles,
+    ...(approvalRequired !== undefined ? { approvalRequired } : {}),
+    ...(metrics ? { metrics } : {}),
+    ...(dimensions ? { dimensions } : {}),
+    ...(source ? { source } : {}),
+  };
+}
+
+function parseSemanticConstraints(
+  value: unknown,
+  label: string,
+): PolicyStrataRuntimeSemanticConstraints | undefined {
+  if (value === undefined) return undefined;
+  if (!isRecord(value)) {
+    throw new Error(`PolicyStrata runtime ${label} must be an object`);
+  }
+  const metrics = parseOptionalStringArray(value.metrics, `${label}.metrics`);
+  const dimensions = parseOptionalStringArray(value.dimensions, `${label}.dimensions`);
+  return {
+    ...(metrics ? { metrics } : {}),
+    ...(dimensions ? { dimensions } : {}),
+  };
+}
+
+function parseReleaseConstraints(
+  value: unknown,
+  label: string,
+): PolicyStrataRuntimeReleaseConstraints | undefined {
+  if (value === undefined) return undefined;
+  if (!isRecord(value)) {
+    throw new Error(`PolicyStrata runtime ${label} must be an object`);
+  }
+  const boundaries = parseOptionalStringArray(value.boundaries, `${label}.boundaries`);
+  const resultKinds = parseOptionalStringArray(value.resultKinds, `${label}.resultKinds`);
+  const lineageSources = parseOptionalStringArray(value.lineageSources, `${label}.lineageSources`);
+  const maxRows = value.maxRows;
+  if (
+    maxRows !== undefined &&
+    (typeof maxRows !== "number" || !Number.isInteger(maxRows) || maxRows < 0)
+  ) {
+    throw new Error(`PolicyStrata runtime ${label}.maxRows must be a non-negative integer`);
+  }
+  const requireLineage = parseOptionalBoolean(value.requireLineage, `${label}.requireLineage`);
+  const allowSensitive = parseOptionalBoolean(value.allowSensitive, `${label}.allowSensitive`);
+  const allowRawRows = parseOptionalBoolean(value.allowRawRows, `${label}.allowRawRows`);
+  return {
+    ...(boundaries ? { boundaries } : {}),
+    ...(resultKinds ? { resultKinds } : {}),
+    ...(lineageSources ? { lineageSources } : {}),
+    ...(typeof maxRows === "number" ? { maxRows } : {}),
+    ...(requireLineage !== undefined ? { requireLineage } : {}),
+    ...(allowSensitive !== undefined ? { allowSensitive } : {}),
+    ...(allowRawRows !== undefined ? { allowRawRows } : {}),
+  };
+}
+
+function parseOptionalString(value: unknown, label: string): string | undefined {
+  if (value !== undefined && (typeof value !== "string" || value.length === 0)) {
+    throw new Error(`PolicyStrata runtime ${label} must be a non-empty string`);
+  }
+  return typeof value === "string" ? value : undefined;
+}
+
+function parseOptionalBoolean(value: unknown, label: string): boolean | undefined {
+  if (value !== undefined && typeof value !== "boolean") {
+    throw new Error(`PolicyStrata runtime ${label} must be a boolean`);
+  }
+  return typeof value === "boolean" ? value : undefined;
+}
+
+function parseOptionalStringArray(value: unknown, label: string): string[] | undefined {
+  if (
+    value !== undefined &&
+    (!Array.isArray(value) ||
+      value.some((item) => typeof item !== "string" || item.length === 0))
+  ) {
+    throw new Error(`PolicyStrata runtime ${label} must be an array of non-empty strings`);
+  }
+  return Array.isArray(value) ? value : undefined;
+}
+
+function optionalRecord(value: unknown, label: string): Record<string, unknown> | undefined {
+  if (value !== undefined && !isRecord(value)) {
+    throw new Error(`PolicyStrata runtime ${label} must be an object`);
+  }
+  return isRecord(value) ? value : undefined;
+}
+
+function isRuntimeToolKind(value: unknown): value is PolicyStrataRuntimeToolKind {
+  return (
+    value === "read" ||
+    value === "write" ||
+    value === "export" ||
+    value === "memory" ||
+    value === "external"
+  );
+}
+
+function isNonEmptyStringArray(value: unknown): value is string[] {
+  return (
+    Array.isArray(value) &&
+    value.length > 0 &&
+    value.every((item) => typeof item === "string" && item.length > 0)
+  );
 }
 
 export function createPolicyStrataAuthorizer(
@@ -608,16 +1223,16 @@ export function createPolicyStrataAuthorizer(
             ? "pending"
             : "not_required");
       const decision = authorize({
-        subject: { role: input.role },
+        subject: { role: input.role ?? null },
         action,
         resource: input.toolName,
         context: {
           allowWriteTools: writeState === "enabled",
           approvalRequiredSatisfied:
             decisionPoint === "execution" ? approvalState === "satisfied" : true,
-          semanticIr: input.semanticIr,
+          ...(input.semanticIr !== undefined ? { semanticIr: input.semanticIr } : {}),
         },
-        mode: input.mode,
+        ...(input.mode ? { mode: input.mode } : {}),
       });
       const reasons = decision.reasons.map((reason) =>
         reason === `unknown resource: ${input.toolName}` ? `unknown tool: ${input.toolName}` : reason,
@@ -627,16 +1242,20 @@ export function createPolicyStrataAuthorizer(
           `tool kind context ${input.toolKind} does not match manifest kind ${runtimeAction.kind} for ${input.toolName}`,
         );
       }
+      const userId = optionalString(input.userId);
+      const householdId = optionalString(input.householdId);
 
       return {
         ...decision,
         allowed: reasons.length === 0,
         reasons,
         toolName: input.toolName,
-        normalizedRole: decision.normalizedRoles[0],
-        toolKind: runtimeAction?.kind,
-        userId: optionalString(input.userId),
-        householdId: optionalString(input.householdId),
+        ...(decision.normalizedRoles[0]
+          ? { normalizedRole: decision.normalizedRoles[0] }
+          : {}),
+        ...(runtimeAction?.kind ? { toolKind: runtimeAction.kind } : {}),
+        ...(userId ? { userId } : {}),
+        ...(householdId ? { householdId } : {}),
         writeState,
         approvalState,
         decisionPoint,
@@ -644,18 +1263,18 @@ export function createPolicyStrataAuthorizer(
     },
     authorizeRelease(input) {
       const decision = authorize({
-        subject: input.subject,
+        ...(input.subject !== undefined ? { subject: input.subject } : {}),
         action: "release",
         resource: input.resource,
         context: {
           ...(input.context ?? {}),
           release: {
             boundary: input.boundary,
-            result: input.result,
-            lineage: input.lineage,
+            ...(input.result !== undefined ? { result: input.result } : {}),
+            ...(input.lineage !== undefined ? { lineage: input.lineage } : {}),
           },
         },
-        mode: input.mode,
+        ...(input.mode ? { mode: input.mode } : {}),
       });
 
       return {
@@ -888,10 +1507,10 @@ export function evaluateRuntimeEvent(
     reasons,
     layer: input.layer,
     operation: input.operation,
-    controlId,
+    ...(controlId ? { controlId } : {}),
     policyRefs: [...(input.policyRefs ?? [])],
     redactions,
-    queryRisk,
+    ...(queryRisk ? { queryRisk } : {}),
     decision,
     event: {
       ...input,
@@ -992,10 +1611,12 @@ function normalizeResources(
             name: tool.kind,
             kind: tool.kind,
             allowedRoles: tool.allowedRoles,
-            approvalRequired: tool.approvalRequired,
+            ...(tool.approvalRequired !== undefined
+              ? { approvalRequired: tool.approvalRequired }
+              : {}),
             requiresWriteGrant: tool.kind === "write",
-            metrics: tool.metrics,
-            dimensions: tool.dimensions,
+            ...(tool.metrics ? { metrics: tool.metrics } : {}),
+            ...(tool.dimensions ? { dimensions: tool.dimensions } : {}),
           }),
         ],
       ]),
@@ -1027,7 +1648,10 @@ function semanticConstraintsFromLegacyFields(
   dimensions: readonly string[] | undefined,
 ): PolicyStrataRuntimeSemanticConstraints | undefined {
   if (!metrics && !dimensions) return undefined;
-  return { metrics, dimensions };
+  return {
+    ...(metrics ? { metrics } : {}),
+    ...(dimensions ? { dimensions } : {}),
+  };
 }
 
 function addResource(
@@ -1109,9 +1733,9 @@ function toolActionName(
   const resource = resourcesByName.get(toolName);
   if (!resource) return "run";
   const nonReleaseActions = [...resource.actions.keys()].filter((action) => action !== "release");
-  if (nonReleaseActions.length === 1) return nonReleaseActions[0];
+  if (nonReleaseActions.length === 1) return nonReleaseActions[0] ?? "run";
   if (resource.actions.size !== 1) return "run";
-  return [...resource.actions.keys()][0];
+  return [...resource.actions.keys()][0] ?? "run";
 }
 
 function optionalString(value: string | null | undefined): string | undefined {
@@ -1214,9 +1838,7 @@ function releaseReasons(
 }
 
 function recordValue(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
+  return isRecord(value) ? value : {};
 }
 
 function stringValue(value: unknown): string | undefined {

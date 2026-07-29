@@ -1,3 +1,6 @@
+from pathlib import Path
+from typing import Any
+
 import pytest
 
 from policystrata.domain import copy_domain, load_suite_metadata, load_surface_config, load_tasks
@@ -58,7 +61,7 @@ def test_generated_suite_rejects_out_of_range_count(count: int) -> None:
 
 
 @pytest.mark.parametrize("count", [True, "1"])
-def test_generated_suite_rejects_non_integer_count(count) -> None:
+def test_generated_suite_rejects_non_integer_count(count: Any) -> None:
     with pytest.raises(TypeError, match="generated count must be an integer"):
         load_tasks("support_saas", "generated", generated_count=count, generated_seed=7)
 
@@ -67,7 +70,7 @@ def test_generated_suite_rejects_non_integer_count(count) -> None:
     "suite",
     ["../secret", "nested/suite", r"nested\\suite", "a" * (MAX_SAFE_IDENTIFIER_LENGTH + 1)],
 )
-def test_load_tasks_rejects_path_like_suite_names(tmp_path, suite: str) -> None:
+def test_load_tasks_rejects_path_like_suite_names(tmp_path: Path, suite: str) -> None:
     domain_path = copy_domain("support_saas", tmp_path)
     (tmp_path / "secret.yaml").write_text("suite: secret\ntasks: []\n", encoding="utf-8")
 
@@ -76,7 +79,7 @@ def test_load_tasks_rejects_path_like_suite_names(tmp_path, suite: str) -> None:
 
 
 @pytest.mark.parametrize("count", [0, -1, MAX_GENERATED_COUNT + 1])
-def test_matrix_rejects_out_of_range_count(tmp_path, count: int) -> None:
+def test_matrix_rejects_out_of_range_count(tmp_path: Path, count: int) -> None:
     domain_path = copy_domain("support_saas", tmp_path)
     (domain_path / "tasks" / "adversarial.yaml").write_text(
         f"""
@@ -108,7 +111,7 @@ matrix:
 
 
 @pytest.mark.parametrize("count", [True, "1"])
-def test_matrix_rejects_non_integer_count(tmp_path, count) -> None:
+def test_matrix_rejects_non_integer_count(tmp_path: Path, count: Any) -> None:
     domain_path = copy_domain("support_saas", tmp_path)
     rendered_count = "true" if count is True else f'"{count}"'
     (domain_path / "tasks" / "adversarial.yaml").write_text(

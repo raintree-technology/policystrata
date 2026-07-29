@@ -51,7 +51,7 @@ def test_catalog_covers_every_tcb_adapter() -> None:
     assert set(mutation_ids) == set(EXPECTED_OUTCOMES)
 
 
-def test_main_scenario_baseline_detects_true_findings(tmp_path) -> None:
+def test_main_scenario_baseline_detects_true_findings(tmp_path: Path) -> None:
     signature = run_scenario("main", FIXTURE_DIR, tmp_path / "baseline")
 
     assert signature.gate == "fail"
@@ -63,7 +63,7 @@ def test_main_scenario_baseline_detects_true_findings(tmp_path) -> None:
     }
 
 
-def test_adapter_mutations_match_recorded_classification(tmp_path) -> None:
+def test_adapter_mutations_match_recorded_classification(tmp_path: Path) -> None:
     results = run_catalog(FIXTURE_DIR, tmp_path)
     outcomes = {result.mutation_id: result.outcome for result in results}
 
@@ -71,7 +71,7 @@ def test_adapter_mutations_match_recorded_classification(tmp_path) -> None:
     assert outcome_tally(results) == {"HIDDEN": 13, "INVENTED": 3, "NEUTRAL": 1, "LOUD": 1}
 
 
-def test_run_catalog_restores_patched_adapters(tmp_path) -> None:
+def test_run_catalog_restores_patched_adapters(tmp_path: Path) -> None:
     originals = (
         scanner.load_imported_traces,
         scanner.finding,

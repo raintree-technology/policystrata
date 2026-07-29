@@ -26,6 +26,7 @@ import json
 import pathlib
 import sys
 from dataclasses import dataclass
+from typing import Any
 
 from policystrata.mutations import MUTATIONS
 
@@ -36,7 +37,6 @@ SOURCE = {
     "vulnerability_count": 8,
 }
 
-# The seven non-clean suites of scripts/reproduce-final.sh.
 DEFAULT_SUITES = (
     "support-seeded",
     "support-generated",
@@ -53,12 +53,10 @@ class Vulnerability:
     id: str
     layer: str
     name: str
-    coverage: str  # covered | partial | outside
+    coverage: str
     rationale: str
 
 
-# V1-V8 verbatim in name and layer from the source paper; `coverage` and
-# `rationale` are this study's judgement about the PolicyStrata v1 model.
 TAXONOMY: tuple[Vulnerability, ...] = (
     Vulnerability(
         "V1",
@@ -132,12 +130,8 @@ TAXONOMY: tuple[Vulnerability, ...] = (
     ),
 )
 
-# Curated mapping: operator id -> external vulnerability id, or None when the
-# operator has no counterpart in the external taxonomy.
 OPERATOR_MAP: dict[str, str | None] = {
-    # V3: declared cost bound not preserved by the lowering.
     "cost_estimate_ignores_expansion": "V3",
-    # V4: reference semantics and lowered semantics disagree.
     "gross_net_metric_drift": "V4",
     "fanout_join_drift": "V4",
     "compiler_removes_distinct": "V4",
@@ -146,7 +140,6 @@ OPERATOR_MAP: dict[str, str | None] = {
     "materialized_view_lineage_drop": "V4",
     "timezone_bucket_drift": "V4",
     "uniq_to_count_drift": "V4",
-    # V7: identity or privilege is not bound through the workflow.
     "compiler_drops_tenant_predicate": "V7",
     "compiler_uses_old_tenant_key": "V7",
     "compiler_swaps_tenant_account_id": "V7",
@@ -155,9 +148,6 @@ OPERATOR_MAP: dict[str, str | None] = {
     "clickhouse_row_policy_missing_project_filter": "V7",
     "distributed_table_policy_gap": "V7",
     "clickhouse_row_policy_readonly_assumption_violation": "V7",
-    # No counterpart: the external taxonomy assumes an adversary who controls
-    # the prompt and uploaded data. These operators need no adversary -- they
-    # are an update leaving one surface behind.
     "stale_metric_alias_manifest": None,
     "grammar_permits_forbidden_dimension": None,
     "validator_omits_sensitive_column": None,
@@ -188,7 +178,7 @@ def operator_counts(run_root: pathlib.Path, suites: tuple[str, ...]) -> collecti
     return counts
 
 
-def build_report(counts: collections.Counter[str]) -> dict:
+def build_report(counts: collections.Counter[str]) -> dict[str, Any]:
     unknown = set(counts) - set(OPERATOR_MAP)
     missing = set(OPERATOR_MAP) - set(MUTATIONS)
     unmapped_registry = set(MUTATIONS) - set(OPERATOR_MAP)
@@ -200,7 +190,7 @@ def build_report(counts: collections.Counter[str]) -> dict:
             f"registry_not_mapped={sorted(unmapped_registry)}"
         )
 
-    per_vuln: dict[str, dict] = {}
+    per_vuln: dict[str, dict[str, Any]] = {}
     for vuln in TAXONOMY:
         ops = sorted(op for op, vid in OPERATOR_MAP.items() if vid == vuln.id)
         per_vuln[vuln.id] = {
@@ -246,7 +236,7 @@ def build_report(counts: collections.Counter[str]) -> dict:
     }
 
 
-def render_markdown(report: dict) -> str:
+def render_markdown(report: dict[str, Any]) -> str:
     t = report["totals"]
     lines = [
         "# External Fault-Taxonomy Coverage",

@@ -10,7 +10,7 @@ from typing import Any
 
 try:
     from importlib.resources.abc import Traversable
-except ImportError:  # Python 3.10 exposes Traversable from importlib.abc.
+except ImportError:
     from importlib.abc import Traversable
 
 from policystrata.domain import (
@@ -23,7 +23,6 @@ from policystrata.domain import (
 from policystrata.mutations import MUTATIONS
 
 MANIFEST_VERSION = "policystrata.benchmark-manifest.v1"
-# created_at is display-only; it records when the manifest was written and is not reproducible.
 FREEZE_HASH_FIELDS = (
     "manifest_version",
     "domain",
@@ -202,7 +201,7 @@ def sha256_bytes(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def sha256_json(value: Any) -> str:
+def sha256_json(value: object) -> str:
     return sha256_bytes(json.dumps(value, sort_keys=True, separators=(",", ":")).encode("utf-8"))
 
 

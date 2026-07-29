@@ -1,4 +1,7 @@
 import json
+from pathlib import Path
+
+import pytest
 
 from policystrata.cli import main
 from policystrata.domain import load_surface_config, load_tasks
@@ -15,7 +18,7 @@ def test_clickhouse_domain_seeded_suite_has_analytics_contracts() -> None:
     assert "withhold_small_cohort_aggregates" in config.contracts["release"].responsibilities
 
 
-def test_clickhouse_seeded_suite_runs_with_clickhouse_sql(tmp_path) -> None:
+def test_clickhouse_seeded_suite_runs_with_clickhouse_sql(tmp_path: Path) -> None:
     traces = run_suite("analytics_clickhouse", "seeded", tmp_path / "analytics")
 
     assert len(traces) == 100
@@ -26,7 +29,7 @@ def test_clickhouse_seeded_suite_runs_with_clickhouse_sql(tmp_path) -> None:
     assert any(trace.localized_surface == "release" for trace in traces)
 
 
-def test_clickhouse_generated_suite_supports_large_deterministic_counts(tmp_path) -> None:
+def test_clickhouse_generated_suite_supports_large_deterministic_counts(tmp_path: Path) -> None:
     first = run_suite(
         "analytics_clickhouse",
         "generated",
@@ -48,7 +51,7 @@ def test_clickhouse_generated_suite_supports_large_deterministic_counts(tmp_path
     assert any(trace.mutation == "aggregate_small_cohort_release" for trace in first)
 
 
-def test_clean_controls_report_false_positive_accounting(tmp_path) -> None:
+def test_clean_controls_report_false_positive_accounting(tmp_path: Path) -> None:
     run_dir = tmp_path / "clean"
 
     traces = run_suite("support_saas", "clean_controls", run_dir, generated_count=16, generated_seed=1)
@@ -60,7 +63,10 @@ def test_clean_controls_report_false_positive_accounting(tmp_path) -> None:
     assert summary["mutant_kill_rate"] == 0.0
 
 
-def test_ablation_and_doctor_cli(tmp_path, capsys) -> None:
+def test_ablation_and_doctor_cli(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     run_dir = tmp_path / "analytics"
     ablations_path = tmp_path / "ablations.json"
 

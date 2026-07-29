@@ -1,17 +1,17 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import type { AddressInfo } from "node:net";
-
 import {
   evaluateRuntimeEvent,
   evaluateRuntimeEvents,
+  parsePolicyStrataRuntimeEvent,
   type PolicyStrataRuntimeEventDecision,
   type PolicyStrataRuntimeEventEvaluation,
   type PolicyStrataRuntimeEventInput,
   type PolicyStrataRuntimeManifest,
+  type PolicyStrataPolicyLayer,
 } from "policystrata/runtime";
 
-export const POLICYSTRATA_GATEWAY_VERSION = "0.1.2";
+export const POLICYSTRATA_GATEWAY_VERSION = "0.1.3";
 
 export type AgentTrustGatewayMode = "shadow" | "enforce";
 
@@ -115,7 +115,7 @@ export function nativeIntegrationRuntimeEvent(
     connectionId: input.connectionId,
     ...(input.payload ?? {}),
   };
-  return {
+  const event: PolicyStrataRuntimeEventInput = {
     schemaVersion: "0.2.0",
     eventId: `integration-${input.provider}-${input.connectionId}-${sha256Json(payload).slice(0, 16)}`,
     project: input.project,
@@ -147,7 +147,8 @@ export function nativeIntegrationRuntimeEvent(
     })),
     artifactRefs: [...evidenceRefs],
     payloadHash: sha256Json(payload),
-  } as PolicyStrataRuntimeEventInput;
+  };
+  return event;
 }
 
 export function decideRuntimeEvent(
@@ -189,13 +190,13 @@ export async function guardRuntimePayload(
 
 export function runtimeEventsFromPayload(payload: unknown): PolicyStrataRuntimeEventInput[] {
   if (Array.isArray(payload)) {
-    return payload.map(assertRuntimeEvent);
+    return payload.map(parsePolicyStrataRuntimeEvent);
   }
   const record = recordValue(payload);
   if (Array.isArray(record.events)) {
-    return record.events.map(assertRuntimeEvent);
+    return record.events.map(parsePolicyStrataRuntimeEvent);
   }
-  return [assertRuntimeEvent(payload)];
+  return [parsePolicyStrataRuntimeEvent(payload)];
 }
 
 export function redactRuntimeEventForUpload(event: RuntimeEventWithDecision): RuntimeEventWithDecision {
@@ -238,6 +239,9 @@ export function assertMetadataBoundary(payload: unknown): void {
   const findings = scanMetadataBoundary(payload);
   if (findings.length > 0) {
     const first = findings[0];
+    if (!first) {
+      throw new Error("metadata-only boundary violation");
+    }
     throw new Error(`metadata-only boundary violation at ${first.path}: ${first.reason}`);
   }
 }
@@ -315,7 +319,10 @@ export async function startAgentTrustGateway(
       resolve();
     });
   });
-  const address = server.address() as AddressInfo;
+  const address = server.address();
+  if (!address || typeof address === "string") {
+    throw new Error("runtime gateway did not bind to a TCP address");
+  }
   return {
     server,
     url: `http://${address.address}:${address.port}`,
@@ -359,7 +366,9 @@ async function handleRequest(
     const status = uploadFailed ? 502 : !result.ok && mode === "enforce" ? 403 : 200;
     sendJson(response, status, {
       ...result,
-      upload: upload ? { ok: upload.ok, status: upload.status, body: upload.body } : undefined,
+      ...(upload
+        ? { upload: { ok: upload.ok, status: upload.status, body: upload.body } }
+        : {}),
     });
   } catch (error) {
     sendJson(response, 400, {
@@ -379,16 +388,6 @@ function decisionResult(
     events: decisions.map((decision) => decision.event),
     decisions: [...decisions],
   };
-}
-
-function assertRuntimeEvent(value: unknown): PolicyStrataRuntimeEventInput {
-  const event = recordValue(value);
-  for (const key of ["schemaVersion", "eventId", "project", "observedAt", "agent", "layer", "operation", "summary"]) {
-    if (event[key] === undefined) {
-      throw new Error(`runtime event is missing ${key}`);
-    }
-  }
-  return event as unknown as PolicyStrataRuntimeEventInput;
 }
 
 function runtimeEventsEndpoint(options: RuntimeEventUploadOptions): string {
@@ -462,7 +461,8 @@ async function readJsonBody(request: IncomingMessage, maxBodyBytes: number): Pro
   if (!raw.trim()) {
     throw new Error("runtime gateway request body is empty");
   }
-  return JSON.parse(raw) as unknown;
+  const parsed: unknown = JSON.parse(raw);
+  return parsed;
 }
 
 function sendJson(response: ServerResponse, status: number, payload: unknown): void {
@@ -471,9 +471,11 @@ function sendJson(response: ServerResponse, status: number, payload: unknown): v
 }
 
 function recordValue(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
+  return isRecord(value) ? value : {};
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
 const SENSITIVE_KEY_PATTERN =
@@ -530,7 +532,7 @@ function defaultIntegrationEventType(provider: NativeIntegrationProvider): strin
   }
 }
 
-function defaultIntegrationLayer(provider: NativeIntegrationProvider): string {
+function defaultIntegrationLayer(provider: NativeIntegrationProvider): PolicyStrataPolicyLayer {
   switch (provider) {
     case "snowflake":
       return "sql";

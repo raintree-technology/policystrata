@@ -9,7 +9,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from policystrata.database import assert_read_only_sql
+from policystrata.database import assert_read_only_sql as assert_read_only_sql
 from policystrata.models import Policy, SemanticQuery
 from policystrata.policy import PolicyOracle
 from policystrata.scan_models import ImportedTrace, MutantStatus
@@ -61,7 +61,7 @@ def load_imported_traces(paths: list[Path]) -> list[ImportedTrace]:
     return traces
 
 
-def normalize_imported_trace_record(raw: Any) -> dict[str, Any] | None:
+def normalize_imported_trace_record(raw: object) -> dict[str, Any] | None:
     if not isinstance(raw, dict):
         raise ValueError("trace record must be a JSON object")
     record_type = raw.get("record_type")

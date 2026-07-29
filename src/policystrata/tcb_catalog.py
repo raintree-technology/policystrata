@@ -35,10 +35,9 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 from policystrata import database, scanner, trace_import
-from policystrata.database import PostgresAdapter
 from policystrata.evidence import markdown_table
 from policystrata.models import WitnessClass
 from policystrata.scan_models import (
@@ -72,7 +71,7 @@ SCENARIO_CONFIGS = {
 }
 
 Undo = Callable[[], None]
-RowShaper = Callable[[list[dict[str, Any]]], list[dict[str, Any]]]
+RowShaper = Callable[[list[dict[str, object]]], list[dict[str, object]]]
 
 _GATE_RANK = {"pass": 0, "warn": 1, "fail": 2}
 _SEVERITY_RANK = {"info": 0, "warning": 1, "high": 2, "critical": 3}
@@ -155,9 +154,6 @@ def _apply_trace_rewrite(rewrite: Callable[[ImportedTrace], ImportedTrace]) -> U
     return _patch(scanner, "load_imported_traces", loader)
 
 
-# --- trace importer mutations -----------------------------------------------
-
-
 def _apply_drop_tenant_ids() -> Undo:
     return _apply_trace_rewrite(lambda trace: trace.model_copy(update={"tenant_ids": []}))
 
@@ -225,9 +221,6 @@ def _apply_skip_malformed_lines() -> Undo:
     return _patch(scanner, "load_imported_traces", loader)
 
 
-# --- read-only SQL guard mutations ------------------------------------------
-
-
 def _apply_permissive_sql_guard() -> Undo:
     def guard(sql: str) -> None:
         lowered = sql.strip().lower()
@@ -248,15 +241,13 @@ def _apply_cte_rejecting_sql_guard() -> Undo:
     return _patch_sql_guard(guard)
 
 
-# --- database result-shaping mutations (emulated PostgresAdapter.query) -----
-
-_STATE_ROWS: tuple[dict[str, Any], ...] = (
+_STATE_ROWS: tuple[dict[str, object], ...] = (
     {"tenant_id": "acme", "value": 2},
     {"tenant_id": "beta", "value": 1},
 )
 
 
-def _identity_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _identity_rows(rows: list[dict[str, object]]) -> list[dict[str, object]]:
     return rows
 
 
@@ -264,17 +255,15 @@ _state_row_shaper: RowShaper = _identity_rows
 
 
 class _StateFixtureAdapter:
-    """In-memory stand-in for PostgresAdapter.query returning a leaky result."""
-
-    def query(self, sql: str, tenant_id: str | None = None) -> list[dict[str, Any]]:
+    def query(self, sql: str, tenant_id: str | None = None) -> list[dict[str, object]]:
         return _state_row_shaper([dict(row) for row in _STATE_ROWS])
 
 
-def _truncate_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _truncate_rows(rows: list[dict[str, object]]) -> list[dict[str, object]]:
     return rows[:1]
 
 
-def _rename_tenant_column(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _rename_tenant_column(rows: list[dict[str, object]]) -> list[dict[str, object]]:
     return [
         {("tenant" if key == "tenant_id" else key): value for key, value in row.items()} for row in rows
     ]
@@ -286,9 +275,6 @@ def _apply_truncate_result_rows() -> Undo:
 
 def _apply_rename_result_columns() -> Undo:
     return _patch(_THIS_MODULE, "_state_row_shaper", _rename_tenant_column)
-
-
-# --- finding emission mutations ---------------------------------------------
 
 
 def _apply_ignore_forbidden_values() -> Undo:
@@ -515,7 +501,7 @@ def run_scenario(scenario: str, fixture_dir: Path, out_dir: Path) -> ScenarioSig
     config_path = fixture_dir / SCENARIO_CONFIGS[scenario]
     if scenario == SCENARIO_STATE:
         config = scanner.load_scan_config(config_path)
-        adapter = cast(PostgresAdapter, _StateFixtureAdapter())
+        adapter = _StateFixtureAdapter()
         findings = scanner.scan_state_assertions(config, config_path, adapter)
         gate = scanner.decide_gate(findings, config)
         return ScenarioSignature(gate=gate.outcome.value, findings=_signature_rows(findings))

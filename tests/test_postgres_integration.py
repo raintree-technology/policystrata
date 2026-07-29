@@ -55,7 +55,7 @@ def test_postgres_schema_setup_is_idempotent_for_existing_app_role() -> None:
     os.environ.get("POLICYSTRATA_RUN_DB_TESTS") != "1",
     reason="set POLICYSTRATA_RUN_DB_TESTS=1 and start docker compose postgres",
 )
-def test_scanner_runs_real_postgres_rls_check(tmp_path) -> None:
+def test_scanner_runs_real_postgres_rls_check(tmp_path: Path) -> None:
     config = tmp_path / "policystrata.yaml"
     config.write_text(
         f"""
@@ -89,7 +89,7 @@ gate:
     os.environ.get("POLICYSTRATA_RUN_DB_TESTS") != "1",
     reason="set POLICYSTRATA_RUN_DB_TESTS=1 and start docker compose postgres",
 )
-def test_scanner_executes_imported_trace_against_real_postgres_fixture(tmp_path) -> None:
+def test_scanner_executes_imported_trace_against_real_postgres_fixture(tmp_path: Path) -> None:
     result = run_scan(Path("examples/postgres_dbt/policystrata_real_db_clean.yaml"), tmp_path / "scan")
 
     assert result.gate.outcome == GateOutcome.PASS
