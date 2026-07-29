@@ -37,6 +37,15 @@ Resolved on 2026-07-28. Kept here because the last item records a trap worth not
       of `.github/workflows/ci.yml`. That job's service is `postgres:16` on port 55432 with the
       `policystrata` superuser, which is exactly what the script defaults to, so it needs no extra
       configuration. The weakened-predicate run is the part that guards against regression.
+- [ ] Re-enable the `CI` workflow, or the step above never runs. Both `CI` and `security` are
+      `disabled_manually` on GitHub as of 2026-07-11, so pushes to `main` currently get only
+      CodeQL, dependency-review, Dependency Graph, and Socket. Every CI run before they were
+      disabled ended in `startup_failure` at 0s, which is the signature of a workflow GitHub
+      refused to start rather than a failing job. The file parses cleanly now and declares five
+      jobs, so the original cause may already be gone, but that needs confirming with one
+      `workflow_dispatch` run before trusting the gate. Until then, treat every check in this
+      repository as local-only: the evidence scripts, 348 tests, ruff, and mypy were all verified
+      on this machine, not by CI.
 
 ## 2. Blocked on people or credentials we do not have
 
