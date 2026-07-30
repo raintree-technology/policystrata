@@ -403,7 +403,6 @@ function uploadHeaders(options: RuntimeEventUploadOptions): HeadersInit {
   }
   if (options.organizationId) {
     headers["x-clearance-organization-id"] = options.organizationId;
-    headers["x-assurance-organization-id"] = options.organizationId;
   }
   if (options.idempotencyKey) {
     headers["idempotency-key"] = options.idempotencyKey;

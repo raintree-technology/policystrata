@@ -1,481 +1,215 @@
 # PolicyStrata
 
-PolicyStrata is a deterministic regression-testing framework for cross-layer policy drift in LLM
-data-agent stacks.
+Every layer of a SQL data agent can pass its own tests while the stack fails as a whole. A
+tenant-scoped request reaches a stale compiler, the compiler lowers it against
+`legacy_tenant_id`, and another tenant's rows can enter the result.
 
-It generates principals, requests, semantic plans, database states, lowered queries, and release
-decisions; compares each layer against a canonical reference policy; and minimizes failures into
-small reproducible witnesses.
+PolicyStrata catches that class of drift in CI. It checks the transitions between model-visible
+tools, semantic validation, SQL compilation, database containment, and result release—then writes
+a small witness that identifies the first layer that broke the policy.
 
-Use it when you are building text-to-SQL agents, BI copilots, internal analytics agents, warehouse
-chat systems, or governed enterprise LLM tools and need to know whether prompts, manifests,
-semantic plans, validators, SQL compilers, database controls, and output filters still agree about
-policy.
+[PyPI](https://pypi.org/project/policystrata/) ·
+[Documentation](https://github.com/raintree-technology/policystrata/tree/main/docs) ·
+[Paper](https://raintree.technology/papers/PolicyStrata.pdf)
 
-PolicyStrata's scanner is not an authorization boundary, and it is not another generic text-to-SQL benchmark.
-It is a reproducible research artifact and regression gate for finding reachable disagreements
-between layers.
+Runs are deterministic and require no LLM API key. Evidence stays local and metadata-only by
+default.
 
-## PolicyStrata OSS, Clearance, And Agent Trust Gateway
+> PolicyStrata's scanner is a regression tester and release gate, not an authorization boundary.
+> Keep application authorization and database controls in the system being tested.
 
-PolicyStrata OSS is the open standard and local tooling layer: deterministic runner, scanner, SDK
-contracts, runtime evaluator, customer-hosted Agent Trust Gateway, schemas, tests, and evidence
-artifacts. It works without a hosted account and deterministic runs do not require an LLM API key.
-
-Clearance by PolicyStrata is the optional hosted control plane for organization state: auth, RBAC,
-review UI, waivers, approvals, audit logs, procurement workflows, billing, and trust-center
-reporting.
-The intended split is similar to Pydantic and Logfire: the library stays useful locally and the
-hosted product manages team operations around the evidence.
-PolicyStrata OSS produces evidence close to sensitive systems; Clearance records review state and
-release decisions. The PolicyStrata Agent Trust Gateway is the customer-hosted runtime sidecar that
-enforces and uploads sanitized decision envelopes. Keep that boundary intact:
-
-- Use local-only or metadata-only mode when producing artifacts from customer environments.
-- Do not put raw prompts, documents, rows, tool payloads, credentials, private schemas, or full
-  traces in uploaded metadata.
-- Treat constrained generation and scanner findings as reliability evidence, not authorization.
-- Keep customer authorization, database controls, and application-side enforcement in the customer
-  system.
-
-See [docs/clearance-runner.md](docs/clearance-runner.md) for local Clearance contracts, upload
-scaffolding, exit codes, artifact refs, and metadata-boundary checks.
-
-## Paper And Artifact
-
-- Editable paper source: [`paper/main.tex`](paper/main.tex)
-- Paper editing and publication guide: [`paper/README.md`](paper/README.md)
-- Paper PDF: <https://raintree.technology/papers/PolicyStrata.pdf>
-- Release note: <https://raintree.technology/blog/policystrata-release>
-- GitHub release: <https://github.com/raintree-technology/policystrata/releases/tag/policystrata-paper-2026-06-26>
-- Artifact zip: <https://github.com/raintree-technology/policystrata/releases/download/policystrata-paper-2026-06-26/policystrata-submission-kit-2026-06-26.zip>
-- Website mirror: <https://raintree.technology/artifacts/policystrata/policystrata-submission-kit-2026-06-26.zip>
-
-Build and check the editable paper:
+## See a Failure
 
 ```bash
-bun run paper:build
-bun run paper:check
+uvx policystrata demo --out runs/demo
 ```
 
-Reproduce the paper-facing artifact run:
+No manual install is needed: `uvx` creates an isolated environment and runs the package.
 
-```bash
-POLICYSTRATA_RUN_ROOT=/tmp/policystrata-final ./scripts/reproduce-final.sh
+The demo runs 50 deterministic cases and prints a worked witness (excerpt):
+
+```text
+Worked example: stale tenant-key lowering
+- Request: Show escalations by severity for my tenant, variant 1.
+- Version vector: manifest=v7, grammar=v7, validator=v7, compiler=v5, database=v7, release=v7
+- First violated transition: compiler (lowering_violation)
+- Why: compiler violated its declared responsibility: The compiler emits a predicate against legacy_tenant_id instead of tenant_id.
+- Distinguishing result before containment: canonical=4, lowered=12
+- Containment: database
+- Release: blocked
 ```
 
-The paper's central evidence is the defense-in-depth gap: a layered stack of conventional
-controls (validator, SQL snapshot, database/RLS, final-answer checks) misses 159 of 1720
-injected cross-layer faults that PolicyStrata's responsibility-scoped contracts catch and
-attribute to the first violating surface. The deterministic artifact-suite coverage figures
-(1720/1720 non-clean injected cases, 0 false positives on 80 clean controls) are a consistency
-check over PolicyStrata's own operator taxonomy, not a production-recall claim, and not an
-authorization boundary.
+The complete run writes JSONL traces, a summary, and minimized JSON witnesses under `runs/demo`.
 
-## Quick Start
+The 50-case demo completes in about 0.2 seconds locally after dependencies are installed.
+Dependency installation and optional database startup are separate CI costs.
 
-From PyPI:
+## Is This for You?
 
-```bash
-uvx policystrata demo
-pipx run policystrata demo
+The strongest supported path is SQL/data-agent policy drift: text-to-SQL systems, BI copilots, dbt
+semantic models, PostgreSQL RLS, and governed analytics tools.
+
+PolicyStrata is a good fit when:
+
+- a semantic model or tool manifest declares capabilities that are later lowered into SQL;
+- tenant or role rules are repeated across validation, PostgreSQL RLS, and release filters; and
+- you can export sanitized traces and want CI to fail when those layers disagree.
+
+It is not a model-quality benchmark, penetration-testing suite, or replacement for runtime
+authorization.
+
+## What It Checks
+
+```text
+canonical policy
+    → model-visible manifest
+    → semantic validation
+    → SQL compilation
+    → database containment
+    → result release
 ```
 
-From a source checkout:
+Each transition has a declared responsibility. PolicyStrata generates or imports policy-relevant
+traces, compares the observed transition with the canonical obligation, and localizes the first
+violation instead of requiring every layer to behave identically.
 
-```bash
-uv sync --extra dev
-uv run policystrata demo
-```
+See the [failure taxonomy](https://github.com/raintree-technology/policystrata/blob/main/docs/failure-taxonomy.md)
+for the concrete drift classes.
 
-The demo runs the built-in `support_saas` fixture, writes traces and minimized witnesses to
-`runs/demo`, and then walks one stale-tenant-key case through its version vector, first failed
-contract, distinguishing result, database containment, release decision, and witness path. Use
-`--out` to choose another output directory:
+## What the Numbers Do and Don't Show
 
-```bash
-uv run policystrata demo --out runs/demo
-```
+A conventional layered control stack caught 1,561 of 1,720 injected faults. PolicyStrata's
+responsibility-scoped contracts caught all 1,720 and attributed each to its first violating
+surface.
 
-No LLM API key is required for deterministic tests, benchmark runs, or the built-in demo.
+The remaining 159 were not flagged by any of the validator, SQL-snapshot, database/RLS, or
+final-answer checks in that layered stack—not merely detected and misattributed. Each point
+control's local view accepted them; the transition contracts detected the disagreement and
+localized the first break.
+
+The 1,720 cases come from PolicyStrata's own published operator taxonomy, so the all-caught result
+is an internal consistency invariant—not production recall. The useful comparative result is the
+159-case gap.
+
+Read the [evidence snapshot](https://github.com/raintree-technology/policystrata/blob/main/docs/evidence.md)
+for the underlying counts and limitations, or the
+[paper](https://raintree.technology/papers/PolicyStrata.pdf) for the complete evaluation.
+
+These results establish fault-model coverage and reproducible regression behavior. They do not
+establish recall on unknown production failures or independently operated deployment
+effectiveness.
 
 ## Install
 
-PolicyStrata is a CLI-first Python package. The public package provides the `policystrata` console
-script and importable Python modules.
+| Surface | Install | Documentation |
+| --- | --- | --- |
+| Python CLI and scanner | `python -m pip install policystrata` | [PyPI](https://pypi.org/project/policystrata/) |
+| Node recorder and runtime | `npm install policystrata` | [npm](https://www.npmjs.com/package/policystrata) |
+| Self-hosted gateway | `npm install @policystrata/agent-trust-gateway` | [npm](https://www.npmjs.com/package/@policystrata/agent-trust-gateway) |
+| CI scanner | Pin a released `v*` tag | [GitHub Action guide](https://github.com/raintree-technology/policystrata/blob/main/docs/github-action.md) |
+
+For one-off Python use, run commands through `uvx` or `pipx` without managing an environment.
+
+## Scan an Application
+
+Create a scanner configuration, scan its example trace, and inspect readiness:
 
 ```bash
-python -m pip install policystrata
-policystrata demo
+uvx policystrata init-scan --out policystrata
+uvx policystrata scan \
+  --config policystrata/policystrata.yaml \
+  --out runs/policystrata
+uvx policystrata doctor \
+  --config policystrata/policystrata.yaml
 ```
 
-For one-off CLI use without managing an environment:
+`scan` finds policy drift in configured artifacts and exported traces. `doctor` checks whether the
+expected stack surfaces and release gates are wired. Add `--strict` in CI once every reported
+readiness gap should fail the build.
+
+The generated `policystrata.yaml` names the policy domain, required traces, tenancy vocabulary, and
+gate behavior:
+
+```yaml
+domain: support_saas
+domain_path: domain
+sql_traces: {files: [traces.example.jsonl], required: true}
+tenancy: {tenant_columns: [accounts.tenant_id]}
+gate: {fail_on_high_confidence: true}
+```
+
+The scanner can emit JSON, JSONL, Markdown, minimized witnesses, and SARIF. Start with the
+[scanner guide](https://github.com/raintree-technology/policystrata/blob/main/docs/scanner.md),
+[trace contract](https://github.com/raintree-technology/policystrata/blob/main/docs/trace-contract.md),
+and [trace adapters](https://github.com/raintree-technology/policystrata/blob/main/docs/trace-adapters.md).
+
+## Run a Benchmark
+
+Run the deterministic benchmark when evaluating PolicyStrata itself. Application CI normally uses
+`scan` instead.
 
 ```bash
-uvx policystrata demo
-pipx run policystrata demo
-```
-
-Repository examples under `examples/`, Docker Compose fixtures, and evidence scripts are available
-from a GitHub checkout or source distribution. The wheel installs the runtime package, built-in
-domain fixtures, and packaged scanner examples reachable through `policystrata init-scan`.
-
-## Use As A Template
-
-Click **Use this template** on GitHub, then start with the deterministic fixtures:
-
-```bash
-uv sync --extra dev
-uv run policystrata run --domain support_saas --suite seeded --out runs/example
-uv run policystrata summarize runs/example
-```
-
-To copy a built-in domain fixture into your tree:
-
-```bash
-uv run policystrata init-domain support_saas --out examples/my-policystrata-domain
-```
-
-Keep custom integrations as adapters. The policy oracle should stay independent from SQL compiler
-behavior, external eval frameworks, and model-provider behavior.
-
-## What It Tests
-
-The core failure class is cross-layer policy drift:
-
-```text
-Canonical policy:
-  Analysts may view tenant-scoped aggregate ticket counts, but not customer-level PII.
-
-Model-visible manifest or grammar:
-  Accidentally exposes customer_email as a dimension.
-
-SQL compiler:
-  Accidentally drops the tenant predicate while lowering an authorized aggregate.
-
-Output layer:
-  Releases the result because the final answer looks like a summary.
-
-PolicyStrata result:
-  A minimized witness localizes the violated layer and failed obligation.
-```
-
-PolicyStrata does not assume every layer should behave identically. Each surface has a declared
-responsibility:
-
-- `manifest`: expose model-visible capabilities without stale or forbidden options.
-- `grammar`: parse the declared intent space and preserve untrusted intent for validation.
-- `validator`: authorize semantic queries and bind principal, tenant, time, and budget obligations.
-- `compiler`: lower authorized semantic IR into SQL while preserving metric, tenant, time, and row
-  obligations.
-- `database`: contain row access with RLS and other database-side controls.
-- `release`: withhold contained or unauthorized results.
-
-See [docs/failure-taxonomy.md](docs/failure-taxonomy.md) for how witness classes map to concrete
-policy-drift failures.
-
-## Run Benchmarks
-
-PolicyStrata ships with deterministic `support_saas`, `finance_saas`, and
-`analytics_clickhouse` benchmarks, generated mutation suites, held-out suite support, clean
-controls, minimized witnesses, JSONL traces, baseline comparisons, and evidence tables.
-
-```bash
-uv run policystrata run --domain support_saas --suite seeded --out runs/example
-uv run policystrata run \
+policystrata run \
   --domain support_saas \
   --suite generated \
   --count 500 \
   --seed 1729 \
   --out runs/generated
-uv run policystrata run --domain finance_saas --suite seeded --out runs/finance
-uv run policystrata freeze-benchmark --domain support_saas --suite heldout_v1 --count 500 --seed 260626 --out runs/freeze/support-heldout-v1.json
-uv run policystrata run --domain support_saas --suite heldout_v1 --count 500 --seed 260626 --freeze-manifest runs/freeze/support-heldout-v1.json --out runs/support-heldout-v1
-uv run policystrata baselines runs/example runs/support-heldout-v1
-uv run policystrata ablations runs/example runs/support-heldout-v1
+policystrata summarize runs/generated
 ```
 
-The default `run` command writes:
+For archival comparisons, `policystrata freeze-benchmark` creates a manifest that `run
+--freeze-manifest` verifies before execution. Freeze manifests hash the policy, surfaces, tasks,
+generator, detector, and operator taxonomy so results can be compared across revisions. See the
+[benchmark reference](https://github.com/raintree-technology/policystrata/blob/main/docs/benchmark-reference.md)
+and [versioning guide](https://github.com/raintree-technology/policystrata/blob/main/docs/benchmark-versioning.md).
 
-```text
-runs/<id>/traces.jsonl
-runs/<id>/summary.json
-runs/<id>/metadata.json
-runs/<id>/benchmark_manifest.json  # for frozen runs
-runs/<id>/witnesses/*.json
-```
+## Optional Runtime Enforcement
 
-`metadata.json` records the mutation operator set, suite provenance, evidence level, and
-detector-freeze status. Frozen runs verify the manifest before writing traces. Static suite YAML can
-declare `suite_metadata` so externally authored, detector-frozen, or incident-reconstruction cases
-stay separate from public/generated benchmark scores.
+The Node runtime provides a deterministic in-process authorizer for applications that want live
+tool and result-release decisions. The self-hosted gateway evaluates the same contracts out of
+process, centralizes sanitized decision envelopes, and can return `allow`, `deny`, `redact`,
+`require_approval`, `quarantine`, or `log_only`.
 
-Regenerate paper-style evidence tables with:
+These components enforce in the application's request path; the scanner does not. Adopting them is
+a separate decision from using the CI gates. No general runtime-overhead claim is published, so
+measure them in the target deployment.
 
-```bash
-scripts/reproduce-evidence.sh
-scripts/reproduce-final.sh
-```
+See [runtime controls](https://github.com/raintree-technology/policystrata/blob/main/docs/runtime-controls.md)
+and the [gateway deployment examples](https://github.com/raintree-technology/policystrata/blob/main/docs/gateway-deployment-examples.md).
 
-Generate reviewer-facing artifact metrics for a run:
+## Data-Safety Boundary
 
-```bash
-uv run policystrata artifact-report runs/repro/seeded
-```
+- Keep raw prompts, documents, rows, tool payloads, credentials, and private schemas local.
+- Upload only the metadata required for a finding or release decision.
+- Treat generated-case coverage as fault-model coverage, not field recall.
+- Treat scanner findings as regression evidence, not proof of authorization correctness.
 
-Current benchmark details are in [docs/evidence.md](docs/evidence.md), with methodology and claim
-boundaries in [docs/methodology.md](docs/methodology.md) and [EVAL_CARD.md](EVAL_CARD.md).
+The gateway strips event payloads and fixture-only expectations from uploads by default and rejects
+common sensitive-data and secret patterns before sending metadata. The
+[Clearance runner contract](https://github.com/raintree-technology/policystrata/blob/main/docs/clearance-runner.md)
+documents the artifact and upload boundary.
 
-## Run The Scanner
+## Documentation
 
-`policystrata scan` is the production-oriented path. It treats PolicyStrata as a scanner and
-release gate, not as the authorization boundary.
-
-Create a scanner scaffold for an application:
-
-```bash
-uv run policystrata init-scan --out policystrata
-uv run policystrata scan --config policystrata/policystrata.yaml --out runs/policystrata-smoke
-```
-
-The scaffold writes `policystrata.yaml`, `domain/policy.yaml`, `domain/surfaces.yaml`, and
-`traces.example.jsonl`. Replace the example trace with exported SQL/tool-call traces from your app.
-Use `--source-domain finance_saas` to scaffold the finance policy and a matching finance trace
-instead of the default support SaaS example.
-
-Copy a packaged Postgres/dbt scanner example from an installed wheel:
-
-```bash
-uvx policystrata init-scan postgres_dbt --out policystrata-example
-uvx policystrata scan --config policystrata-example/policystrata_clean.yaml --out runs/scan-clean
-```
-
-`policystrata doctor` audits only the config you pass. In the copied `postgres_dbt` example,
-`policystrata_clean.yaml` is a minimal clean smoke config, so doctor reports database and dbt
-wiring as missing. Use `policystrata_real_db_clean.yaml` for the DB/RLS readiness audit, and
-combine the dbt and database sections in your own app config when one strict readiness gate should
-cover both.
-
-Clean smoke test:
-
-```bash
-uv run policystrata scan --config examples/postgres_dbt/policystrata_clean.yaml --out runs/scan-clean
-```
-
-Intentional gate-failure fixture:
-
-```bash
-uv run policystrata scan --config examples/postgres_dbt/policystrata.yaml --out runs/scan
-```
-
-That fixture should exit `1` because it contains imported traces with known authorization,
-unsafe-release, and tenant-scope findings.
-
-Scanner outputs include:
-
-```text
-runs/scan-clean/scan.json
-runs/scan-clean/findings.jsonl
-runs/scan-clean/summary.json
-runs/scan-clean/report.md
-runs/scan-clean/witnesses/*.json
-runs/scan-clean/scan.sarif  # when sarif: true
-```
-
-For a scanner run that also executes imported SQL beside canonical compiler SQL against the
-Docker/PostgreSQL fixture:
-
-```bash
-docker compose up -d postgres
-uv run policystrata scan --config examples/postgres_dbt/policystrata_real_db_clean.yaml --out runs/scan-real-db-clean
-```
-
-Postgres access goes through Python/`psycopg`; host `psql` is not required. See
-[docs/scanner.md](docs/scanner.md) for scanner configuration, gate behavior, tenancy config,
-remediation fields, state assertions, and real-database fixture details. See
-[docs/trace-contract.md](docs/trace-contract.md), [docs/trace-adapters.md](docs/trace-adapters.md),
-and [docs/testing-ai-data-assistant.md](docs/testing-ai-data-assistant.md) for imported-trace
-contracts and framework recipes.
-
-## Audit Stack Wiring
-
-`policystrata doctor` without a config still checks local reproducibility dependencies. With a
-scanner config, it audits what a deployment has wired and what is missing:
-
-```bash
-uv run policystrata doctor --format markdown
-uv run policystrata doctor --config examples/postgres_dbt/policystrata_real_db_clean.yaml \
-  --format markdown --out runs/doctor.md
-```
-
-The audit inventories policy/domain YAML, surface contracts, SQL traces, dbt semantic models,
-PostgreSQL schema/RLS/grant/view/index metadata, privacy policies, terms of service, DPA/security/
-retention/internal-policy documents, prompt/tool manifests, source maps, release coverage, and CI
-gates. It classifies policy-document obligation signals, compares JSON/YAML prompt manifests
-against the canonical policy for stale exposed metrics or dimensions, and emits remediation todos
-with owners, files, expected tests, and gate commands. Use `--strict` when missing, partial, or
-invalid wiring should fail CI.
-
-## GitHub Action
-
-Use the first-party action to run `policystrata scan` as a pull-request or release policy-drift
-gate. The example pins the current release tag:
-
-```yaml
-name: PolicyStrata
-
-on:
-  pull_request:
-  push:
-    branches: [main]
-
-jobs:
-  scan:
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: raintree-technology/policystrata@v1.1.3
-        with:
-          config: policystrata.yaml
-          out: runs/policystrata
-
-      - name: Implementation readiness gate
-        if: always()
-        run: policystrata doctor --config policystrata.yaml --strict
-```
-
-In CI, keep both gates: `policystrata scan` catches high-confidence policy drift, while
-`policystrata doctor --strict` catches missing, partial, or invalid stack wiring before release.
-
-See [docs/github-action.md](docs/github-action.md) for inputs, artifact upload, and database
-fixture guidance.
-
-## Integrations And Exports
-
-PolicyStrata keeps core execution independent from external eval frameworks. Adapter exports are
-available for downstream systems:
-
-```bash
-uv run policystrata export runs/example --format inspect --out runs/example/inspect.jsonl
-uv run policystrata export runs/example --format benchflow --out runs/example/benchflow.json
-```
-
-The repo also includes a small dbt Semantic Layer adapter and fixture:
-
-```bash
-uv run policystrata check-integration dbt-semantic \
-  --domain finance_saas \
-  --path examples/integrations/dbt_semantic/finance_saas/semantic_models.yml
-```
-
-See [docs/trace-interop.md](docs/trace-interop.md) for adapter field mappings.
-
-## TypeScript / Node SDK
-
-The repository includes a first-party TypeScript recorder under `packages/node` for Next.js,
-Drizzle, and other Node agent stacks:
-
-```ts
-import { createPolicyStrataRecorder } from "policystrata/node";
-
-const recorder = createPolicyStrataRecorder({
-  service: "demo-data-agent",
-  out: ".policystrata/traces.jsonl",
-  tenancy: {
-    tenantColumns: ["transactions.household_id", "accounts.household_id"],
-  },
-});
-```
-
-`wrapTool()` records sanitized tool executions, `captureQuery()` captures Drizzle `.toSQL()` output
-when available, and read-tool SQL records can be scanned with `policystrata scan`.
-By default, the recorder HMACs ID fields with a per-recorder key, omits prompt text and raw error
-messages, redacts SQL literal values, and records sanitized argument shape rather than argument values.
-Default-redacted Node traces omit scanner `tenant_ids`; trusted fixture traces can set
-`redaction.hashIds: false` when real database comparison needs raw tenant IDs.
-Structured trace payloads such as semantic filters and expected-policy notes are redacted
-recursively by default; `semantic_ir.filters.tenant_id` is HMACed unless trusted fixtures set
-`redaction.hashIds: false`.
-
-The Node package also includes `policystrata/runtime`, a deterministic in-process authorizer for
-applications that want live tool/action and result-release boundaries generated from a PolicyStrata
-runtime manifest. Use it inside the app's own request path; keep `policystrata scan` and
-`policystrata doctor` as CI/release evidence and readiness gates over exported traces and wiring.
-Runtime `allowed` is always the deterministic policy decision. `mode: "shadow"` does not turn a deny
-into an allow; it is rollout metadata for applications that want to observe denied decisions before
-blocking the same decision under `mode: "enforce"`.
-Tool decisions also include operational metadata for logs and metrics: `toolKind`,
-`decisionPoint`, `writeState`, `approvalState`, `userId`, and `householdId`. Approval-required tools
-can be exposed before model invocation with `decisionPoint: "pre_model"` and
-`approvalState: "pending"`; approval is enforced when the same tool is checked at
-`decisionPoint: "execution"`.
-
-For governed-data agents that need a customer-hosted sidecar, install
-`@policystrata/agent-trust-gateway` from npm. The gateway evaluates v0.2 runtime events for model,
-retrieval, MCP/tool, SQL/data, memory, browser/code, and egress boundaries, returns `allow`,
-`deny`, `redact`, `require_approval`, `quarantine`, or `log_only`, and uploads sanitized decision
-envelopes to Clearance by PolicyStrata. Event `payload` and fixture-only `expectedDecision`
-metadata are stripped before upload by default so prompts, rows, documents, tool payloads, and test
-expectations remain local unless a deployment opts in to payload upload.
-Gateway uploads also run a metadata-boundary scanner and fail closed before sending if summaries,
-references, or other envelope fields contain sensitive field names, bearer tokens, JWTs, email
-addresses, payment-card-like values, or secret assignments. Deployments can explicitly opt out only
-for local testing.
-Loopback sidecars can run without gateway auth; bindings beyond loopback require
-`POLICYSTRATA_GATEWAY_TOKEN` or `--gateway-token`, and callers must send a bearer token to
-`/v1/decide`. Control-plane uploads send `x-clearance-organization-id` and the legacy
-`x-assurance-organization-id` header during the product rename migration.
-Like the in-process runtime, the gateway is an application-side enforcement and telemetry helper;
-it does not replace `policystrata scan`, `policystrata doctor`, application authorization, or
-database controls.
-Node applications should install the Node package from npm; the PyPI package installs the Python
-CLI/scanner and does not make `policystrata/runtime` importable to Node.
-
-## Reference Docs
-
-- [docs/benchmark-reference.md](docs/benchmark-reference.md): domains, generated mutants,
-  baselines, and witness shape.
-- [docs/scanner.md](docs/scanner.md): scanner inputs, gates, state assertions, and PostgreSQL
-  fixture use.
-- [docs/clearance-runner.md](docs/clearance-runner.md): metadata-only Clearance runner contract,
-  evidence packs, payload audit, and pilot exit codes.
-- [docs/github-action.md](docs/github-action.md): CI wrapper for `policystrata scan`.
-- [docs/generic-exports.md](docs/generic-exports.md): generic Slack, Jira, and Datadog export
-  examples using redacted local evidence JSON.
-- [docs/gateway-deployment-examples.md](docs/gateway-deployment-examples.md): generic
-  customer-hosted gateway Docker, Terraform, and Helm sketches.
-- [docs/pilot-install-path.md](docs/pilot-install-path.md): recommended pilot install paths and
-  why Docker images/signed binaries are not current defaults.
-- [docs/oss-todo-policy.md](docs/oss-todo-policy.md): root TODO ownership and hosted-app boundary.
-- [docs/contract-milestones.md](docs/contract-milestones.md): issue/milestone labels for stable
-  public contracts.
-- [docs/distribution-roadmap.md](docs/distribution-roadmap.md): CLI, GitHub Action, SDK, MCP, and
-  GitHub CLI extension sequence.
-- [docs/js-distribution-decision.md](docs/js-distribution-decision.md): JavaScript package
-  dry-run/publishing decision.
-- [docs/evidence.md](docs/evidence.md): current evidence snapshot and reproduction commands.
-- [docs/production-pilot.md](docs/production-pilot.md): BetterOff deployment binding, live
-  read-only probe results, data-handling boundary, and remaining authenticated checks.
-- [docs/methodology.md](docs/methodology.md): claims, limitations, mutant definitions, and witness
-  minimization.
-- [EVAL_CARD.md](EVAL_CARD.md): benchmark provenance, evidence levels, and eval boundaries.
-- [docs/open-source-commercial-strategy.md](docs/open-source-commercial-strategy.md): packaging and
-  product boundary.
+| Topic | Guide |
+| --- | --- |
+| Scanner configuration and gates | [Scanner](https://github.com/raintree-technology/policystrata/blob/main/docs/scanner.md) |
+| Benchmark domains and witnesses | [Benchmark reference](https://github.com/raintree-technology/policystrata/blob/main/docs/benchmark-reference.md) |
+| Runtime decisions and rollout modes | [Runtime controls](https://github.com/raintree-technology/policystrata/blob/main/docs/runtime-controls.md) |
+| Trace schema and redaction | [Trace contract](https://github.com/raintree-technology/policystrata/blob/main/docs/trace-contract.md) |
+| Packages and compatibility | [Distribution](https://github.com/raintree-technology/policystrata/blob/main/docs/distribution.md) |
+| First adoption workflow | [Testing an AI data assistant](https://github.com/raintree-technology/policystrata/blob/main/docs/testing-ai-data-assistant.md) |
 
 ## Development
 
 ```bash
-uv run pytest
-uv run ruff check .
-uv run mypy src
+uv sync --extra dev
+bun install --frozen-lockfile
+bun run validate
 ```
 
-The built-in `support_saas` domain is deterministic and seed-driven. Preserve JSON/YAML trace
-stability when extending artifacts; add fields compatibly.
-
-## Status
-
-PolicyStrata is an early research artifact. It is useful for reproducing the paper's core failure
-model and for building regression gates around real stacks. It does not prove recall on unknown
-production incidents, and it should not be represented as a production security scanner by itself.
+[Contributing](https://github.com/raintree-technology/policystrata/blob/main/CONTRIBUTING.md) ·
+[Security](https://github.com/raintree-technology/policystrata/blob/main/SECURITY.md) ·
+[Changelog](https://github.com/raintree-technology/policystrata/blob/main/CHANGELOG.md) ·
+[MIT License](https://github.com/raintree-technology/policystrata/blob/main/LICENSE)

@@ -186,8 +186,8 @@ def test_render_junit_quotes_attribute_values() -> None:
     assert failure.text == 'Add tenant_id = "current tenant"'
 
 
-def test_secute_security_cases_fixture_exercises_security_failures(tmp_path: Path) -> None:
-    result = run_scan(Path("examples/secute_security_cases/policystrata.yaml"), tmp_path / "secute")
+def test_security_cases_fixture_exercises_security_failures(tmp_path: Path) -> None:
+    result = run_scan(Path("examples/security_cases/policystrata.yaml"), tmp_path / "security-cases")
 
     finding_ids = {item.id for item in result.findings}
     assert result.gate.outcome == GateOutcome.FAIL
@@ -200,8 +200,8 @@ def test_secute_security_cases_fixture_exercises_security_failures(tmp_path: Pat
     assert "unsafe_release_release_leak_after_database_containment" in finding_ids
 
 
-def test_secute_security_cases_doctor_reports_governance_wiring() -> None:
-    report = run_config_doctor(Path("examples/secute_security_cases/policystrata.yaml"))
+def test_security_cases_doctor_reports_governance_wiring() -> None:
+    report = run_config_doctor(Path("examples/security_cases/policystrata.yaml"))
 
     stack = {item["id"]: item for item in report["stack"]}
     assert stack["policy_docs_ingestion"]["status"] == "wired"

@@ -144,7 +144,7 @@ Reference schemas by stable local artifact path or URI:
   "approvalRequiredSatisfied": true,
   "decision": {
     "action": "allow",
-    "reason": "approved by reviewer",
+    "reason": "approved by policy owner",
     "approvalRef": "approval://support-bi/exp_123"
   }
 }

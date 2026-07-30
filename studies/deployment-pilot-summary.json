@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "study_id": "deployment-pilot-2026-07-26",
+  "target": "maintainer-operated production application",
+  "source_availability": "private",
+  "deployment_binding": {
+    "source_revision_matched_deployment": true,
+    "identifiers_published": false
+  },
+  "live_boundary_checks": {
+    "attempted": 36,
+    "passed": 33,
+    "failed": 0,
+    "skipped": 3,
+    "side_effecting_checks_excluded": true
+  },
+  "adapter": {
+    "tools": 33,
+    "roles": 3,
+    "runtime_events": 6,
+    "sql_traces": 6,
+    "database_checks": 4,
+    "findings": 0,
+    "gate": "pass"
+  },
+  "data_handling": {
+    "production_mutations": 0,
+    "customer_rows_read": 0,
+    "customer_prompts_recorded": 0,
+    "database_evaluation": "disposable synthetic PostgreSQL fixture"
+  },
+  "claim_boundary": [
+    "The study was operated by the project maintainers.",
+    "Private source and deployment identifiers are intentionally omitted.",
+    "Authenticated tenant-to-tenant behavior was not exercised.",
+    "No independently operated deployment study is claimed."
+  ]
+}

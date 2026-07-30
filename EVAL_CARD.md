@@ -46,11 +46,12 @@ and task hashes for frozen runs.
 - A fresh MetricFlow checkout at `45dce78641bbdd7e182aa57132fc11a23b24dde5` reproduced 68
   upstream-authored expected-SQL cases byte-for-byte. Raintree authored the bridge policy and ran
   the study, so this is not an externally operated blind suite.
-- Exact Git-object replay reproduced three BetterOff pre/post-fix source contracts. Two missing-RLS
-  cases map to v1; one export-audit gap is outside it. The vulnerable services were not executed.
-- A BetterOff production pilot bound the adapter to the exact deployed revision. Thirty-three of
-  36 live read-only probes passed, with three authenticated probes skipped. It read no customer
-  rows and made no production mutations.
+- Exact private-source replay reproduced three pre/post-fix source contracts. Two missing-RLS cases
+  map to v1; one export-audit gap is outside it. Private revisions and source excerpts are omitted,
+  and the vulnerable services were not executed.
+- A maintainer-operated production study verified that the inspected source matched the deployed
+  revision. Thirty-three of 36 live read-only boundary probes passed, with three authenticated
+  probes skipped. It read no customer rows and made no production mutations.
 
 ## Scanner Evidence Levels
 
@@ -100,7 +101,7 @@ Current limitations:
 - generated mutants share the public operator taxonomy;
 - baseline comparators are simple observability controls, not independent production test suites;
 - bounded witness reduction is not full delta debugging or source-code root-cause localization.
-- no isolated production smoke principal was available for authenticated cross-tenant probes;
+- no isolated synthetic production principal was available for authenticated cross-tenant probes;
 - no study or blind suite was independently operated.
 
 External validation should follow `docs/external-suite-protocol.md` and, for real incidents,

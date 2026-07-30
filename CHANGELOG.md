@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+- Separate registry publication from verification, support safe verify-only
+  reruns, and harden npm propagation checks with fresh-cache retries.
+- Remove private planning, reviewer-response, submission, deployment, and
+  repository metadata from the public tree; publish only anonymized aggregate
+  study summaries and enforce reviewed source-distribution allowlists.
+- Remove stale private-artifact links and a legacy gateway header, and verify
+  Python source archives contain only reviewed package and project metadata.
+- Condense the package README into a PyPI-safe landing page with direct links
+  to supported packages, focused guides, paper evidence, and project policies.
+
 ## [1.1.3] - 2026-07-29
 
 - Enforce strict Python and TypeScript checking across source, scripts, and tests.
@@ -16,7 +26,7 @@
 
 - Fix dbt Semantic Layer parsing for real MetricFlow manifests and add regression
   coverage for the corrected adapter behavior.
-- Add reviewer-facing evaluation evidence, including external taxonomy coverage,
+- Add evaluation evidence, including external taxonomy coverage,
   a live-database Midday study, expanded brownfield results, and the revised
   manuscript.
 - Publish the reviewed Node runtime changes as `policystrata@0.1.4` and the
@@ -26,7 +36,7 @@
 
 ## [1.1.1] - 2026-07-22
 
-- Publish the review-response hardening work from the immutable `v1.1.0`
+- Publish the external-evaluation hardening work from the immutable `v1.1.0`
   source line after integrating the current protected `main` branch.
 - Keep the Node runtime and Agent Trust Gateway packages unchanged; this is a
   Python-package release.
@@ -71,8 +81,8 @@ runtime and gateway packages are unchanged this cycle.
   tool payloads, credentials, JWTs, API keys, emails, cards, and stripped fixture-only fields.
 - Improve runtime and gateway coverage for SQL tenant predicates, query-risk classification,
   row-limit checks, RLS drift events, egress classes, and fail-open/fail-closed documentation.
-- Add schema compatibility fixtures/tests, audit fixtures, generic integration/export docs, and the
-  TODO completion audit that separates PolicyStrata OSS work from agent-assurance hosted work.
+- Add schema compatibility fixtures/tests, audit fixtures, generic integration/export docs, and
+  release-boundary guidance separating public contracts from hosted integrations.
 - Fix scanner JUnit XML attribute quoting for findings with quoted messages.
 - Publish the gateway under the scoped npm name `@policystrata/agent-trust-gateway`.
 - Publish the release tuple: PyPI `policystrata==1.0.5`, npm runtime `policystrata@0.1.3`, and
@@ -207,5 +217,5 @@ runtime and gateway packages are unchanged this cycle.
 - Suite provenance, evidence-level, and detector-freeze metadata for future blinded or externally
   authored suites.
 - `defense_in_depth_stack` baseline and scanner `evidence_exercised` reporting for clean scans.
-- Artifact usability report command for reviewer-facing run, witness, latency, and fixture metrics.
-- arXiv-ready paper source and same-day submission notes under `paper/arxiv`.
+- Artifact usability report command for run, witness, latency, and fixture metrics.
+- Editable paper source and reproducible paper-build tooling.

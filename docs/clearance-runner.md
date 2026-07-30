@@ -1,14 +1,12 @@
 # Clearance Runner Contract
 
-PolicyStrata can emit a local Clearance runner contract for enterprise pilots where sensitive
-inputs stay in the customer environment. The contract is metadata-only by default: it records hashes,
+PolicyStrata can emit a local Clearance runner contract for deployments where sensitive inputs stay
+inside the application environment. The contract is metadata-only by default: it records hashes,
 artifact references, summaries, decisions, and exit-code intent, not raw prompts, documents, rows,
 tool payloads, credentials, or private schemas.
 
-PolicyStrata OSS remains usable without Clearance. Clearance by PolicyStrata is optional hosted
-infrastructure for review state, waivers, approvals, audit logs, procurement, billing, and
-trust-center reporting. The OSS package produces evidence near sensitive systems; the hosted
-control plane should receive only the metadata contract unless a deployment explicitly enables a
+PolicyStrata remains usable without a control plane. When uploads are enabled, the configured
+endpoint should receive only the metadata contract unless the deployment explicitly enables a
 stronger, reviewed artifact mode.
 
 Every `policystrata run` writes:
@@ -24,7 +22,7 @@ referenced as redacted local artifacts.
 
 ## Config
 
-Create `clearance.runner.yaml` for pilot-specific metadata:
+Create `clearance.runner.yaml` for deployment metadata:
 
 ```yaml
 schemaVersion: clearance.runner.v1
@@ -171,7 +169,7 @@ or production uploads.
 
 ## Exit Codes
 
-The runner contract records the Clearance pilot exit-code mapping:
+The runner contract records this exit-code mapping:
 
 - `0`: pass or review-only
 - `1`: fail

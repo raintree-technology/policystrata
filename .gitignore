@@ -11,6 +11,7 @@ Thumbs.db
 .env
 .env.*
 !.env.example
+.infisical.json
 .envrc.local
 .direnv/
 
@@ -75,9 +76,12 @@ output/
 .clearance/
 paper/build/
 
-# Venue-targeting notes stay local. This repository is public and the paper links to it, so a
-# committed file naming a submission target would disclose it alongside the public preprint.
-# Double-anonymous venues ask authors not to specify where a manuscript was submitted.
+# Local planning and manuscript working files
+todo.txt
+PAPER_TODO.md
+paper/AUTHOR_RESPONSE.md
+paper/DEMO_SCRIPT.md
+paper/REVISION_NOTES.md
 paper/submissions/
 
 # Generated public-site artifacts

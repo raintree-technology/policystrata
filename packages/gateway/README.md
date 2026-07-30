@@ -2,7 +2,7 @@
 
 Customer-hosted runtime gateway for governed-data agents. The gateway evaluates redacted runtime
 events locally with `policystrata/runtime`, blocks deny/quarantine/approval-required decisions in
-enforce mode, and uploads only decision envelopes to Clearance by PolicyStrata by default.
+enforce mode, and uploads only decision envelopes to a configured control plane by default.
 It is an application-side enforcement and telemetry helper, not a replacement for `policystrata
 scan`, `policystrata doctor`, application authorization, or database controls.
 
@@ -73,9 +73,9 @@ Uploads fail closed by default if the redacted envelope still contains sensitive
 common secret/PII value patterns in summaries, refs, or other metadata. Use
 `allowBoundaryViolations` only for local negative tests.
 
-Uploads send `x-clearance-organization-id` and the legacy
-`x-assurance-organization-id` header while hosted control planes migrate. Uploads also support an
-idempotency key and enforce a 1 MB default upload-body limit before opening the network request.
+Uploads send `x-clearance-organization-id` when an organization ID is configured. They also
+support an idempotency key and enforce a 1 MB default upload-body limit before opening the network
+request.
 
 ## Deployment Guidance
 

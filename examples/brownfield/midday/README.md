@@ -1,7 +1,6 @@
 # Brownfield target: midday-ai/midday
 
-Source: shallow clone (`--depth 1`) of `midday-ai/midday` at
-`/private/tmp/claude-501/-Users-mb1-Code-raintree-oss-policystrata/3e286431-07a6-4558-8ba2-1af21b7c3c90/scratchpad/brownfield/midday`.
+Source: shallow clone (`--depth 1`) of `midday-ai/midday`.
 Static inspection only; no midday code (TypeScript, Drizzle queries, or migrations) was executed.
 
 Run:
@@ -35,12 +34,10 @@ structural limitation, not a midday defect.
 ### (c) Scanner limitation, non-gating -- 1x `postgres_fixture_unavailable` (WARNING)
 
 `database.schema: schema.sql` is configured with `required: false` and no `start_docker`/seed.
-This machine happens to have *something* listening on `127.0.0.1:55432` (the scan's connection
-attempt got `password authentication failed`, not `connection refused`), so the finding reads as
-an auth failure rather than "no server" -- either way, no live Postgres fixture matching
-PolicyStrata's expected credentials was prepared, exactly as expected for this pass (we did not
-start or configure one -- static analysis only, per this task's constraints). Non-gating by
-design (`required: false`). This is expected, not a discovery.
+No live PostgreSQL fixture was prepared for this static pass, so
+`postgres_fixture_unavailable` is expected. Its exact connection message depends on the services
+running on the invoking machine. The finding is non-gating by design (`required: false`) and is not
+a discovery.
 
 ### (c) Real, narrowly-scoped scanner/config limitation -- 1x `tenant_scope_missing` (HIGH/HIGH, gate-failing)
 

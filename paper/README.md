@@ -9,15 +9,8 @@ The website repository contains only the published PDF and rendered page preview
 - `preamble.tex`: formatting and paper macros
 - `sections/`: one source file per paper section
 - `references.bib`: bibliography
-- `REVISION_NOTES.md`: reviewer concern-to-evidence map for the current rewrite
-- `AUTHOR_RESPONSE.md`: point-by-point response to reviews 38A, 38B, and 38C
-- `DEMO_SCRIPT.md`: narrated replacement-demo script and claim-boundary checklist
-- `submissions/`: venue target and submission gate, ignored by Git and intentionally local
 - `build/PolicyStrata.pdf`: generated PDF, ignored by Git
 - `build/tectonic.log`: full build diagnostics, ignored by Git
-
-The three-page SPLASH/ISSTA tool-demo manuscript is a separate historical submission. It is not
-the source for the paper published at `raintree.technology/writing/policystrata`.
 
 ## Build
 
@@ -66,5 +59,3 @@ Run `bun run paper:build` for normal drafting and `bun run paper:check` before s
 - Keep deterministic fault-model coverage separate from claims about production recall.
 - Do not describe the benchmark, scanner, runtime evaluator, or gateway as a replacement for
   application authorization or database controls.
-- Put venue-specific manuscripts and submission forms under a separate `paper/submissions/`
-  directory if they need active maintenance.

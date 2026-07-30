@@ -290,16 +290,10 @@ test("nativeIntegrationRuntimeEvent emits provider traceability", () => {
   assert.deepEqual(integrationEvent.artifactRefs, ["integration://aws/conn_aws"]);
 });
 
-test("uploadRuntimeEvents sends clearance and legacy organization headers", async () => {
-  let organizationHeaders: {
-    clearance: string | undefined;
-    assurance: string | undefined;
-  } = { clearance: undefined, assurance: undefined };
+test("uploadRuntimeEvents sends the configured organization header", async () => {
+  let organizationHeader: string | undefined;
   const controlPlane = await startJsonServer(async (request) => {
-    organizationHeaders = {
-      clearance: request.headers["x-clearance-organization-id"]?.toString(),
-      assurance: request.headers["x-assurance-organization-id"]?.toString(),
-    };
+    organizationHeader = request.headers["x-clearance-organization-id"]?.toString();
     return { ok: true };
   });
   try {
@@ -311,8 +305,7 @@ test("uploadRuntimeEvents sends clearance and legacy organization headers", asyn
       events: result.events,
     });
 
-    assert.equal(organizationHeaders.clearance, "org_test");
-    assert.equal(organizationHeaders.assurance, "org_test");
+    assert.equal(organizationHeader, "org_test");
   } finally {
     await controlPlane.close();
   }

@@ -1,7 +1,6 @@
 # Brownfield target: cube-js/cube -- intentionally-broken ACL fixtures
 
-Source: shallow clone (`--depth 1`) of `cube-js/cube` at
-`/private/tmp/claude-501/-Users-mb1-Code-raintree-oss-policystrata/3e286431-07a6-4558-8ba2-1af21b7c3c90/scratchpad/brownfield/cube`.
+Source: shallow clone (`--depth 1`) of `cube-js/cube`.
 Static inspection only; no cube code was executed. All content below was produced by
 `scripts/brownfield-transform-cube.py` (stdlib + PyYAML only) reading that clone.
 

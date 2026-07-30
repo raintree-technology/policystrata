@@ -21,6 +21,6 @@ The catalog covers:
 - CI gates
 - adapter-based exports
 
-It also defines a small reviewer feedback data format and quality-tracking fields for validated
+It also defines a small human-review data format and quality-tracking fields for validated
 false negatives and noisy false positives. These are local evidence formats; they do not depend on
 Clearance hosted workflows.

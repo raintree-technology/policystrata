@@ -119,8 +119,8 @@ doc and a reproduction script; all are deterministic and need no LLM API key unl
 | External fault-taxonomy coverage | v1 registry vs an independently authored 8-class data-agent vulnerability taxonomy: 2 covered, 1 partial, 5 outside; 401/1720 cases have no counterpart there | [external-taxonomy-coverage.md](external-taxonomy-coverage.md) |
 | Second taxonomy cross-check | LASM's 116-paper vocabulary: v1 occupies 3/7 architectural layers and 1/4 temporal classes | [second-taxonomy-coverage.md](second-taxonomy-coverage.md) |
 | Source-frozen MetricFlow | 68 upstream-authored expected-SQL cases reproduced byte-for-byte at an exact Git object; Raintree-authored bridge leaves 68 fuzz mutations surviving | [brownfield-results.md](brownfield-results.md) |
-| BetterOff production pilot | exact deployed revision; 33/36 live read-only probes passed, 3 authenticated skips; no customer reads or production mutations | [production-pilot.md](production-pilot.md) |
-| BetterOff historical replay | 3/3 exact pre/post-fix source contracts reproduced; 2 map to v1 and 1 is outside the taxonomy | [`studies/betteroff-historical-replay.json`](../studies/betteroff-historical-replay.json) |
+| Maintainer-operated deployment study | deployed and inspected source revisions matched; 33/36 read-only boundary probes passed, with 3 authenticated skips; no customer reads or production mutations | [deployment-study.md](deployment-study.md) |
+| Private-source historical replay | 3/3 source-contract changes reproduced; 2 map to v1 and 1 is outside the taxonomy; private identifiers and source excerpts are omitted | [`studies/historical-replay-summary.json`](../studies/historical-replay-summary.json) |
 | Counterfactual-repair attribution | attribution is causally validated (sufficiency + necessity), not label-matched; teeth-checked | [counterfactual-repair.md](counterfactual-repair.md) |
 | Higher-order / compound mutants | first-transition attribution is stable under distinct-surface composition | [compound-mutants.md](compound-mutants.md) |
 | Minimization metrics | per-witness reduction ratios, 1-minimality (100% on standard suites, not guaranteed) | [minimization-metrics.md](minimization-metrics.md) |
@@ -131,7 +131,7 @@ doc and a reproduction script; all are deterministic and need no LLM API key unl
 | LLM reachability harness | build-only; manifest-skew changes emitted plans (stub); no model runs yet | [reachability.md](reachability.md) |
 | Real ClickHouse row-policy check | real row-policy containment evidence (verified against ClickHouse 25.6) | [clickhouse.md](clickhouse.md) |
 | Write-action model (v2) | write containment with its own first-transition detector; 48/48 killed, 0 FP | [write-actions.md](write-actions.md) |
-| Benchmark release + difficulty tiers | difficulty tiers from the baseline matrix; freeze/verify + adapters | [benchmark-release.md](benchmark-release.md) |
+| Benchmark versioning + difficulty tiers | difficulty tiers from the baseline matrix; freeze/verify + adapters | [benchmark-versioning.md](benchmark-versioning.md) |
 
 ## Known Limitations
 

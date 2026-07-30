@@ -1,7 +1,6 @@
-# Benchmark Release and Productization
+# Benchmark Versioning
 
-What a third party needs to run PolicyStrata's benchmark against their own
-detector and report comparable numbers.
+PolicyStrata freeze manifests make benchmark runs comparable across source revisions.
 
 ## Versioned, frozen suites
 
@@ -15,9 +14,8 @@ uv run policystrata verify-freeze freeze/support-generated.json
 ```
 
 `verify-freeze` recomputes the hashes from the current tree and fails if the
-detector, taxonomy, policy, or suite changed. That is the mechanism a leaderboard
-uses to guarantee everyone ran the same benchmark version. The full reproduction
-is `scripts/reproduce-final.sh`.
+detector, taxonomy, policy, or suite changed. The full reproduction is
+`scripts/reproduce-final.sh`.
 
 ## Difficulty tiers
 
@@ -31,11 +29,8 @@ support_saas generated suite (500 cases, 15 baseline strategies):
 | medium | 357 |
 | easy | 143 |
 
-No operator evades every strategy (so no "hard" tier here), but operators differ
-sharply in how many strategies catch them - from `db_rls_old_ownership_field` (3)
-to grammar/manifest cases (7+). A leaderboard can weight cases by
-`mean_baseline_catchers` so a detector is rewarded for the cases conventional
-tools miss, not the ones everything already catches.
+No operator evades every strategy in this suite, but operators differ sharply in how many
+strategies catch them, from `db_rls_old_ownership_field` (3) to grammar/manifest cases (7+).
 
 ```bash
 uv run policystrata run --domain support_saas --suite generated --count 500 --out runs/gen
@@ -58,11 +53,8 @@ generic evidence export (aggregate counts, trace IDs, semantic IR,
 expected/observed witness classes, cost/latency) that omits raw request text,
 raw SQL, and raw result values.
 
-## What is still external
+## Limitations
 
-- A public leaderboard and third-party reproduction reports require hosting and
-  other people running it; those cannot be produced from inside this repo. The
-  freeze/verify + difficulty + adapter pieces are the machinery they would use.
+- Comparable third-party results require an independent run against the same freeze manifest.
 - Difficulty tiers are defined against the current baseline set; adding stronger
-  baselines (see the comparators in the evidence table) would re-tier cases and
-  is the intended way the benchmark stays honest as tools improve.
+  baselines re-tiers cases.

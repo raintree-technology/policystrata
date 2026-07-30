@@ -187,7 +187,7 @@ The current baselines are deliberately simple:
   and witness localization.
 - `grammar_only`, `semantic_validator_only`, `sql_ast_policy_checker`, `db_policy_only`,
   `release_filter_only`, `lineage_only`, `policy_as_code_precheck`, and
-  `defense_in_depth_stack_v2`: reviewer-facing variants that separate layer-local controls from
+  `defense_in_depth_stack_v2`: expanded variants that separate layer-local controls from
   cross-layer responsibility checks.
 
 All baselines receive the same traces. They are not full reimplementations of production testing

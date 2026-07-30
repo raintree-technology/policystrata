@@ -265,7 +265,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     artifact_parser = subparsers.add_parser(
         "artifact-report",
-        help="Render reviewer-facing reproducibility and usability metrics for a run.",
+        help="Render reproducibility and usability metrics for a run.",
     )
     artifact_parser.add_argument("run_dir", type=Path)
     artifact_parser.add_argument("--domain-path", type=Path, default=None)

@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "study_id": "private-source-historical-replay",
+  "source_availability": "private",
+  "cases": 3,
+  "reproduced": 3,
+  "taxonomy": {
+    "mapped_to_v1": 2,
+    "outside_v1": 1
+  },
+  "surfaces": {
+    "database": 2,
+    "release": 1
+  },
+  "identifiers_published": false,
+  "claim_boundary": [
+    "The replay checked source-contract changes across exact private revisions.",
+    "The public repository does not contain private revisions, paths, source excerpts, or probe patterns.",
+    "The replay did not execute historical production services.",
+    "This aggregate is maintainer-auditable but not independently reproducible from public inputs."
+  ]
+}

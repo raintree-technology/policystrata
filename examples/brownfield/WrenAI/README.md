@@ -1,7 +1,6 @@
 # Brownfield target: Canner/WrenAI -- MDL row-level access control
 
-Source: shallow clone (`--depth 1`) of `Canner/WrenAI` at
-`/private/tmp/claude-501/-Users-mb1-Code-raintree-oss-policystrata/3e286431-07a6-4558-8ba2-1af21b7c3c90/scratchpad/brownfield/WrenAI`.
+Source: shallow clone (`--depth 1`) of `Canner/WrenAI`.
 Static inspection only; no WrenAI/wren-core code (Python, Rust, or otherwise) was executed. All
 content below was produced by `scripts/brownfield-transform-wrenai.py` (stdlib + PyYAML only)
 reading `core/wren-core-base/tests/data/mdl.json`, a real MDL (Modeling Definition Language) test

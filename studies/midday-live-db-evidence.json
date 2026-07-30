@@ -38,7 +38,7 @@
           "mutation": null,
           "mutant_status": null,
           "regression_case": null,
-          "reproducible_command": "policystrata scan --config /Users/mb1/Code/raintree/oss/policystrata/examples/brownfield/midday/policystrata_live_db.yaml",
+          "reproducible_command": "policystrata scan --config examples/brownfield/midday/policystrata_live_db.yaml",
           "metadata": {
             "tenant_id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
             "rows": 4
@@ -48,7 +48,7 @@
           "owner": "database",
           "probable_fix": "tighten the database policy check or remove the stale exposed capability",
           "minimal_repro_trace": "witnesses/postgres_rls_check_failed_insights_team_scope_ann.json",
-          "ci_gate_command": "policystrata scan --config /Users/mb1/Code/raintree/oss/policystrata/examples/brownfield/midday/policystrata_live_db.yaml"
+          "ci_gate_command": "policystrata scan --config examples/brownfield/midday/policystrata_live_db.yaml"
         },
         {
           "id": "postgres_rls_check_failed_insights_team_scope_ben",
@@ -69,7 +69,7 @@
           "mutation": null,
           "mutant_status": null,
           "regression_case": null,
-          "reproducible_command": "policystrata scan --config /Users/mb1/Code/raintree/oss/policystrata/examples/brownfield/midday/policystrata_live_db.yaml",
+          "reproducible_command": "policystrata scan --config examples/brownfield/midday/policystrata_live_db.yaml",
           "metadata": {
             "tenant_id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
             "rows": 4
@@ -79,7 +79,7 @@
           "owner": "database",
           "probable_fix": "tighten the database policy check or remove the stale exposed capability",
           "minimal_repro_trace": "witnesses/postgres_rls_check_failed_insights_team_scope_ben.json",
-          "ci_gate_command": "policystrata scan --config /Users/mb1/Code/raintree/oss/policystrata/examples/brownfield/midday/policystrata_live_db.yaml"
+          "ci_gate_command": "policystrata scan --config examples/brownfield/midday/policystrata_live_db.yaml"
         },
         {
           "id": "postgres_rls_check_failed_insights_unauthenticated",
@@ -100,7 +100,7 @@
           "mutation": null,
           "mutant_status": null,
           "regression_case": null,
-          "reproducible_command": "policystrata scan --config /Users/mb1/Code/raintree/oss/policystrata/examples/brownfield/midday/policystrata_live_db.yaml",
+          "reproducible_command": "policystrata scan --config examples/brownfield/midday/policystrata_live_db.yaml",
           "metadata": {
             "tenant_id": null,
             "rows": 4
@@ -110,7 +110,7 @@
           "owner": "database",
           "probable_fix": "tighten the database policy check or remove the stale exposed capability",
           "minimal_repro_trace": "witnesses/postgres_rls_check_failed_insights_unauthenticated.json",
-          "ci_gate_command": "policystrata scan --config /Users/mb1/Code/raintree/oss/policystrata/examples/brownfield/midday/policystrata_live_db.yaml"
+          "ci_gate_command": "policystrata scan --config examples/brownfield/midday/policystrata_live_db.yaml"
         },
         {
           "id": "postgres_state_assertion_failed_insights_exclude_other_team",
@@ -131,7 +131,7 @@
           "mutation": null,
           "mutant_status": null,
           "regression_case": "pass_to_pass",
-          "reproducible_command": "policystrata scan --config /Users/mb1/Code/raintree/oss/policystrata/examples/brownfield/midday/policystrata_live_db.yaml",
+          "reproducible_command": "policystrata scan --config examples/brownfield/midday/policystrata_live_db.yaml",
           "metadata": {
             "tenant_id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
             "rows": 4,
@@ -147,7 +147,7 @@
           "owner": "database",
           "probable_fix": "tighten the database policy check or remove the stale exposed capability",
           "minimal_repro_trace": "witnesses/postgres_state_assertion_failed_insights_exclude_other_team.json",
-          "ci_gate_command": "policystrata scan --config /Users/mb1/Code/raintree/oss/policystrata/examples/brownfield/midday/policystrata_live_db.yaml"
+          "ci_gate_command": "policystrata scan --config examples/brownfield/midday/policystrata_live_db.yaml"
         }
       ],
       "result": "pass"

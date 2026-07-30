@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -59,6 +59,9 @@ function smokePythonArtifact() {
   run("uv", ["run", "twine", "check", "--strict", ...distributions]);
   const wheel = distributions.find((file) => file.endsWith(".whl"));
   if (!wheel) throw new Error("uv build did not produce a wheel");
+  const sourceDistribution = distributions.find((file) => file.endsWith(".tar.gz"));
+  if (!sourceDistribution) throw new Error("uv build did not produce a source distribution");
+  assertPythonSourceDistribution(sourceDistribution);
 
   const temp = mkdtempSync(join(tmpdir(), "policystrata-python-artifact-"));
   try {
@@ -82,6 +85,42 @@ function smokePythonArtifact() {
     run(policystrata, ["doctor", "--config", fixtures.config, "--out", join(temp, "doctor.json")]);
   } finally {
     rmSync(temp, { recursive: true, force: true });
+  }
+}
+
+function assertPythonSourceDistribution(archive) {
+  const result = spawnSync("tar", ["-tzf", archive], {
+    cwd: root,
+    encoding: "utf8",
+  });
+  if (result.status !== 0) {
+    throw new Error(`could not list source distribution: ${result.stderr || `tar exited with ${result.status}`}`);
+  }
+
+  const archiveRoot = `${basename(archive).slice(0, -".tar.gz".length)}/`;
+  const allowedRootFiles = new Set([
+    "CITATION.cff",
+    "LICENSE",
+    "MANIFEST.in",
+    "PKG-INFO",
+    "README.md",
+    "SECURITY.md",
+    "pyproject.toml",
+    "setup.cfg",
+  ]);
+  const violations = result.stdout
+    .split("\n")
+    .filter(Boolean)
+    .filter((entry) => {
+      if (entry === archiveRoot.slice(0, -1)) return false;
+      if (!entry.startsWith(archiveRoot)) return true;
+      const relative = entry.slice(archiveRoot.length);
+      if (!relative) return false;
+      const [topLevel] = relative.split("/");
+      return topLevel !== "src" && !allowedRootFiles.has(relative);
+    });
+  if (violations.length > 0) {
+    throw new Error(`source distribution contains unreviewed paths:\n${violations.join("\n")}`);
   }
 }
 
@@ -152,10 +191,9 @@ function smokePublishedNpmRuntime() {
   const version = process.env.POLICYSTRATA_NPM_VERSION || readPackageJson(join(root, "packages/node")).version;
   const temp = mkdtempSync(join(tmpdir(), "policystrata-published-npm-runtime-"));
   try {
-    writeFileSync(join(temp, "package.json"), JSON.stringify({ private: true, type: "module" }), "utf8");
-    retry(() => run("npm", ["install", "--ignore-scripts", `policystrata@${version}`], { cwd: temp }));
-    const fixtures = writeRuntimeFixtures(temp);
-    runNodeRuntimeSmoke(temp, fixtures);
+    const install = installPublishedNpmPackages(temp, [`policystrata@${version}`]);
+    const fixtures = writeRuntimeFixtures(install);
+    runNodeRuntimeSmoke(install, fixtures);
   } finally {
     rmSync(temp, { recursive: true, force: true });
   }
@@ -167,27 +205,32 @@ function smokePublishedGateway() {
     process.env.POLICYSTRATA_GATEWAY_VERSION || readPackageJson(join(root, "packages/gateway")).version;
   const temp = mkdtempSync(join(tmpdir(), "policystrata-published-gateway-"));
   try {
-    writeFileSync(join(temp, "package.json"), JSON.stringify({ private: true, type: "module" }), "utf8");
-    retry(() =>
-      run(
-        "npm",
-        [
-          "install",
-          "--ignore-scripts",
-          `policystrata@${runtimeVersion}`,
-          `@policystrata/agent-trust-gateway@${gatewayVersion}`,
-        ],
-        {
-          cwd: temp,
-        },
-      ),
-    );
-    const fixtures = writeRuntimeFixtures(temp);
-    runNodeRuntimeSmoke(temp, fixtures);
-    runGatewaySmoke(temp, fixtures);
+    const install = installPublishedNpmPackages(temp, [
+      `policystrata@${runtimeVersion}`,
+      `@policystrata/agent-trust-gateway@${gatewayVersion}`,
+    ]);
+    const fixtures = writeRuntimeFixtures(install);
+    runNodeRuntimeSmoke(install, fixtures);
+    runGatewaySmoke(install, fixtures);
   } finally {
     rmSync(temp, { recursive: true, force: true });
   }
+}
+
+function installPublishedNpmPackages(temp, packages) {
+  return retry((attempt) => {
+    const install = join(temp, `install-${attempt}`);
+    const cache = join(temp, `npm-cache-${attempt}`);
+    mkdirSync(install);
+    writeFileSync(join(install, "package.json"), JSON.stringify({ private: true, type: "module" }), "utf8");
+    for (const packageSpec of packages) {
+      run("npm", ["view", packageSpec, "version", "--prefer-online", "--cache", cache], { cwd: install });
+    }
+    run("npm", ["install", "--ignore-scripts", "--prefer-online", "--cache", cache, ...packages], {
+      cwd: install,
+    });
+    return install;
+  });
 }
 
 function runNodeRuntimeSmoke(temp, fixtures) {
@@ -341,21 +384,21 @@ function packPackage(directory) {
 }
 
 function retry(operation) {
-  const attempts = Number(process.env.POLICYSTRATA_RELEASE_SMOKE_RETRIES || "10");
-  let lastError;
+  const attempts = Number(process.env.POLICYSTRATA_RELEASE_SMOKE_RETRIES || "15");
+  if (!Number.isInteger(attempts) || attempts < 1) {
+    throw new Error("POLICYSTRATA_RELEASE_SMOKE_RETRIES must be a positive integer");
+  }
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     try {
-      operation();
-      return;
+      return operation(attempt);
     } catch (error) {
-      lastError = error;
-      if (attempt === attempts) break;
+      if (attempt === attempts) throw error;
       const delaySeconds = Math.min(30, attempt * 5);
       process.stderr.write(`release smoke attempt ${attempt} failed; retrying in ${delaySeconds}s\n`);
       spawnSync("sleep", [String(delaySeconds)], { stdio: "inherit" });
     }
   }
-  throw lastError;
+  throw new Error("release smoke retry loop exited unexpectedly");
 }
 
 function run(command, args, options = {}) {

@@ -25,7 +25,7 @@ It evaluates the canonical plan and the lowered query, checks each transition in
 The right oracle is therefore not literal equality between layers. A manifest may intentionally expose less than a validator accepts, and RLS may intentionally be stricter than an application check. \policystrata{} assigns each surface a responsibility and checks only the obligations that surface accepts or emits.
 
 \paragraph{Scope and evidence boundary.}
-\policystrata{} is a regression tester and scanner, not an authorization boundary. It assumes a human-reviewed canonical policy and trusted adapters that map implementation artifacts into the checking model. The v1 benchmark covers single-request, read-only analytics. Its deterministic generator selects plans from the same public operator taxonomy used by the simulator, so its perfect kill count measures internal coverage. A read-only BetterOff pilot binds static and live boundary evidence to an exact production deployment, but does not read customer rows and lacks an authenticated smoke principal. No evaluation observes an independently operated deployment or estimates recall on unknown production incidents.
+\policystrata{} is a regression tester and scanner, not an authorization boundary. It assumes a human-reviewed canonical policy and trusted adapters that map implementation artifacts into the checking model. The v1 benchmark covers single-request, read-only analytics. Its deterministic generator selects plans from the same public operator taxonomy used by the simulator, so its perfect kill count measures internal coverage. A maintainer-operated deployment study verifies source-to-deployment binding and selected live denial behavior, but publishes only aggregate results, does not read customer rows, and lacks an authenticated synthetic principal. No evaluation observes an independently operated deployment or estimates recall on unknown production incidents.
 
 \paragraph{Claims and non-claims.}
 \begin{center}
@@ -49,5 +49,5 @@ This paper contributes:
   \item a model of a data agent as six non-equivalent policy surfaces with explicit exposure, validation, lowering, containment, and release contracts;
   \item a deterministic generator and replay checker that produces first-transition witnesses, plus counterfactual repair checks for attribution and bounded replay reduction for witness size;
   \item \bench, with 22 named operators, explicit suite provenance, equivalent/invalid accounting, freeze manifests, two spec-derived comparators, and separate synthetic, spec-blind, public-fault, brownfield, and historical-revision evidence;
-  \item a documented retargeting contract plus a deployment-linked, read-only BetterOff pilot over an exact production revision.
+  \item a documented retargeting contract plus an aggregate, deployment-linked read-only study whose private operational identifiers are withheld.
 \end{itemize}

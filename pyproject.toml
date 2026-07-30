@@ -42,7 +42,7 @@ Repository = "https://github.com/raintree-technology/policystrata"
 Documentation = "https://github.com/raintree-technology/policystrata#readme"
 Paper = "https://raintree.technology/papers/PolicyStrata.pdf"
 PaperRelease = "https://raintree.technology/blog/policystrata-release"
-Artifact = "https://github.com/raintree-technology/policystrata/releases/download/policystrata-paper-2026-06-26/policystrata-submission-kit-2026-06-26.zip"
+Evidence = "https://github.com/raintree-technology/policystrata/blob/main/docs/evidence.md"
 Changelog = "https://github.com/raintree-technology/policystrata/blob/main/CHANGELOG.md"
 Issues = "https://github.com/raintree-technology/policystrata/issues"
 
