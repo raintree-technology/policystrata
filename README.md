@@ -132,5 +132,6 @@ defines governed requirements. See the
 
 ## Project policies
 
-[Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [Changelog](CHANGELOG.md) ·
+[Contributing](CONTRIBUTING.md) · [Code of Conduct](CODE_OF_CONDUCT.md) ·
+[Security](SECURITY.md) · [Changelog](CHANGELOG.md) ·
 [Source repository](https://github.com/raintree-technology/policystrata) · [MIT License](LICENSE)
