@@ -103,3 +103,6 @@ addopts = ["-ra", "--showlocals"]
 markers = [
     "integration: tests requiring Dockerized services (PostgreSQL or ClickHouse)",
 ]
+
+[tool.uv]
+constraint-dependencies = ["cryptography>=50.0.0"]
