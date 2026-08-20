@@ -6,7 +6,7 @@ open-source data-agent / semantic-layer / multi-tenant-SaaS stacks, run from sha
 [dbt-labs/metricflow](#metricflow), [midday-ai/midday](#midday), [Canner/WrenAI](#wrenai), and
 [cube-js/cube](#cube) (bonus target, intentionally-broken ACL fixtures). All four ran `policystrata
 scan` to completion. Full detail, including exact source citations for every transformed or
-synthesized value, lives in each target's own `examples/brownfield/<repo>/README.md`; this
+synthesized value, lives in the corresponding `docs/studies/*.md` record; this
 document summarizes and cross-references.
 
 ## Method
@@ -56,7 +56,7 @@ independent targets, which is itself the most useful signal from this pass).
 ### metricflow
 
 `examples/brownfield/metricflow/` -- `dbt-labs/metricflow`. Full detail:
-`examples/brownfield/metricflow/README.md`.
+[`docs/studies/metricflow.md`](studies/metricflow.md).
 
 The merge transform the inventory anticipated (metricflow's multi-doc singular `semantic_model:`
 YAML → PolicyStrata's plural `semantic_models:` list) was implemented and works cleanly: 12
@@ -74,7 +74,7 @@ adapter rather than to metricflow.
 ### midday
 
 `examples/brownfield/midday/` -- `midday-ai/midday`. Full detail:
-`examples/brownfield/midday/README.md`.
+[`docs/studies/midday.md`](studies/midday.md).
 
 The only target with real, committed Postgres RLS SQL (`packages/db/migrations/*.sql`, 20
 `CREATE POLICY` statements) and a real tenant-column vocabulary (`team_id`). `schema.sql` is a
@@ -92,7 +92,7 @@ started for this pass.
 ### WrenAI
 
 `examples/brownfield/WrenAI/` -- `Canner/WrenAI`. Full detail:
-`examples/brownfield/WrenAI/README.md`.
+[`docs/studies/wrenai.md`](studies/wrenai.md).
 
 Smallest-scope target. Built from one real MDL JSON fixture
 (`core/wren-core-base/tests/data/mdl.json`), scoped to the one model (`customer`) and one rule
@@ -106,7 +106,7 @@ scoping the policy to just the RLAC-relevant model rather than all three models 
 
 ### cube (bonus)
 
-`examples/brownfield/cube/` -- `cube-js/cube`. Full detail: `examples/brownfield/cube/README.md`.
+`examples/brownfield/cube/` -- `cube-js/cube`. Full detail: [`docs/studies/cube.md`](studies/cube.md).
 
 The requested bonus target: `orders_incorrect_acl.yml` and `orders_nonexist_acl.yml`, two of
 cube's own schema-compiler unit-test fixtures for *intentionally invalid* `accessPolicy` row-level
@@ -168,7 +168,7 @@ global `tenant_columns`. This lets midday declare `team_id` globally and `user_i
 `midday`'s real schema genuinely uses two different real RLS dimensions across tables (`team_id`
 for most tables, `user_id` for a few, e.g. `insight_user_status`). `tenancy.tenant_columns` has no
 way to declare "table X uses column Y," so a config correctly scoped for the dominant pattern
-necessarily misjudges the minority one. See `examples/brownfield/midday/README.md`'s finding
+necessarily misjudges the minority one. See [`docs/studies/midday.md`](studies/midday.md)'s finding
 detail for the concrete example and recommended fix (per-table/per-trace tenancy declarations).
 
 ### 3. dbt adapter does plain name-string matching with no entity-join resolution — FIXED
@@ -188,7 +188,7 @@ references them via entity-qualified dunder names (`booking__is_instant`) that n
 verbatim in the manifest YAML. `src/policystrata/integrations/dbt_semantic.py`'s
 `inspect_dbt_semantic_model` does a flat name-set diff, so any tool with this (common, in
 dbt-Semantic-Layer-style systems) declared-name vs. referenced-name split will produce this class
-of warning. See `examples/brownfield/metricflow/README.md`.
+of warning. See [`docs/studies/metricflow.md`](studies/metricflow.md).
 
 ### 4. `metrics ∪ measures` comparison pool conflates private measures with public metrics — FIXED
 
@@ -205,7 +205,7 @@ Also in `dbt_semantic.py`: `dbt_metric_names` is `metrics ∪ measures`. metricf
 `create_metric: true` with no separate literal `metric:` document (relying on metricflow's own
 name-equals-measure-name auto-promotion convention) land in that pool with no policy counterpart
 and are flagged "stale," even though they were never meant to be individually governed the same
-way as an explicit metric. See `examples/brownfield/metricflow/README.md`.
+way as an explicit metric. See [`docs/studies/metricflow.md`](studies/metricflow.md).
 
 ### 5. `expression_mismatches` doesn't know omitted `expr:` has an implicit default — FIXED
 
@@ -218,7 +218,7 @@ expression-mismatch warnings drop to 0. Original report follows.
 metricflow measures may omit `expr:` (it implicitly defaults to the measure's own name). dbt
 adapter's `expression_matches_policy` treats an empty `expr` string as an automatic mismatch
 regardless of whether the underlying policy expression is actually correct. See
-`examples/brownfield/metricflow/README.md`.
+[`docs/studies/metricflow.md`](studies/metricflow.md).
 
 ## False-positive accounting on real inputs
 
@@ -258,7 +258,7 @@ statements across all six policy-bearing tables in the frozen migrations are loa
 PostgreSQL 18.4 and executed, with a Raintree-authored bridge supplying the Supabase roles,
 `auth.uid()`, `private.get_teams_for_authenticated_user()`, and base tables that midday's
 migrations assume but do not commit. Checks connect as a non-owner, non-superuser role, so RLS
-applies. Full provenance is in `examples/brownfield/midday/live_db/README.md`.
+applies. Full provenance is in [`docs/studies/midday-live-database.md`](studies/midday-live-database.md).
 
 | Fixture | Expected gate | Observed gate | Findings | Which |
 | --- | --- | --- | --- | --- |

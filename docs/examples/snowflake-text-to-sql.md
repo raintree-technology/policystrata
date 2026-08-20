@@ -1,4 +1,4 @@
-# Snowflake Text-to-SQL Fixture
+# Snowflake text-to-SQL fixture
 
 This fixture models a Snowflake-backed text-to-SQL trace without requiring Snowflake credentials or
 network access. It is a static imported-trace scanner example:

@@ -8,7 +8,7 @@
     "test": "uv run --locked --extra dev pytest && bun run --cwd packages/node test && bun run --cwd packages/gateway test",
     "test:unit": "bun run test",
     "test:e2e": "echo \"Run PostgreSQL integration tests through the CI workflow or with POLICYSTRATA_RUN_DB_TESTS=1\"",
-    "lint": "uv run --locked --extra dev ruff check .",
+    "lint": "uv run --locked --extra dev ruff check . && biome check .",
     "lint:fix": "uv run --locked --extra dev ruff check . --fix",
     "format": "uv run --locked --extra dev ruff format .",
     "paper:build": "python3 scripts/build-paper.py",
@@ -25,5 +25,8 @@
   ],
   "engines": {
     "node": "24.x"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.6"
   }
 }

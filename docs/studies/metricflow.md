@@ -1,4 +1,4 @@
-# Brownfield target: dbt-labs/metricflow
+# Brownfield study: dbt-labs/metricflow
 
 Source: shallow clone (`--depth 1`) of `dbt-labs/metricflow` at commit
 `45dce78641bbdd7e182aa57132fc11a23b24dde5`. The freeze manifest is

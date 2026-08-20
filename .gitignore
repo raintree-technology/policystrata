@@ -78,6 +78,7 @@ paper/build/
 
 # Local planning and manuscript working files
 todo.txt
+[Tt][Oo][Dd][Oo]*.md
 PAPER_TODO.md
 paper/AUTHOR_RESPONSE.md
 paper/DEMO_SCRIPT.md

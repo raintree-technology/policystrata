@@ -1,4 +1,4 @@
-# Brownfield target: cube-js/cube -- intentionally-broken ACL fixtures
+# Brownfield study: cube-js/cube intentionally broken ACL fixtures
 
 Source: shallow clone (`--depth 1`) of `cube-js/cube`.
 Static inspection only; no cube code was executed. All content below was produced by
@@ -72,7 +72,7 @@ declares no `tenancy` block (correctly -- the `common` group's `allowAll: true` 
 row-level predicate to declare), so `tenant_columns_for_scope_check` falls back to
 `compiler.py::tenant_column("brownfield_cube")` = the hardcoded built-in-domain default
 `"accounts.tenant_id"`, a column name that has nothing to do with cube's `orders` schema. This is
-the **same scanner gap already documented in `examples/brownfield/metricflow/README.md`**
+the **same scanner gap documented in [`metricflow.md`](metricflow.md)**
 (custom `domain_path` domains silently inherit an irrelevant built-in tenant-column fallback
 instead of erroring or skipping when tenancy is unconfigured), now independently reproduced on a
 second, unrelated target. That recurrence is itself useful signal for prioritizing a scanner fix.

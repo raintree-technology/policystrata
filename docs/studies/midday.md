@@ -1,4 +1,4 @@
-# Brownfield target: midday-ai/midday
+# Brownfield study: midday-ai/midday
 
 Source: shallow clone (`--depth 1`) of `midday-ai/midday`.
 Static inspection only; no midday code (TypeScript, Drizzle queries, or migrations) was executed.

@@ -1,4 +1,4 @@
-# PolicyStrata Paper
+# Build the PolicyStrata paper
 
 This directory is the source of truth for the editable PolicyStrata paper.
 The website repository contains only the published PDF and rendered page previews.

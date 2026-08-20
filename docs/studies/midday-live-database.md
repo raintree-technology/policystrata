@@ -1,4 +1,4 @@
-# midday live-database fixture
+# Midday live-database study
 
 The original midday brownfield pass was static: PolicyStrata read `packages/db/migrations/*.sql`
 and reasoned about the SQL without running it. `docs/brownfield-results.md` recorded that as a

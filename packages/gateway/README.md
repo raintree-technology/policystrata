@@ -1,10 +1,13 @@
 # PolicyStrata Agent Trust Gateway
 
-Customer-hosted runtime gateway for governed-data agents. The gateway evaluates redacted runtime
-events locally with `policystrata/runtime`, blocks deny/quarantine/approval-required decisions in
-enforce mode, and uploads only decision envelopes to a configured control plane by default.
-It is an application-side enforcement and telemetry helper, not a replacement for `policystrata
-scan`, `policystrata doctor`, application authorization, or database controls.
+**Active customer-hosted package for teams that need PolicyStrata runtime decisions
+beside an application or agent.**
+
+The gateway evaluates redacted runtime events locally with `policystrata/runtime`. In
+enforce mode it blocks deny, quarantine, and approval-required decisions. It uploads
+only decision envelopes to a configured control plane by default.
+
+## Install and start
 
 ```bash
 npm install @policystrata/agent-trust-gateway
@@ -15,11 +18,8 @@ agent-trust-gateway serve --manifest runtime-manifest.json --port 8787 \
   --api-url https://policystrata.example
 ```
 
-Loopback bindings are intended for same-host sidecars. If you bind beyond
-loopback, set `POLICYSTRATA_GATEWAY_TOKEN` or pass `--gateway-token`; callers
-must send `authorization: Bearer <token>` to `/v1/decide`.
-
-POST one event or `{ "events": [...] }` to `/v1/decide`:
+Expected result: a loopback HTTP service accepts redacted runtime events at
+`/v1/decide` and returns deterministic allow, deny, quarantine, or approval decisions.
 
 ```bash
 curl -s http://127.0.0.1:8787/v1/decide \
@@ -27,7 +27,11 @@ curl -s http://127.0.0.1:8787/v1/decide \
   --data @runtime-event.json
 ```
 
-The same evaluator is available in-process:
+The endpoint accepts one event or `{ "events": [...] }`. To bind beyond loopback, set
+`POLICYSTRATA_GATEWAY_TOKEN` or pass `--gateway-token`; callers must send an
+`authorization: Bearer <token>` header.
+
+## Use the evaluator in-process
 
 ```ts
 import { decideRuntimeEvent } from "@policystrata/agent-trust-gateway";
@@ -38,51 +42,40 @@ if (!result.ok) {
 }
 ```
 
-## Runtime Modes
+Use `enforce` when a deny, quarantine, or approval-required decision must fail closed.
+Use `shadow` while measuring policy coverage without blocking the caller.
 
-Use `enforce` for production gates that should fail closed on deny, quarantine, or approval-required
-decisions. Use `shadow` to observe decisions without blocking the caller. For tenant, PII, SQL,
-egress, and tool controls, production examples should default to fail-closed behavior and rely on
-explicit approvals or allowlists for exceptions.
+## Security and upload boundary
 
-The evaluator supports:
+The gateway strips `payload` before upload unless `includePayload` or
+`--include-payload` is set. It always strips fixture-only `expectedDecision` metadata.
+Keep raw prompts, rows, documents, tool payloads, connector payloads, and test
+expectations local.
 
-- auth-context required fields
-- retrieval tenant and entitlement checks
-- SQL tenant predicate detection, query-risk classification, and row-limit checks
-- RLS drift events through the `database_rule` layer
-- runtime kill-switch deny behavior
-- memory tenant isolation
-- egress destination allowlists, approval requirements, and destination classes
-- data-class deny/redaction policies
+Uploads fail closed by default if the redacted envelope still contains sensitive field
+names or common secret or PII value patterns. The default upload-body limit is 1 MB.
+Use `allowBoundaryViolations` only for local negative tests.
 
-See `docs/runtime-controls.md` for PII, MCP schema, browser action, code execution, human approval,
-and kill-switch event examples.
-See `docs/gateway-deployment-examples.md` for generic Docker, Terraform, and Helm deployment
-sketches that avoid hosted-app assumptions.
+## Compatibility and support boundary
 
-## Upload Boundary
+The gateway requires the Node version declared by the package and a deny-by-default
+PolicyStrata runtime manifest. Keep it close to the application, bind to loopback or a
+trusted network, and terminate TLS and rate-limit at the platform edge, service mesh, or
+reverse proxy.
 
-`payload` is stripped before upload unless `includePayload` or `--include-payload` is set.
-Fixture-only `expectedDecision` metadata is always stripped before upload. Keep raw prompts, rows,
-documents, tool payloads, connector payloads, and test expectations local; send hashes, witness
-refs, policy refs, redaction classes, query risk, and the runtime decision envelope to the control
-plane.
+This package is an application-side enforcement and telemetry helper. It does not
+replace application authorization, database controls, `policystrata scan`, or
+`policystrata doctor`.
 
-Uploads fail closed by default if the redacted envelope still contains sensitive field names or
-common secret/PII value patterns in summaries, refs, or other metadata. Use
-`allowBoundaryViolations` only for local negative tests.
+## Deeper documentation
 
-Uploads send `x-clearance-organization-id` when an organization ID is configured. They also
-support an idempotency key and enforce a 1 MB default upload-body limit before opening the network
-request.
+- [Runtime controls](../../docs/runtime-controls.md) — Supported control layers and event examples.
+- [Gateway deployment examples](../../docs/gateway-deployment-examples.md) — Docker,
+  Terraform, and Helm starting points.
+- [Node SDK and runtime guide](../../docs/node-sdk.md) — In-process authorizers and event builders.
+- [PolicyStrata project guide](../../README.md) — Scanner workflow, evidence, and limits.
+- [Security policy](../../SECURITY.md) — Reporting and disclosure boundary.
 
-## Deployment Guidance
+## License
 
-Keep the gateway close to the application or agent runtime. For production:
-
-- bind to loopback or require a gateway token for non-loopback bindings;
-- terminate TLS and rate-limit requests at the platform edge, service mesh, or reverse proxy;
-- keep request bodies small and metadata-only;
-- default tenant, PII, SQL, egress, and tool controls to fail closed;
-- use `shadow` mode only while validating policy coverage before an enforcement rollout.
+[MIT License](LICENSE)

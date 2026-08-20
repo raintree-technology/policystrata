@@ -1,4 +1,4 @@
-# Brownfield target: Canner/WrenAI -- MDL row-level access control
+# Brownfield study: Canner/WrenAI MDL row-level access control
 
 Source: shallow clone (`--depth 1`) of `Canner/WrenAI`.
 Static inspection only; no WrenAI/wren-core code (Python, Rust, or otherwise) was executed. All

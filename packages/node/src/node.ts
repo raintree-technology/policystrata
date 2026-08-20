@@ -1236,7 +1236,9 @@ function fieldsFromRows(
   }
   const fields = new Set<string>();
   for (const row of rows) {
-    Object.keys(row).forEach((key) => fields.add(sanitizeTraceKey(key, redaction)));
+    Object.keys(row).forEach((key) => {
+      fields.add(sanitizeTraceKey(key, redaction));
+    });
   }
   return [...fields].sort();
 }
