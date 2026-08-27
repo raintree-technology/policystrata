@@ -1,0 +1,28 @@
+{
+  "title": "PolicyStrata: Responsibility-Scoped Testing for Cross-Layer Policy Drift in LLM Data Agents",
+  "created_for": "arXiv public preprint source upload",
+  "top_level_file": "paper.tex",
+  "recommended_processor": "pdflatex",
+  "source_directory": "/Users/mb1/Code/raintree/papers/conference-kit/submissions/arxiv-public-preprint/build/policystrata-arxiv-source",
+  "zip_path": "/Users/mb1/Code/raintree/papers/conference-kit/submissions/arxiv-public-preprint/policystrata-arxiv-source.zip",
+  "zip_sha256": "c83fe33345306699d373bce1e4adec3805a772721e65f9f2f31e3158558b2d7c",
+  "files": {
+    "paper.tex": {
+      "bytes": 42189,
+      "sha256": "293206cbe50bdd7ab0c8b17f6164a72e675cdfd3256bebdea0bc17dda7e25671"
+    },
+    "preamble.tex": {
+      "bytes": 796,
+      "sha256": "183f0b7d237db36bf1c82fe2787e861548eae68e4b567afe2c92eef943d88ca5"
+    },
+    "refs.bib": {
+      "bytes": 11412,
+      "sha256": "30a5c7bf32acef81762d90564485ea1dee38355cc56121a40a877eed8daf145b"
+    }
+  },
+  "notes": [
+    "The upload zip intentionally excludes generated PDFs and auxiliary files.",
+    "The bundle rewrites the repo-relative preamble include to a local include.",
+    "The bundle removes fontspec/font-name lookups for arXiv portability."
+  ]
+}

@@ -1,0 +1,326 @@
+\documentclass[sigconf,review,anonymous]{acmart}
+
+\sloppy
+\emergencystretch=1em
+\settopmatter{printacmref=true}
+\renewcommand\footnotetextcopyrightpermission[1]{}
+\pagestyle{plain}
+
+\acmConference[SECUTE 2026]{2nd International Workshop on Software Security Testing}{October 16, 2026}{Munich, Germany}
+\acmYear{2026}
+\acmISBN{}
+\acmDOI{}
+
+\newcommand{\tool}{PolicyStrata}
+\newcommand{\ArtifactSha}{d8182fb6d9b6d6a4a8ffec119e53ec6b3d34896bc4c7c24d38fb3ba376e76225}
+\newcommand{\ArtifactUrl}{Anonymized artifact URL to be inserted after external anonymous hosting is created.}
+
+\title{Finding Cross-Layer Authorization Drift in LLM Data-Agent Systems}
+
+\author{Anonymous Author(s)}
+\affiliation{%
+  \institution{Anonymous Institution}
+  \country{}}
+
+\begin{document}
+
+\begin{abstract}
+LLM data agents split security policy across model-visible tools, constrained
+generation grammars, semantic validators, SQL compilers, database roles, row-level
+security, lineage, and release filters. A layer can satisfy its local checks
+while the composed system exposes a forbidden metric, drops a tenant predicate,
+or releases a result whose lineage should remain inside a trusted boundary. We
+present \tool{}, a deterministic security-testing artifact for cross-layer policy
+drift in governed data-agent stacks. Given canonical authorization, semantic,
+and release specifications, \tool{} generates or imports principals, requests,
+semantic plans, mixed-version surface configurations, SQL traces, database
+states, and result-lineage decisions. It then checks responsibility-scoped
+contracts and emits minimized witnesses for the first violated transition. The
+artifact includes deterministic benchmark suites, baseline comparators, a stack
+doctor for policy/TOS/privacy-document and prompt-manifest coverage, and an
+anonymous security fixture covering unauthorized capability exposure, stale
+tenant-key lowering, and release leakage after database containment.
+\end{abstract}
+
+\keywords{security testing, LLM data agents, authorization, text-to-SQL, row-level security, policy testing}
+
+\begin{CCSXML}
+<ccs2012>
+   <concept>
+       <concept_id>10002978.10003006.10003013</concept_id>
+       <concept_desc>Security and privacy~Software security engineering</concept_desc>
+       <concept_significance>500</concept_significance>
+   </concept>
+   <concept>
+       <concept_id>10011007.10011074.10011099</concept_id>
+       <concept_desc>Software and its engineering~Software testing and debugging</concept_desc>
+       <concept_significance>300</concept_significance>
+   </concept>
+</ccs2012>
+\end{CCSXML}
+
+\ccsdesc[500]{Security and privacy~Software security engineering}
+\ccsdesc[300]{Software and its engineering~Software testing and debugging}
+
+\maketitle
+
+\section{Problem}
+
+LLM data agents translate user requests into tool calls, semantic plans, SQL
+queries, and final results. Security-critical obligations are therefore repeated
+across heterogeneous surfaces: the model-visible manifest says which operations
+exist; a grammar or schema constrains action shape; a validator decides whether a
+semantic object is authorized; a compiler lowers the object to executable SQL; a
+database role and row-level security (RLS) policy contain execution; and a
+release filter decides whether a result-lineage pair may leave the trusted
+boundary.
+
+This decomposition creates a software-security testing problem. A conventional
+unit test can verify that a validator rejects a forbidden request, a SQL parser
+accepts generated SQL, or RLS prevents cross-tenant reads. None of those checks
+alone establishes that the same tenant, purpose, policy version, semantic
+meaning, and release obligation survived every transition. Constrained decoding
+systems such as PICARD reduce malformed actions~\cite{picard}, and text-to-SQL
+benchmarks such as Spider and BIRD evaluate query correctness~\cite{spider,bird},
+but grammar membership and query correctness are not authorization guarantees.
+Likewise, PostgreSQL RLS is an important containment layer, but it does not
+decide whether a result computed from sensitive lineage is safe to release
+\cite{postgresql_rls}.
+
+\tool{} targets this gap. It treats cross-layer authorization drift as a
+security test case: a principal, request, policy version vector, semantic plan,
+lowered SQL, database state, lineage, observed result, and violated obligation.
+The goal is not to replace authorization enforcement. It is to generate and
+replay tests that expose when deployed policy-bearing representations no longer
+agree on their assigned obligations.
+
+\section{Threat Model and Contracts}
+
+We model accidental and adversarial drift in a data-agent stack. The attacker or
+fault can influence a user request, exploit a stale model-visible tool manifest,
+trigger a stale validator or compiler path, or route a result through a release
+surface that lacks sufficient lineage checks. The trusted input is a canonical
+policy snapshot. We do not assume the language model is trustworthy, and we do
+not treat constrained generation as an enforcement boundary. We also do not
+assume that database containment is enough: an unauthorized plan may be contained
+by RLS while still revealing unsafe aggregate or lineage information through a
+later release path.
+
+\tool{} separates policy into authorization, semantic, and release
+specifications. Each surface gets a responsibility-scoped contract:
+
+\begin{itemize}
+  \item \textbf{Manifest/grammar:} do not expose capabilities whose reachable
+  operations are unauthorized for the principal and context.
+  \item \textbf{Validator:} accept authorized semantic objects inside the
+  declared support envelope and reject unauthorized objects.
+  \item \textbf{Compiler:} preserve principal, tenant, purpose, policy version,
+  lineage, and business semantics during lowering.
+  \item \textbf{Database policy:} contain unauthorized executable operations
+  under the runtime role.
+  \item \textbf{Release policy:} release only result-lineage pairs allowed to
+  leave the trusted boundary.
+\end{itemize}
+
+This contract split is similar in spirit to access-control policy mutation and
+difference testing~\cite{xacml_mutation,margrave}, but the tested object is the
+relationship among policy-bearing representations rather than a single policy
+language. The policy oracle is independent of the SQL compiler path so a compiler
+bug cannot certify itself.
+
+\section{Artifact Workflow}
+
+The artifact has two reviewer-facing workflows.
+
+\textbf{Scanner.} The scanner imports JSONL tool/SQL traces or deterministic
+benchmark cases, authorizes the semantic request against the canonical policy,
+checks whether SQL preserves tenant scope and metric semantics, optionally
+executes read-only SQL in a PostgreSQL fixture, checks RLS and database state
+assertions, and evaluates release decisions. Findings are written as
+\texttt{scan.json}, \texttt{findings.jsonl}, \texttt{summary.json},
+\texttt{report.md}, and minimized witness files. Each witness records the
+principal, request, version vector, semantic plan, lowered SQL, database rows or
+state, lineage, observed result, and first violated transition.
+
+\textbf{Doctor.} The doctor audits stack wiring before a team has complete test
+coverage. It inventories policy/domain YAML, surface contracts, dbt semantic
+models, SQL/tool traces, tenant predicates, PostgreSQL schema/RLS/grants/views,
+state assertions, release tests, CI gates, privacy policies, terms of service,
+data-processing agreements, security policies, internal access policies, prompt
+manifests, and source maps. For privacy/TOS inputs, it classifies document type
+and extracts deterministic obligation signals such as personal-data
+minimization, purpose-limited processing, retention/deletion, third-party
+sharing, subprocessor controls, security controls, sensitive-data controls, and
+tenant isolation. For prompt manifests, it compares model-visible metrics,
+dimensions, and tools against the canonical policy. The output is coverage
+accounting plus remediation todos with owner, files, expected tests, and CI gate
+command.
+
+\section{Security Fixture}
+
+The SECUTE artifact includes a focused security fixture under
+\texttt{examples/secute\_security\_cases}. The fixture is intentionally small
+enough to inspect by hand, but it exercises the surfaces that are easy to miss in
+ordinary application tests: privacy/TOS/DPA/internal-policy inputs,
+model-visible tools, source maps, semantic models, SQL traces, release
+decisions, and tenant-scope lowering. Table~\ref{tab:security-cases} summarizes
+the cases.
+
+\begin{table}[t]
+\caption{Anonymous SECUTE fixture cases.}
+\label{tab:security-cases}
+\begin{tabular}{p{0.25\columnwidth}p{0.38\columnwidth}p{0.25\columnwidth}}
+\toprule
+Case & Drift & Expected finding \\
+\midrule
+Unauthorized exposure & Manifest exposes a forbidden revenue alias that reaches
+SQL and is released. & Unsafe release; unauthorized SQL reachability. \\
+Stale tenant key & Compiler lowers an authorized metric through
+\texttt{legacy\_tenant\_id}. & Tenant-scope lowering violation. \\
+Release leak & Export releases customer-email lineage after DB containment
+would have scoped rows. & Unsafe release; unauthorized SQL reachability. \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The fixture also checks governance wiring. The privacy policy and terms fixture
+trigger personal-data minimization, purpose limitation, notice/consent,
+retention/deletion, third-party sharing, security-control, sensitive-data, and
+tenant-isolation obligations. The DPA fixture adds controller/processor and
+subprocessor controls. The internal policy fixture adds least-privilege and
+role-based-access signals. The prompt manifest intentionally exposes unsafe
+metrics and sensitive dimensions, so doctor reports it as partial rather than
+clean. The source map connects each failing trace to a notional owner and test
+file, which lets the report produce remediation work instead of only listing
+violations.
+
+\section{Evaluation Snapshot}
+
+The deterministic benchmark path contains three synthetic analytics domains and
+four suite families: seeded cases, generated cases, detector-frozen held-out
+cases, and clean controls. In one artifact reproduction run, \tool{} killed
+1720/1720 non-clean injected faults covered by the implemented operators and
+reported 0 false positives on 80 clean controls. The run produced 1800 traces and
+the artifact archive is 211775 bytes. These are deterministic artifact-suite
+coverage numbers, not production recall and not an authorization-boundary claim.
+
+\begin{table}[t]
+\caption{Point baselines over the same deterministic non-clean traces.}
+\label{tab:baselines}
+\begin{tabular}{lr}
+\toprule
+Comparator & Caught \\
+\midrule
+Grammar only & 121/1720 \\
+Semantic validator only & 573/1720 \\
+SQL policy checker & 1043/1720 \\
+Database policy only & 326/1720 \\
+Release filter only & 364/1720 \\
+Defense-in-depth stack & 1561/1720 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+For SECUTE, we added an anonymous security fixture that exercises three concrete
+failure classes. First, a model-visible revenue tool exposes a forbidden alias
+that reaches SQL and is released. Second, a compiler lowers an authorized ticket
+metric through a stale tenant key rather than the canonical tenant predicate.
+Third, an export path releases customer-email lineage even though the request
+should be withheld at the release boundary. Running the scanner on this fixture
+produces five high-confidence findings: two unsafe releases, two unauthorized
+requests reaching SQL, and one stale tenant-scope lowering. Running doctor on
+the same fixture reports wired privacy/TOS/DPA/internal-policy ingestion, wired
+source mapping, wired export coverage, and partial prompt-manifest checks because
+the manifest intentionally exposes unsafe capabilities.
+
+\section{Reproducibility}
+
+The anonymous artifact is built as a zip with a generated manifest and an
+anonymization scan. The builder omits public project URLs, public release notes,
+GitHub Action branding, generated caches, local run outputs, and private local
+paths. It generates an anonymous README, license, data-availability note, and
+project metadata while preserving the package name used by imports and command
+examples.
+
+On a fresh unpack of the current archive, the following checks passed:
+\texttt{uv run --extra dev ruff check .}; \texttt{uv run --extra dev mypy src};
+and \texttt{uv run --extra dev pytest}. The test run collected 105 tests, with
+100 passing and 5 skipped optional integration tests for PostgreSQL and
+ClickHouse smoke paths. Running the SECUTE scan exits nonzero by design because
+the fixture is a failing security-test suite. The expected gate output is:
+
+\begin{scriptsize}
+\begin{verbatim}
+unsafe_release_unauthorized_metric_exposure_reached_sql
+unauthorized_trace_reached_sql_unauthorized_metric_exposure_reached_sql
+tenant_scope_missing_stale_tenant_key_lowering
+unsafe_release_release_leak_after_database_containment
+unauthorized_trace_reached_sql_release_leak_after_database_containment
+\end{verbatim}
+\end{scriptsize}
+
+The main benchmark reproduction path is longer because it regenerates frozen
+benchmark manifests, runs deterministic suites, computes baselines and
+ablations, and writes evidence reports. Its purpose is reviewer verification,
+not runtime benchmarking.
+
+\section{Limitations and Ethics}
+
+\tool{} is a testing artifact, not an access-control engine. It does not prove
+general SQL equivalence, does not claim recall on unknown production incidents,
+and does not replace runtime enforcement. The deterministic benchmark operators
+can miss organization-specific policy nuance, and optional database fixtures are
+smoke evidence unless backed by representative schema and state. The anonymous
+security fixture uses synthetic data and synthetic policy documents. No customer
+data, private prompts, or production secrets are included.
+
+\section{Relation to Prior Work}
+
+\tool{} composes ideas from several testing lines. Access-control mutation
+testing supplies the adequacy intuition: a test suite should kill meaningful
+policy mutants, while equivalent mutants must be separated from missed faults
+\cite{xacml_mutation}. Policy-difference analysis shows how small policy
+version changes can alter authorization behavior~\cite{margrave}. Text-to-SQL
+test-suite accuracy shows why generated states and semantic comparison matter
+for query behavior~\cite{test_suite_accuracy}. Database access control and RLS
+remain important enforcement layers~\cite{postgresql_rls}. \tool{} uses these
+ideas across the data-agent pipeline: the artifact is successful when it
+identifies which representation first stopped carrying its assigned obligation.
+
+\section{Data Availability Statement}
+
+All data in the submitted artifact is synthetic or generated by deterministic
+fixtures. The anonymous artifact archive contains source, tests, benchmark
+generators, JSONL traces, optional PostgreSQL fixture files, expected outputs,
+and the SECUTE security fixture. It requires Python 3.10 or newer and
+\texttt{uv}; it does not require an LLM API key or host \texttt{psql}. Docker is
+used only for optional database smoke checks.
+
+Artifact access during review: \ArtifactUrl{} The local review archive checksum
+is:
+
+\begin{scriptsize}
+\begin{verbatim}
+SHA256 d8182fb6d9b6d6a4a8ffec119e53ec6b3d34896bc4c7c24d38fb3ba376e76225
+\end{verbatim}
+\end{scriptsize}
+
+Primary commands:
+
+\begin{scriptsize}
+\begin{verbatim}
+uv run --extra dev ruff check .
+uv run --extra dev mypy src
+uv run --extra dev pytest
+POLICYSTRATA_RUN_ROOT=/tmp/policystrata-final \
+  ./scripts/reproduce-final.sh
+uv run policystrata scan --config \
+  examples/secute_security_cases/policystrata.yaml \
+  --out /tmp/policystrata-secute-scan
+\end{verbatim}
+\end{scriptsize}
+
+\bibliographystyle{ACM-Reference-Format}
+\bibliography{refs}
+
+\end{document}
