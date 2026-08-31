@@ -3,16 +3,16 @@
 We organize the evaluation by the question each evidence source can answer. Deterministic suites measure fault-model coverage; spec-blind, external-source, and historical-revision suites probe taxonomy dependence; brownfield and deployment-linked checks measure retargeting behavior; intervention and adapter studies test diagnostic assumptions.
 
 \paragraph{RQ1: Does the checker cover its declared fault model?}
-All 1720 non-clean cases emit a witness, and 80 no-drift controls emit none. The result includes 170 hand-authored cases and 1550 generated cases. Because expected behavior and generated cases share the mutation registry, 1720/1720 is a regression invariant over the implementation, not an estimate of field recall.
+All 1,720 non-clean cases emit a witness, and 80 no-drift controls emit none. The result includes 170 hand-authored cases and 1,550 generated cases. Because expected behavior and generated cases share the mutation registry, 1,720/1,720 is a regression invariant over the implementation, not an estimate of field recall.
 
 \begin{center}
 \scriptsize
 \setlength{\tabcolsep}{2pt}
 \begin{tabular}{@{}L{0.38\columnwidth}rrrr@{}}
 \toprule
-Suite group & N & Killed & Surv. & FP \\
+Suite group & Cases & Killed & Survived & False positives \\
 \midrule
-support: seeded/generated/frozen & 1050 & 1050 & 0 & -- \\
+support: seeded/generated/frozen & 1,050 & 1,050 & 0 & -- \\
 finance: seeded/frozen & 270 & 270 & 0 & -- \\
 analytics: seeded/generated & 400 & 400 & 0 & -- \\
 clean controls & 80 & -- & -- & 0 \\
@@ -29,7 +29,7 @@ We retain simple point checks as diagnostic ablations, but do not present them a
 \toprule
 Checker & Caught & Missed \\
 \midrule
-\policystrata{} responsibility contracts & 1720 & 0 \\
+\policystrata{} responsibility contracts & 1,720 & 0 \\
 Conventional spec-derived tests & 1579 & 141 \\
 Layered point-control stack & 1561 & 159 \\
 Pairwise surface differential & 899 & 821 \\
@@ -51,7 +51,7 @@ A separate source ledger screened 25 cited public faults from PostgreSQL, Supaba
 \toprule
 Evidence & N & Independence & What it supports \\
 \midrule
-Generated mutants & 1550 & shared generator/taxonomy & regression coverage only \\
+Generated mutants & 1,550 & shared generator/taxonomy & regression coverage only \\
 Seeded mutants & 170 & author-written & named examples only \\
 Spec-blind & 42 & detector source hidden; same author & contract clarity and misses \\
 Public-fault map & 25/19 & external reports; mapped model & taxonomy grounding \\
@@ -65,7 +65,7 @@ Production HTTP & 33/36 & exact deployed revision & live public and denial bound
 \end{tabular}
 \end{center}
 
-No row in this table is an independently operated production study. The separate LASM cross-check maps the same 1720 cases onto a 116-paper architectural taxonomy; it is a scope analysis, not another case suite. The 68 MetricFlow rows are the frozen subset of the 74 brownfield traces, not an additional denominator. The table prevents calling upstream-authored cases an externally operated blind suite, treating historical source probes as vulnerable-service execution, or treating denial probes as field recall.
+No row in this table is an independently operated production study. The separate LASM cross-check maps the same 1,720 cases onto a 116-paper architectural taxonomy; it is a scope analysis, not another case suite. The 68 MetricFlow rows are the frozen subset of the 74 brownfield traces, not an additional denominator. The table prevents calling upstream-authored cases an externally operated blind suite, treating historical source probes as vulnerable-service execution, or treating denial probes as field recall.
 
 \paragraph{RQ4: Can the scanner be retargeted?}
 Static scans targeted MetricFlow, Midday, WrenAI, and Cube. Inputs were labeled native, mechanically transformed, or synthesized. Across 74 traces carrying real SQL content, the initial pass produced one content-level false positive (1.4\%) and no newly discovered upstream defect. It did catch Cube's two already-known broken access-policy fixtures while leaving the valid fixture clean. A fresh MetricFlow checkout at Git object \texttt{45dce78641bb} reproduced all 68 transformed traces byte-for-byte. Its upstream-authored requests and expected SQL are more independent than generated cases, but the policy bridge remains author-written; 68 fuzz mutations survived because the synthetic bridge role permits every dimension. The five adapter gaps that pass exposed have since been fixed, which is the more useful outcome than the null discovery result: MetricFlow's adapter-attributable warnings fall from 27 to four, and each survivor is a finding the adapter should report. Running a scanner against code its authors did not write mostly measures the scanner.
@@ -81,4 +81,4 @@ Counterfactual repair was evaluated on 120 compound cases per domain. In all 360
 The bounded reducer reaches 1-minimality under its three edit types on the standard support suites, but reductions are small because generated plans already contain one dimension and few optional fields. Finally, the 18-case trusted-adapter mutation study finds 16 silent corruptions. This negative result sets a practical limit on every scan result: adapter correctness is part of the claim.
 
 \paragraph{Cost.}
-The frozen artifact run completes in about four seconds on the reported Apple laptop with a prepared environment, producing 1800 traces and 1720 witness files in a 17 MB directory. This is a reproducibility measurement on one machine, not a scaling law.
+The frozen artifact run completes in about four seconds on the reported Apple laptop with a prepared environment. It produces 1,800 traces and 1,720 witness files in a 17 MB directory. This is a reproducibility measurement on one machine, not a scaling law.
