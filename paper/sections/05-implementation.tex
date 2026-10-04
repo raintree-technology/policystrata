@@ -34,6 +34,8 @@ Cube & 389 & 4 & two missing-filter regressions synthesized \\
 \end{tabular}
 \end{center}
 
+The table inventories 79 adapter traces, not the precision-study denominator. The 75 real-input traces comprise 68 MetricFlow, five Midday, one WrenAI, and one Cube case. The inventory additionally includes one hypothetical WrenAI bypass, two synthesized Cube missing-filter regressions, and one additional Cube clean-policy variant. These four cases are excluded from the primary real-input precision population.
+
 ``Script lines'' is checked-in transform-script length, not person-hours or an optimized adapter estimate. MetricFlow additionally scans 19 test files and selects 68 of 266 test documents; it skips 43 multi-metric cases, 33 cases outside the chosen model, and 122 macro-dependent cases rather than inventing unsupported IR. Midday concatenates 39 native migrations and transcribes five cited ORM queries. WrenAI maps one required session-property rule. Cube maps one accepted policy and two already-rejected policy fixtures. These measurements show that retargeting is feasible but not automatic. Each target requires an explicit decision about what cannot be represented.
 
 \paragraph{Freeze and provenance.}

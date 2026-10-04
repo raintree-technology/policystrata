@@ -222,22 +222,31 @@ regardless of whether the underlying policy expression is actually correct. See
 
 ## False-positive accounting on real inputs
 
-Across the 4 targets, **74 traces carry real (not intentionally-broken, not hypothetical-
+The adapter inventory contains 79 traces: 68 MetricFlow, five Midday, two WrenAI,
+and four Cube. The precision population contains 75 traces from the primary
+configurations. It excludes WrenAI's one hypothetical bypass, Cube's two
+synthesized missing-filter regressions, and the one additional Cube clean-policy
+variant in `traces_clean.jsonl`. The 68 MetricFlow cases are a subset of these
+75, not an additional denominator. Earlier text incorrectly counted four
+Midday traces and reported 74; the checked-in primary file contains five.
+The corrected one-of-75 content-level false-positive rate is 1.3%.
+
+Across the 4 targets, **75 traces carry real (not intentionally-broken, not hypothetical-
 regression) SQL content**: 68 metricflow (100% real `check_query` text), 1 cube (real, resolved
-`accessPolicy` filter), 4 midday (hand-transcribed but cited line-for-line from real ORM code), 1
+`accessPolicy` filter), 5 midday (hand-transcribed but cited line-for-line from real ORM code), 1
 WrenAI (real, rendered RLAC condition).
 
-- **1 of those 74** was flagged where the flag is arguably a false positive against that specific
-  trace's actual SQL content (midday's `insight_user_status`, gap #2 above) -- ~1.4%, and fully
+- **1 of those 75** was flagged where the flag is arguably a false positive against that specific
+  trace's actual SQL content (midday's `insight_user_status`, gap #2 above) -- ~1.3%, and fully
   attributable to one documented, narrow scanner-config limitation, not scattered noise.
-- **68 of those 74** (all of metricflow's) were also flagged, but *not* because of anything wrong
+- **68 of those 75** (all of metricflow's) were also flagged, but *not* because of anything wrong
   with the specific SQL -- every one fails identically, for the same structural reason (gap #1
-  above), independent of trace content. We report this separately from the 1.4% figure above
+  above), independent of trace content. We report this separately from the 1.3% figure above
   because it is not a per-trace judgment call the scanner got wrong; it is one config-fallback
   behavior applied uniformly.
-- **The remaining 5 of 74** (1 cube, 4 midday, and technically metricflow's 108/110 correctly-
-  matched dbt metrics) produced the clean result the scanner is supposed to produce on correct
-  input.
+- **The remaining six of 75** (one Cube, four Midday, and one WrenAI) did not
+  produce a content-level false positive or MetricFlow's uniform structural finding.
+  The fifth Midday trace accounts for the content-level false positive above.
 - **105 non-gating WARNING findings** (95 metricflow + 10 WrenAI) are 100% attributable to a
   documented, deliberate scope decision (policy narrower than the full demo/fixture manifest) --
   none are scanner miscalls against real data.

@@ -114,7 +114,7 @@ doc and a reproduction script; all are deterministic and need no LLM API key unl
 | --- | --- | --- |
 | Reconstructed real-fault suite | 19 real public faults (CVEs, RLS incidents) reconstructed and killed; 6 honestly dropped | [incident-reconstruction-results.md](incident-reconstruction-results.md) |
 | Spec-blind mutant suite | 42 spec-authored mutants; detector agrees on 39/42, 3 misses expose a real contract ambiguity | [spec-blind-results.md](spec-blind-results.md) |
-| Brownfield scans (real OSS) | 0 new real bugs across 4 stacks; ~1.4% real-input FP; true-positive demo on cube's own broken fixtures; 5 scanner gaps found, all 5 now fixed (metricflow adapter warnings 27 → 4) | [brownfield-results.md](brownfield-results.md) |
+| Brownfield scans (real OSS) | 0 new real bugs across 4 stacks; ~1.3% real-input FP; true-positive demo on cube's own broken fixtures; 5 scanner gaps found, all 5 now fixed (metricflow adapter warnings 27 → 4) | [brownfield-results.md](brownfield-results.md) |
 | Executed real RLS (midday) | all 20 `CREATE POLICY` statements in the frozen migrations loaded verbatim across 6 tables; 13/13 live checks pass intact, weakening one real predicate fails exactly the 4 checks covering it | [brownfield-results.md](brownfield-results.md#live-database-pass-midday) |
 | External fault-taxonomy coverage | v1 registry vs an independently authored 8-class data-agent vulnerability taxonomy: 2 covered, 1 partial, 5 outside; 401/1720 cases have no counterpart there | [external-taxonomy-coverage.md](external-taxonomy-coverage.md) |
 | Second taxonomy cross-check | LASM's 116-paper vocabulary: v1 occupies 3/7 architectural layers and 1/4 temporal classes | [second-taxonomy-coverage.md](second-taxonomy-coverage.md) |
