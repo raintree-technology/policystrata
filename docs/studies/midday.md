@@ -1,5 +1,11 @@
 # Brownfield study: midday-ai/midday
 
+This record preserves the original static pass. On 2026-10-01, the static
+configuration gained the existing per-table override for `insight_user_status`.
+The rerun exited zero with one database-fixture warning and no tenant-scope
+finding. Follow the [current integration guide](../../examples/brownfield/midday/README.md)
+for the updated configuration and the separate live-database evidence.
+
 Source: shallow clone (`--depth 1`) of `midday-ai/midday`.
 Static inspection only; no midday code (TypeScript, Drizzle queries, or migrations) was executed.
 

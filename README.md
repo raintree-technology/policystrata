@@ -46,6 +46,8 @@ flowchart LR
 PolicyStrata reports the first transition that broke its declared responsibility,
 while preserving evidence that a later layer contained the failure.
 
+For a checked failure-and-fix example, follow the [tenant regression exercise](examples/tenant_regression/README.md).
+
 ## Why use PolicyStrata
 
 - **Catch disagreement, not only local defects.** Test the handoffs between controls

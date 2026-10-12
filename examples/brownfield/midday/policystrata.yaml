@@ -17,6 +17,10 @@ tenancy:
   # not stand up a live database for this pass, see README.md).
   tenant_columns:
     - team_id
+  # This table's native policy scopes by user rather than team.
+  table_tenant_columns:
+    insight_user_status:
+      - user_id
 # schema.sql is a real, deterministic concatenation of packages/db/migrations/*.sql (see
 # scripts/brownfield-transform-midday.py) but no live PostgreSQL fixture is started in this pass,
 # so this is expected to produce one non-gating "fixture could not be prepared" WARNING, not a
