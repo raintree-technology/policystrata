@@ -8,9 +8,12 @@ guard the built-in path and the per-table override.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from policystrata.scan_models import ImportedTrace, ScanConfig, TenancyScanConfig
 from policystrata.scanner import (
     builtin_domain_tenant_column,
+    load_scan_config,
     primary_table_from_sql,
     tenant_columns_for_scope_check,
 )
@@ -68,3 +71,9 @@ def test_primary_table_extraction() -> None:
     assert primary_table_from_sql("delete from sessions where id = 1") == "sessions"
     assert primary_table_from_sql("insert into audit_log (a) values (1)") == "audit_log"
     assert primary_table_from_sql("with cte as (select 1) select 1") is None
+
+
+def test_midday_static_example_uses_native_scope_dimensions() -> None:
+    config = load_scan_config(Path("examples/brownfield/midday/policystrata.yaml"))
+    assert tenant_columns_for_scope_check(config, _trace("select * from insights")) == ["team_id"]
+    assert tenant_columns_for_scope_check(config, _trace("select * from insight_user_status")) == ["user_id"]
