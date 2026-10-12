@@ -13,6 +13,9 @@ and result-release gates can each pass alone while disagreeing as a system.
 [Documentation](docs/) ·
 [Paper and narrated overview](https://raintree.technology/writing/policystrata)
 
+The PolicyStrata paper was accepted for an IEEE ISSRE 2026 Industry Track talk and
+demonstration.
+
 ## See a failure
 
 ```bash
@@ -129,6 +132,9 @@ PolicyStrata owns cross-layer policy regression testing. It can be used independ
 and [Raintree Standards](https://github.com/raintree-technology/raintree.standards)
 defines governed requirements. See the
 [Raintree open-source portfolio](https://raintree.technology/portfolio#open-source).
+
+Raintree also builds [BetterOff](https://betteroff.finance), which keeps a household's
+spending, investments, assets, debts, and net worth in one current record.
 
 ## Project policies
 
