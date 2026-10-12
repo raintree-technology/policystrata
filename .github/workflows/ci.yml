@@ -40,6 +40,8 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
         with:
           persist-credentials: false
+          # test_release_metadata checks for the release tag, so fetch tags.
+          fetch-depth: 0
 
       - name: Set up mise
         uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db
