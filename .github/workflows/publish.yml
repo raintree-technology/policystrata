@@ -74,18 +74,18 @@ jobs:
           cache-suffix: publish-py-3.12
 
       - name: Install dependencies
-        run: mise x python@3.12.13 node@24.18.0 -- uv sync --extra dev --frozen
+        run: mise x python@3.12.13 node@24.22.1 -- uv sync --extra dev --frozen
 
       - name: Run tests
         env:
           POLICYSTRATA_SKIP_RELEASE_TAG_TEST: ${{ github.event_name == 'workflow_dispatch' && !inputs.publish_pypi && '1' || '' }}
-        run: mise x python@3.12.13 node@24.18.0 -- uv run pytest
+        run: mise x python@3.12.13 node@24.22.1 -- uv run pytest
 
       - name: Run lint
-        run: mise x python@3.12.13 node@24.18.0 -- uv run ruff check .
+        run: mise x python@3.12.13 node@24.22.1 -- uv run ruff check .
 
       - name: Run type checks
-        run: mise x python@3.12.13 node@24.18.0 -- uv run mypy src
+        run: mise x python@3.12.13 node@24.22.1 -- uv run mypy src
 
       - name: Check publishing uses a version tag
         run: |
@@ -100,7 +100,7 @@ jobs:
       - name: Check release tag matches package version
         if: ${{ startsWith(github.ref, 'refs/tags/') && (github.event_name != 'workflow_dispatch' || inputs.publish_pypi) }}
         run: |
-          package_version="$(mise x python@3.12.13 node@24.18.0 -- uv run python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")"
+          package_version="$(mise x python@3.12.13 node@24.22.1 -- uv run python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")"
           tag_version="${GITHUB_REF_NAME#v}"
           if [ "$tag_version" != "$package_version" ]; then
             echo "Tag $GITHUB_REF_NAME does not match package version $package_version" >&2
@@ -108,7 +108,7 @@ jobs:
           fi
 
       - name: Clean-install Python distribution
-        run: mise x python@3.12.13 node@24.18.0 -- node scripts/release-smoke.mjs --python-artifact
+        run: mise x python@3.12.13 node@24.22.1 -- node scripts/release-smoke.mjs --python-artifact
 
       - name: Record distribution checksums
         run: |
@@ -159,18 +159,18 @@ jobs:
           esac
 
       - name: Install package dependencies
-        run: mise x node@24.18.0 bun@1.3.11 -- bun install --frozen-lockfile
+        run: mise x node@24.22.1 bun@1.4.3 -- bun install --frozen-lockfile
 
       - name: Run Node SDK tests
         working-directory: packages/node
-        run: mise x node@24.18.0 bun@1.3.11 -- bun run test
+        run: mise x node@24.22.1 bun@1.4.3 -- bun run test
 
       - name: Verify Node SDK package contents
         working-directory: packages/node
-        run: mise x node@24.18.0 bun@1.3.11 -- bun pm pack --dry-run
+        run: mise x node@24.22.1 bun@1.4.3 -- bun pm pack --dry-run
 
       - name: Clean-install Node SDK package artifact
-        run: mise x node@24.18.0 bun@1.3.11 -- node scripts/release-smoke.mjs --npm-runtime-artifact
+        run: mise x node@24.22.1 bun@1.4.3 -- node scripts/release-smoke.mjs --npm-runtime-artifact
 
   build-gateway:
     name: Build Gateway distribution
@@ -202,18 +202,18 @@ jobs:
           esac
 
       - name: Install package dependencies
-        run: mise x node@24.18.0 bun@1.3.11 -- bun install --frozen-lockfile
+        run: mise x node@24.22.1 bun@1.4.3 -- bun install --frozen-lockfile
 
       - name: Run Gateway tests
         working-directory: packages/gateway
-        run: mise x node@24.18.0 bun@1.3.11 -- bun run test
+        run: mise x node@24.22.1 bun@1.4.3 -- bun run test
 
       - name: Verify Gateway package contents
         working-directory: packages/gateway
-        run: mise x node@24.18.0 bun@1.3.11 -- bun pm pack --dry-run
+        run: mise x node@24.22.1 bun@1.4.3 -- bun pm pack --dry-run
 
       - name: Clean-install Gateway package artifact
-        run: mise x node@24.18.0 bun@1.3.11 -- node scripts/release-smoke.mjs --gateway-artifact
+        run: mise x node@24.22.1 bun@1.4.3 -- node scripts/release-smoke.mjs --gateway-artifact
 
   publish-pypi:
     name: Publish to PyPI
@@ -329,22 +329,22 @@ jobs:
           cache: true
 
       - name: Install package dependencies
-        run: mise x node@24.18.0 bun@1.3.11 -- bun install --frozen-lockfile
+        run: mise x node@24.22.1 bun@1.4.3 -- bun install --frozen-lockfile
 
       - name: Run Node SDK tests
         working-directory: packages/node
-        run: mise x node@24.18.0 bun@1.3.11 -- bun run test
+        run: mise x node@24.22.1 bun@1.4.3 -- bun run test
 
       - name: Verify Node SDK package contents
         working-directory: packages/node
-        run: mise x node@24.18.0 bun@1.3.11 -- bun pm pack --dry-run
+        run: mise x node@24.22.1 bun@1.4.3 -- bun pm pack --dry-run
 
       - name: Check Node package version is unpublished
         id: npm-version
         run: |
-          package_name="$(mise x node@24.18.0 bun@1.3.11 -- node -p "require('./packages/node/package.json').name")"
-          package_version="$(mise x node@24.18.0 bun@1.3.11 -- node -p "require('./packages/node/package.json').version")"
-          if mise x node@24.18.0 bun@1.3.11 -- npm view "${package_name}@${package_version}" version >/dev/null 2>&1; then
+          package_name="$(mise x node@24.22.1 bun@1.4.3 -- node -p "require('./packages/node/package.json').name")"
+          package_version="$(mise x node@24.22.1 bun@1.4.3 -- node -p "require('./packages/node/package.json').version")"
+          if mise x node@24.22.1 bun@1.4.3 -- npm view "${package_name}@${package_version}" version >/dev/null 2>&1; then
             echo "${package_name}@${package_version} already exists on npm; skipping publish"
             echo "published=true" >> "$GITHUB_OUTPUT"
           else
@@ -354,7 +354,7 @@ jobs:
       - name: Publish Node package to npm
         if: ${{ steps.npm-version.outputs.published != 'true' }}
         working-directory: packages/node
-        run: mise x node@24.18.0 bun@1.3.11 -- npm publish --provenance
+        run: mise x node@24.22.1 bun@1.4.3 -- npm publish --provenance
 
   publish-gateway-npm:
     name: Publish Gateway to npm
@@ -383,22 +383,22 @@ jobs:
           cache: true
 
       - name: Install package dependencies
-        run: mise x node@24.18.0 bun@1.3.11 -- bun install --frozen-lockfile
+        run: mise x node@24.22.1 bun@1.4.3 -- bun install --frozen-lockfile
 
       - name: Run Gateway tests
         working-directory: packages/gateway
-        run: mise x node@24.18.0 bun@1.3.11 -- bun run test
+        run: mise x node@24.22.1 bun@1.4.3 -- bun run test
 
       - name: Verify Gateway package contents
         working-directory: packages/gateway
-        run: mise x node@24.18.0 bun@1.3.11 -- bun pm pack --dry-run
+        run: mise x node@24.22.1 bun@1.4.3 -- bun pm pack --dry-run
 
       - name: Check Gateway package version is unpublished
         id: npm-version
         run: |
-          package_name="$(mise x node@24.18.0 bun@1.3.11 -- node -p "require('./packages/gateway/package.json').name")"
-          package_version="$(mise x node@24.18.0 bun@1.3.11 -- node -p "require('./packages/gateway/package.json').version")"
-          if mise x node@24.18.0 bun@1.3.11 -- npm view "${package_name}@${package_version}" version >/dev/null 2>&1; then
+          package_name="$(mise x node@24.22.1 bun@1.4.3 -- node -p "require('./packages/gateway/package.json').name")"
+          package_version="$(mise x node@24.22.1 bun@1.4.3 -- node -p "require('./packages/gateway/package.json').version")"
+          if mise x node@24.22.1 bun@1.4.3 -- npm view "${package_name}@${package_version}" version >/dev/null 2>&1; then
             echo "${package_name}@${package_version} already exists on npm; skipping publish"
             echo "published=true" >> "$GITHUB_OUTPUT"
           else
@@ -408,7 +408,7 @@ jobs:
       - name: Publish Gateway package to npm
         if: ${{ steps.npm-version.outputs.published != 'true' }}
         working-directory: packages/gateway
-        run: mise x node@24.18.0 bun@1.3.11 -- npm publish --provenance --access public
+        run: mise x node@24.22.1 bun@1.4.3 -- npm publish --provenance --access public
 
   verify-pypi:
     name: Verify PyPI release
@@ -448,7 +448,7 @@ jobs:
       - name: Verify published PyPI package
         env:
           POLICYSTRATA_RELEASE_SMOKE_RETRIES: "15"
-        run: mise x node@24.18.0 -- node scripts/release-smoke.mjs --published-pypi
+        run: mise x node@24.22.1 -- node scripts/release-smoke.mjs --published-pypi
 
   verify-npm:
     name: Verify Node release
@@ -482,7 +482,7 @@ jobs:
       - name: Verify published Node package
         env:
           POLICYSTRATA_RELEASE_SMOKE_RETRIES: "15"
-        run: mise x node@24.18.0 bun@1.3.11 -- node scripts/release-smoke.mjs --published-npm-runtime
+        run: mise x node@24.22.1 bun@1.4.3 -- node scripts/release-smoke.mjs --published-npm-runtime
 
   verify-gateway-npm:
     name: Verify Gateway release
@@ -520,4 +520,4 @@ jobs:
       - name: Verify published Gateway package
         env:
           POLICYSTRATA_RELEASE_SMOKE_RETRIES: "15"
-        run: mise x node@24.18.0 bun@1.3.11 -- node scripts/release-smoke.mjs --published-gateway
+        run: mise x node@24.22.1 bun@1.4.3 -- node scripts/release-smoke.mjs --published-gateway

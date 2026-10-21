@@ -67,7 +67,7 @@ jobs:
         run: |
           mise x python@${{ matrix.python-version }} -- uv run ruff check .
           mise x python@${{ matrix.python-version }} -- uv run mypy src
-          mise x python@${{ matrix.python-version }} node@24.18.0 -- node scripts/release-smoke.mjs --python-artifact
+          mise x python@${{ matrix.python-version }} node@24.22.1 -- node scripts/release-smoke.mjs --python-artifact
 
   postgres-integration:
     name: PostgreSQL integration
@@ -214,23 +214,23 @@ jobs:
           cache: true
 
       - name: Install package dependencies
-        run: mise x node@24.18.0 bun@1.3.11 -- bun install --frozen-lockfile
+        run: mise x node@24.22.1 bun@1.4.3 -- bun install --frozen-lockfile
 
       - name: Run Node SDK tests
         working-directory: packages/node
-        run: mise x node@24.18.0 bun@1.3.11 -- bun run test
+        run: mise x node@24.22.1 bun@1.4.3 -- bun run test
 
       - name: Verify Node SDK package contents
         working-directory: packages/node
-        run: mise x node@24.18.0 bun@1.3.11 -- bun pm pack --dry-run
+        run: mise x node@24.22.1 bun@1.4.3 -- bun pm pack --dry-run
 
       - name: Run Gateway tests
         working-directory: packages/gateway
-        run: mise x node@24.18.0 bun@1.3.11 -- bun run test
+        run: mise x node@24.22.1 bun@1.4.3 -- bun run test
 
       - name: Verify Gateway package contents
         working-directory: packages/gateway
-        run: mise x node@24.18.0 bun@1.3.11 -- bun pm pack --dry-run
+        run: mise x node@24.22.1 bun@1.4.3 -- bun pm pack --dry-run
 
       - name: Clean-install packed Node artifacts
-        run: mise x node@24.18.0 bun@1.3.11 -- node scripts/release-smoke.mjs --npm-artifacts
+        run: mise x node@24.22.1 bun@1.4.3 -- node scripts/release-smoke.mjs --npm-artifacts

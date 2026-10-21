@@ -10,6 +10,6 @@ stacks.
 - Keep deterministic tests free of hosted services, LLM keys, and host database tools.
 - Use synthetic fixtures and keep credentials, customer data, and proprietary schemas
   out of evidence artifacts.
-- Use uv for Python and Bun 1.3.11/Node 24 for JavaScript packages.
+- Use uv for Python and Bun 1.4.3/Node 24 for JavaScript packages.
 - Run focused tests while iterating and `bun run validate:full` for repository-wide or
   release-facing changes.
