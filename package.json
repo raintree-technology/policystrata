@@ -1,7 +1,7 @@
 {
   "name": "policystrata",
   "private": true,
-  "packageManager": "bun@1.4.3",
+  "packageManager": "bun@1.4.4",
   "scripts": {
     "dev": "bun run --cwd packages/gateway build",
     "build": "uv build && bun run --cwd packages/node build && bun run --cwd packages/gateway build",
