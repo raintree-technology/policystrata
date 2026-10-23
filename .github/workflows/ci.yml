@@ -33,7 +33,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.10.20", "3.11.15", "3.12.13"]
+        python-version: ["3.11.17", "3.12.15"]
 
     steps:
       - name: Check out repository
@@ -63,7 +63,7 @@ jobs:
         run: mise x python@${{ matrix.python-version }} -- uv run pytest
 
       - name: Run release checks
-        if: ${{ matrix.python-version == '3.12.13' }}
+        if: ${{ matrix.python-version == '3.12.15' }}
         run: |
           mise x python@${{ matrix.python-version }} -- uv run ruff check .
           mise x python@${{ matrix.python-version }} -- uv run mypy src
@@ -110,21 +110,21 @@ jobs:
           cache-suffix: postgres-py-3.12
 
       - name: Install dependencies
-        run: mise x python@3.12.13 -- uv sync --extra dev
+        run: mise x python@3.12.15 -- uv sync --extra dev
 
       - name: Run PostgreSQL integration tests
         env:
           POLICYSTRATA_RUN_DB_TESTS: "1"
-        run: mise x python@3.12.13 -- uv run pytest tests/test_postgres_integration.py
+        run: mise x python@3.12.15 -- uv run pytest tests/test_postgres_integration.py
 
       - name: Run real-db scanner fixture
         run: >
-          mise x python@3.12.13 -- uv run policystrata scan
+          mise x python@3.12.15 -- uv run policystrata scan
           --config examples/postgres_dbt/policystrata_real_db_clean.yaml
           --out runs/scan-real-db-clean
 
       - name: Run midday live-policy evidence
-        run: mise x python@3.12.13 -- uv run python scripts/midday-live-db-evidence.py
+        run: mise x python@3.12.15 -- uv run python scripts/midday-live-db-evidence.py
 
   clickhouse-integration:
     name: ClickHouse integration
@@ -168,15 +168,15 @@ jobs:
           cache-suffix: clickhouse-py-3.12
 
       - name: Install dependencies
-        run: mise x python@3.12.13 -- uv sync --extra dev
+        run: mise x python@3.12.15 -- uv sync --extra dev
 
       - name: Run ClickHouse integration tests
         env:
           POLICYSTRATA_RUN_CLICKHOUSE_TESTS: "1"
-        run: mise x python@3.12.13 -- uv run pytest tests/test_clickhouse_integration.py
+        run: mise x python@3.12.15 -- uv run pytest tests/test_clickhouse_integration.py
 
       - name: Run ClickHouse row-policy evidence script
-        run: mise x python@3.12.13 -- uv run python scripts/clickhouse-rls-evidence.py
+        run: mise x python@3.12.15 -- uv run python scripts/clickhouse-rls-evidence.py
 
   github-action:
     name: GitHub Action smoke test
